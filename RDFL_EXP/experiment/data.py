@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
 # coding: utf-8
-
-# Introduction
-
-"""
-The purpose of this code is to generate the on
-"""
 import binascii
 import csv
 

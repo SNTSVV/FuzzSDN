@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+# coding: utf-8
 import math
 import operator
 import re
@@ -6,6 +8,7 @@ import re
 # ==== ( Lookup tables ) =======================================================
 
 COND_TO_FUZZER_ACTION_DICT = {
+    # Regular fields
     "of_version"    : {"loc": 0,  "size": 1},
     "of_type"       : {"loc": 1,  "size": 1},
     "length"        : {"loc": 2,  "size": 2},
@@ -34,7 +37,8 @@ COND_TO_FUZZER_ACTION_DICT = {
     "arp_sha"       : {"loc": 64, "size": 6},
     "arp_spa"       : {"loc": 70, "size": 4},
     "arp_tha"       : {"loc": 74, "size": 6},
-    "arp_tpa"       : {"loc": 80, "size": 4}
+    "arp_tpa"       : {"loc": 80, "size": 4},
+
 }
 
 STR_TO_OP_DICT = {
@@ -107,6 +111,29 @@ class Rule(object):
     # End def set_class
 
     # ===== ( Methods ) ========================================================
+
+    def to_dict(self):
+        """
+        Convert the rule to a dictionary
+        :return: A dictionary representing the rule
+        """
+        out_dict = dict()
+        cond_str = ""
+        first = True
+
+        for cond in self.__conditions:
+            if not first:
+                cond_str += " and "
+            else:
+                first = False
+            cond_str += "({} {} {})".format(cond["field"],
+                                            OP_TO_STR_DICT.get(cond["op"], "?"),
+                                            cond["value"])
+
+        out_dict["conditions"] = cond_str
+        out_dict["class"] = self.get_class()
+
+        return out_dict
 
     def to_fuzzer_actions(self):
         """
@@ -185,7 +212,6 @@ class Rule(object):
 def from_string(rule_str):
     """
     Create a Rule object from a rule string
-
     :param rule_str:
     :return:
     """
@@ -194,18 +220,22 @@ def from_string(rule_str):
     new_rule = Rule()
 
     # Define regex
-    rgx = r"\(([^(/)]+)\)"
+    rgx_cdt = r"\(([^(/)]+)\)"
+    rgx_cls = r"(?<==>).*=.*(?=\()"
 
     # Find all criteria and store them in a list
-    criteria_found = re.findall(rgx, rule_str)
+    criteria_found = re.findall(rgx_cdt, rule_str)
     for criterion in criteria_found:
         params = criterion.split(" ")
         new_rule.add_condition(field=params[0],
                                op=STR_TO_OP_DICT.get(params[1], "="),
                                value=params[2])
 
-        # find to which class the rules applies
-        # result = re.findall(rgx, rule_str)[0]
+    # Find to which class the rules applies
+    class_match = re.search(rgx_cls, rule_str)
+    if class_match is not None:
+        new_rule.set_class(class_match.group(0).split("=")[1].strip())
+
     return new_rule
 # End def from_string
 

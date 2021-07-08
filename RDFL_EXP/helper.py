@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+# coding: utf-8
 import getpass
 import os
 import pwd

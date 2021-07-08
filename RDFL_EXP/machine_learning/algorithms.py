@@ -8,9 +8,10 @@ from weka.core.classes import Random
 from weka.core.converters import Loader
 
 
-def standard(data_path, tt_split=66.0, seed=1):
+def standard(data_path, tt_split=66.0, cv_folds=None, seed=1):
     """
     Perform a feature selection +
+    :param cv_folds:
     :param data_path:
     :param tt_split:
     :param seed:
@@ -36,7 +37,14 @@ def standard(data_path, tt_split=66.0, seed=1):
     # evaluate and record predictions in memory
     print("Evaluating the classifier")
     evl = Evaluation(train)
-    evl.test_model(cls, test)
+
+    # If cv_folds > 0, perform cross validation
+    if cv_folds:
+        if not isinstance(cv_folds, int) or cv_folds < 1:
+            ValueError("Argument \"cv_folds\" must be None or an integer >= 1 (not \"{}\")".format(cv_folds))
+        evl.crossvalidate_model(cls, train, cv_folds, Random(seed))
+    else:
+        evl.test_model(cls, test)
     # print(evl.summary())
 
     # Get the precision
@@ -67,9 +75,9 @@ if __name__ == '__main__':
 
     try:
         jvm.start()
-        rules = standard("/Users/raphael.ollando/OneDrive - University of Luxembourg/03 - Research Notes/20210621 - Data.arff",
-                         tt_split=70,
-                         seed=1234)
+        rules = standard(
+            "/Users/raphael.ollando/OneDrive - University of Luxembourg/03 - Research Notes/20210621 - Data.arff",
+            tt_split=70, seed=1234)
         for r in rules:
             print(r)
     except Exception as e:
