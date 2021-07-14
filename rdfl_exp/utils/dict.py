@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
 def pretty_print(d, indent=0):
     for key, value in d.items():

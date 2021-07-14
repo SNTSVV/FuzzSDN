@@ -3,12 +3,12 @@
 import binascii
 import csv
 
-from utils.database import Database as SqlDb
-from utils.terminal import progress_bar
+from rdfl_exp.utils.database import Database as SqlDb
+from rdfl_exp.utils.terminal import progress_bar
 
 ## Settings
 PRINT_STATISTICS = False  # default=True
-KEEP_TRACE_ON_UNKNOWN = False  # default=True
+KEEP_TRACE_ON_UNKNOWN = True  # default=True
 SQL_DB_ADDRESS = "10.240.5.104"
 SQL_DB_USER = "dev"
 SQL_DB_PASSWORD = "b14724x"

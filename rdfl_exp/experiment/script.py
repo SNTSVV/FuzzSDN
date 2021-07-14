@@ -13,8 +13,9 @@ from mininet.net import Mininet
 from mininet.node import Host, OVSKernelSwitch, RemoteController
 from mininet.topo import Topo
 from mininet.util import dumpNodeConnections
-from utils.database import Database as SqlDb
-from utils.terminal import Fore, Style
+
+from rdfl_exp.utils.database import Database as SqlDb
+from rdfl_exp.utils.terminal import Fore, Style
 
 REMOTE_CONTROLLER_IP = "10.240.5.104"
 
@@ -98,13 +99,18 @@ def run(count=1, instructions=None, clear_db: bool = False):
 
     # Connect to the database
     print("*** Connecting to the database")
-    SqlDb.init(SQL_DB_ADDRESS, SQL_DB_USER, SQL_DB_PASSWORD)
-    SqlDb.connect("control_flow_fuzzer")
+    if not SqlDb.is_init():
+        SqlDb.init(SQL_DB_ADDRESS, SQL_DB_USER, SQL_DB_PASSWORD)
 
     if clear_db:
-        SqlDb.execute("DELETE FROM fuzzed_of_message")
-        SqlDb.execute("DELETE FROM log_error")
-        SqlDb.commit()
+        try:
+            if not SqlDb.is_connected():
+                SqlDb.connect("control_flow_fuzzer")
+            SqlDb.execute("DELETE FROM fuzzed_of_message")
+            SqlDb.execute("DELETE FROM log_error")
+            SqlDb.commit()
+        finally:
+            SqlDb.disconnect()
 
     # Stop running instances of onos
     print("*** Stopping running instances of ONOS")
@@ -227,9 +233,7 @@ def run(count=1, instructions=None, clear_db: bool = False):
 
         print("Experiment duration: {}s ".format(time.time() - start_timestamp))
         print("#########################################################")
-
-
-# End def main
+# End def run
 
 
 # ===== ( Leftover ) ===========================================================

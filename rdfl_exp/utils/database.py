@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-#
-# A class to manipulate all operations with a database
+# -*- coding: utf-8 -*-
+"""
+A class to manipulate all operations with a database
+"""
 
 import copy
 import MySQLdb

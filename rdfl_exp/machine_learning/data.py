@@ -189,7 +189,10 @@ def format_csv(csv_path, out_path=None, sep=','):
     df['reason'] = df['reason'].apply(filter_reason)
     one_hot_reason = pd.get_dummies(df['reason']).astype(bool)
     ### Ensure that all the reason columns are generated
-    reason_cols = ['reason_NoMatch', 'reason_Action', 'reason_InvalidTTL']
+    reason_cols = ['reason_NoMatch',
+                   'reason_Action',
+                   'reason_InvalidTTL',
+                   'reason_Illegal']
     for i in range(len(reason_cols)):
         if reason_cols[i] not in one_hot_reason:
             one_hot_reason.insert(min(i, len(reason_cols) - 1), reason_cols[i], False)
@@ -208,8 +211,11 @@ def format_csv(csv_path, out_path=None, sep=','):
     df['oxm_class'] = df['oxm_class'].apply(filter_oxm_class)
     one_hot_oxm_class = pd.get_dummies(df['oxm_class']).astype(bool)
     ### Ensure that all the oxm columns are generated
-    oxm_cols = ['oxm_class_NXM_0', 'oxm_class_NXM_1',
-                'oxm_class_OPENFLOW_BASIC', 'oxm_class_EXPERIMENTER']
+    oxm_cols = ['oxm_class_NXM_0',
+                'oxm_class_NXM_1',
+                'oxm_class_OPENFLOW_BASIC',
+                'oxm_class_EXPERIMENTER',
+                'oxm_class_INVALID']
     for i in range(len(oxm_cols)):
         if oxm_cols[i] not in one_hot_reason:
             one_hot_reason.insert(min(i, len(oxm_cols) - 1), oxm_cols[i], False)
@@ -252,7 +258,12 @@ def format_csv(csv_path, out_path=None, sep=','):
 
     # Drop error_trace column if it exists
     if 'error_trace' in df.columns:
-        df.drop('error_trace', axis='columns')
+        df.drop(['error_trace'], axis='columns', inplace=True)
+
+    # Ensure that the error_type column is at the end
+    cols_at_end = ['error_type']
+    df = df[[c for c in df if c not in cols_at_end]
+            + [c for c in cols_at_end if c in df]]
 
     # Stores the data
     df.to_csv(out_path if out_path is not None else csv_path,

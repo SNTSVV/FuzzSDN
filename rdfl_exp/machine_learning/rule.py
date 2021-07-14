@@ -92,7 +92,11 @@ class Rule(object):
 
     def get_class(self):
         return self.__class
-    # End def set_class
+    # End def get_class
+
+    def get_conditions(self):
+        return self.__conditions
+    # End def get_conditions
 
     # ===== ( Setters ) ========================================================
 
@@ -175,9 +179,11 @@ class Rule(object):
             # 3.2 Otherwise we create a new action
             else:
                 action = {
-                    "field": c['field'],
-                    "action": "ByteFieldAction",  # Action is always a byte field action
-                    "type": "unknown"
+                    "field"     : c['field'],
+                    "firstByte" : action_dict["loc"],
+                    "size"      : action_dict["size"],
+                    "action"    : "ByteFieldAction",  # Action is always a byte field action
+                    "type"      : "unknown"
                 }
 
                 # 2.3.1 determine the type of operation:
@@ -198,7 +204,6 @@ class Rule(object):
 
                 # 3.2.2 We add the new action to the action list
                 fuzz_action.append(action)
-            print(fuzz_action)
 
         return fuzz_action
     # End def to_fuzzer_actions

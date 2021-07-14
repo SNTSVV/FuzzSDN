@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-# coding: utf-8
+# -*- coding: utf-8 -*-
+
 import argparse
 import grp
 import json
@@ -16,19 +17,29 @@ from os.path import join
 
 import weka.core.jvm as jvm
 
-import experiment.data as exp_data
-import experiment.script as exp_script
-import helper
-import machine_learning.algorithms as ml_alg
-import machine_learning.data as ml_data
-from const import APP_DIR, OUT_DIR, RESOURCE_DIR, RUN_DIR
-from machine_learning import rule as ml_rule
-from utils import csv, file
-from utils.terminal import Fore, Style
+# Local dependencies
+import rdfl_exp.experiment.data as exp_data
+import rdfl_exp.experiment.script as exp_script
+import rdfl_exp.machine_learning.algorithms as ml_alg
+import rdfl_exp.machine_learning.data as ml_data
+from rdfl_exp import helper
+from rdfl_exp.machine_learning import rule as ml_rule
+from rdfl_exp.utils import csv, file
+from rdfl_exp.utils.terminal import Fore, Style
 
-# ===== ( Parameters ) =========================================================
+# ===== ( Globals ) ============================================================
 
+APP_NAME = 'rdfl_exp'
+PYTHON_VERSION = '3.9'
+
+# Directories
+RESOURCE_DIR = os.path.join(os.path.split(__file__)[0], "resources")
+HOME_DIR = os.path.expanduser('~')
+APP_DIR = os.path.join(HOME_DIR, ".rdfl_exp")
+OUT_DIR = os.path.join(APP_DIR, "out")
+RUN_DIR = "/var/run/rdfl_exp"
 CLEANUP = True
+
 
 # ===== ( Statistics Container ) ===============================================
 
@@ -138,13 +149,18 @@ def setup_pid():
                 process_exists = True
 
             if process_exists is True:
-                raise SystemExit(Fore.YELLOW + Style.BOLD + "Warning" + Style.RESET
-                                 + ": Another experiment is already running with pid: {}.\n".format(pid)
-                                 + "You can stop it manually with \"sudo kill {}\"".format(pid))
+                raise SystemExit(Fore.YELLOW + Style.BOLD + "Warning"
+                                 + Style.RESET
+                                 + ": Another experiment is already running "
+                                 + "with pid: {}.\n".format(pid)
+                                 + "You can stop it manually with"
+                                 + "\"sudo kill {}\"".format(pid))
             else:
                 print(Fore.YELLOW + Style.BOLD + "Warning" + Style.RESET
-                      + ": Previous pid file wasn't cleaned correctly by process: {}.\n".format(pid)
+                      + ": Previous pid file wasn't cleaned correctly by "
+                      + "process: {}.\n".format(pid)
                       + "Overwriting old pid_file.")
+
                 os.remove("{}/pid".format(RUN_DIR))
 
     # If there is no pid we create one for this program
@@ -221,15 +237,15 @@ def main(args):
     dataset_path = join(helper.tmp_dir(), "dataset.csv")  # Create a file where the dataset will be stored
 
     # Create the folder for the current experiment
-    exp_folder = join(OUT_DIR, datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
-    if not os.path.exists(exp_folder):
+    exp_dir = join(OUT_DIR, datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+    if not os.path.exists(exp_dir):
         try:
-            os.mkdir(exp_folder)
-            os.mkdir(join(exp_folder, "datasets"))
+            os.mkdir(exp_dir)
+            os.mkdir(join(exp_dir, "datasets"))
         except Exception:
             raise SystemExit(
                 Fore.RED + Style.BOLD + "Error" + Style.RESET
-                + ": Cannot create experience directory under {}. ".format(exp_folder)
+                + ": Cannot create experience directory under {}. ".format(exp_dir)
             )
 
     # Parse the input file
@@ -284,29 +300,14 @@ def main(args):
             exp_script.run(
                 count=n_samples,
                 instructions=json.dumps({"instructions": [fuzz_instr]}),
-                clear_db=True if (it == 0) else False  # Clear the database before the experiment on the first iteration
+                clear_db=True  # Clear the database before the experiment on the first iteration
             )
 
-            # Fetch the experiment data
-            if not os.path.exists(dataset_path):
-                exp_data.fetch(dataset_path)
-                ml_data.format_csv(dataset_path, sep=';')
-            else:
-                # Fetch the data into a temporary dictionary
-                tmp_dataset_path = join(helper.tmp_dir(),
-                                        "temp_data.csv")
-                exp_data.fetch(tmp_dataset_path)
-                ml_data.format_csv(tmp_dataset_path, sep=';')
-                # Merge the data into the dataset
-                csv.merge(csv_in=[tmp_dataset_path, dataset_path],
-                          csv_out=dataset_path,
-                          out_sep=';',
-                          in_sep=[';', ';'])
         # Otherwise, we parse the rules and generate data accordingly
         else:
-            for rule in rules:
+            for rule_it in range(len(rules)):
                 # Get Rule properties
-                rule = ml_rule.from_dict(rule)
+                rule = ml_rule.from_dict(rules[rule_it])
                 print(Style.BOLD + "*** Applying rule: {}".format(rule) + Style.RESET)
 
                 # Calculate the number of times the experiment should be run with the rule
@@ -322,29 +323,36 @@ def main(args):
                 exp_script.run(
                     count=nb_of_samples,
                     instructions=json.dumps({"instructions": [fuzz_instr]}),
-                    clear_db=True if (it == 0) else False  # Clear the database before the experiment on the first iteration
+                    clear_db=True if (rule_it == 0) else False  # Clear the database before the experiment if it is the first rule
                 )
 
-                print(Style.BOLD + "*** Fetching data for rule: {}".format(rule) + Style.RESET)
+        # Fetch the experiment data
+        if not os.path.exists(dataset_path):
+            # Fetch the dataset
+            exp_data.fetch(dataset_path)
+            # Copy the raw version of the dataset to the exp folder
+            shutil.copy(src=dataset_path,
+                        dst=join(exp_dir, "datasets", "it_{}_raw.csv".format(it)))
+            # Format the dataset
+            ml_data.format_csv(dataset_path, sep=';')
+        else:
+            # Fetch the data into a temporary dictionary
+            tmp_dataset_path = join(helper.tmp_dir(), "temp_data.csv")
+            exp_data.fetch(tmp_dataset_path)
+            # Copy the raw version of the dataset to the exp folder
+            shutil.copy(src=tmp_dataset_path,
+                        dst=join(exp_dir, "datasets", "it_{}_raw.csv".format(it)))
+            # Format the dataset
+            ml_data.format_csv(tmp_dataset_path, sep=';')
+            # Merge the data into the previous dataset
+            csv.merge(csv_in=[tmp_dataset_path, dataset_path],
+                      csv_out=dataset_path,
+                      out_sep=';',
+                      in_sep=[';', ';'])
 
-                # Fetch the experiment data
-                if not os.path.exists(dataset_path):
-                    exp_data.fetch(dataset_path)
-                    ml_data.format_csv(dataset_path, sep=';')
-                else:
-                    # Fetch the data into a temporary file
-                    tmp_dataset_path = join(helper.tmp_dir(), "temp_data.csv")
-                    exp_data.fetch(tmp_dataset_path)
-                    ml_data.format_csv(tmp_dataset_path, sep=';')
-                    # Merge the data into the dataset
-                    csv.merge(csv_in=[tmp_dataset_path, dataset_path],
-                              csv_out=dataset_path,
-                              in_sep=[';', ';'],
-                              out_sep=';')
-
-        # Save the dataset to a the experience folder
+        # Save the dataset to the experience folder
         shutil.copy(src=dataset_path,
-                    dst=join(exp_folder, "datasets", "iteration_{}.csv".format(it)))
+                    dst=join(exp_dir, "datasets", "it_{}.csv".format(it)))
 
         # Convert the set to an arff file
         csv.to_arff(
@@ -358,7 +366,11 @@ def main(args):
         start_of_ml = time.time()
 
         out_rules, precision, recall = ml_alg.standard(
-            join(helper.tmp_dir(), "dataset.arff"), tt_split=70.0, seed=12345)
+            join(helper.tmp_dir(), "dataset.arff"),
+            tt_split=70.0,
+            cv_folds=10,
+            seed=12345
+        )
         end_of_ml = time.time()
 
         # Avoid cases where precision or recall are NaN values
@@ -370,13 +382,10 @@ def main(args):
         # Assign results from machine learning
         rules = list()  # Reset the rules
         for rule in out_rules:
-            if rule.get_class() == class_to_predict:
+            # Add the rules that match the class to predict and that have at least
+            # one condition
+            if rule.get_class() == class_to_predict and len(rule.get_conditions()) > 0:
                 rules += [rule.to_dict()]     # Assign the new rule to the rules
-
-        # # normalize the probabilities
-        # total_probability = sum([r["probability"] for r in rules])
-        # for rules in rules:
-        #     rule["probability"] /= total_probability
 
         # End of iteration total time
         end_of_it = time.time()
@@ -387,12 +396,12 @@ def main(args):
         # Update the ml statistics
         STATS["machine_learning"]["precision_score"]    += [precision]
         STATS["machine_learning"]["recall_score"]       += [recall]
-        STATS["machine_learning"]["rules"]              += [str(out_rules) if len(out_rules) > 0 else None]
+        STATS["machine_learning"]["rules"]              += [[str(r) for r in out_rules]] if len(out_rules) > 0 else [[]]
         # Update the context statistics
         STATS["context"]["nb_of_it"] = it+1
 
         # Save the statistics to the stats
-        with open(join(exp_folder, 'stats.json'), 'w') as stats_file:
+        with open(join(exp_dir, 'stats.json'), 'w') as stats_file:
             json.dump(STATS, stats_file)
 
         # Increment the number of iterations

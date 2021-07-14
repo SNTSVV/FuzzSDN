@@ -1,11 +1,10 @@
 import re
-import traceback
 
-import machine_learning.rule as ml_rule
-import weka.core.jvm as jvm
 from weka.classifiers import Classifier, Evaluation
 from weka.core.classes import Random
 from weka.core.converters import Loader
+
+import rdfl_exp.machine_learning.rule as ml_rule
 
 
 def standard(data_path, tt_split=66.0, cv_folds=None, seed=1):
@@ -42,7 +41,7 @@ def standard(data_path, tt_split=66.0, cv_folds=None, seed=1):
     if cv_folds:
         if not isinstance(cv_folds, int) or cv_folds < 1:
             ValueError("Argument \"cv_folds\" must be None or an integer >= 1 (not \"{}\")".format(cv_folds))
-        evl.crossvalidate_model(cls, train, cv_folds, Random(seed))
+        evl.crossvalidate_model(cls, data, cv_folds, Random(seed))
     else:
         evl.test_model(cls, test)
     # print(evl.summary())
@@ -69,18 +68,3 @@ def extract_rules_from_classifier(cls):
 
     return rules
 # End def extract_rules_from_classifier
-
-
-if __name__ == '__main__':
-
-    try:
-        jvm.start()
-        rules = standard(
-            "/Users/raphael.ollando/OneDrive - University of Luxembourg/03 - Research Notes/20210621 - Data.arff",
-            tt_split=70, seed=1234)
-        for r in rules:
-            print(r)
-    except Exception as e:
-        print(traceback.format_exc())
-    finally:
-        jvm.stop()

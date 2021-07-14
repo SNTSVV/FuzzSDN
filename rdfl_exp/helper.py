@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-# coding: utf-8
+# -*- coding: utf-8 -*-
+"""
+Collection of helping functions for rdfl_exp
+"""
+
 import getpass
 import os
 import pwd
@@ -8,19 +12,26 @@ import tempfile
 
 def tmp_dir(get_obj=False):
     """
-    Returns the tmp directory.
+    Returns the path to the experiment temporary directory (or the object) when
+    called. The temporary directory is created on the first call
+
+    :param get_obj: if set to true, the tempfile object will be returned
     :return: the tmp directory obj if get_obj is true, else, the path to the
              tmp directory
     """
     if not hasattr(tmp_dir, "tmp_dir"):
         tmp_dir.tmp_dir = tempfile.TemporaryDirectory()
 
-    return tmp_dir.tmp_dir if get_obj else tmp_dir.tmp_dir.name
+    return tmp_dir.tmp_dir if get_obj is True else tmp_dir.tmp_dir.name
 # end def tmp_dir
 
 
 def get_user():
-    """Try to find the user who called sudo/pkexec."""
+    """
+    Try to find the user who called sudo/pkexec.
+    :return: The user called by sudo or None if it cannot be found.
+    """
+    user = None
     try:
         return os.getlogin()
     except OSError:
