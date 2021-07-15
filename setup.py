@@ -6,18 +6,19 @@ except ImportError:
     from distutils.core import setup
 
 setup(
+    # Metadata
     name='rdfl_exp',
     version='0.0.1',
     description='Rule Detection with Feedback Loop Experiment',
+    url='',
     author='raphael.ollando',
-    author_email='raphaael.ollando@uni.lu',
-    packages=[
-        'rdfl_exp',
-        'rdfl_exp/experiment',
-        'rdfl_exp/machine_learning',
-        'rdfl_exp/resources',
-        'rdfl_exp/utils'
-    ],
+    author_email='raphael.ollando@uni.lu',
+
+    # Install Instructions
+    python_requires='>=3.8',
+    zip_safe=False,
+
+    # Requirements
     install_requires=[
         'pandas~=1.2.4',
         'numpy>=1.20.3',
@@ -29,10 +30,16 @@ setup(
         'mininet~=2.3.0.dev6',
         'liac-arff>=2.5.0',
     ],
-    zip_safe=False,
+
+    # Packages and Scripts
+    packages=[
+        'rdfl_exp',
+        'rdfl_exp/experiment',
+        'rdfl_exp/machine_learning',
+        'rdfl_exp/utils'
+    ],
     scripts=[
         'bin/rdfl_exp'
     ],
-    license='MIT',
 )
 
