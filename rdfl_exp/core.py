@@ -14,7 +14,7 @@ import rdfl_exp.experiment.script as exp_script
 import rdfl_exp.machine_learning.algorithms as ml_alg
 import rdfl_exp.machine_learning.data as ml_data
 from rdfl_exp import config
-from rdfl_exp.machine_learning import rule as ml_rule
+from rdfl_exp.machine_learning.rule import Rule
 from rdfl_exp.utils import csv
 from rdfl_exp.utils.terminal import Style
 
@@ -109,7 +109,7 @@ def run(args) -> None:
 
         # Write headers
         print(Style.BOLD
-              + "*** Iteration {}/{}".format(it + 1,it_max)
+              + "*** Iteration {}/{}".format(it + 1, it_max)
               + Style.RESET)
         print(Style.BOLD
               + "*** recall: {}/{}".format(recall, recall_th)
@@ -139,7 +139,7 @@ def run(args) -> None:
         else:
             for rule_it in range(len(rules)):
                 # Get Rule properties
-                rule = ml_rule.from_dict(rules[rule_it])
+                rule = Rule.from_dict(rules[rule_it])
                 print(Style.BOLD + "*** Applying rule: {}".format(
                     rule) + Style.RESET)
 

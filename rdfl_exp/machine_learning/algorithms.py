@@ -4,7 +4,7 @@ from weka.classifiers import Classifier, Evaluation
 from weka.core.classes import Random
 from weka.core.converters import Loader
 
-import rdfl_exp.machine_learning.rule as ml_rule
+from rdfl_exp.machine_learning.rule import Rule
 
 
 def standard(data_path, tt_split=66.0, cv_folds=None, seed=1):
@@ -64,7 +64,7 @@ def extract_rules_from_classifier(cls):
     for line in lines:
         # Check if the line match the structure of a rule
         if re.match(r'(.*)=>(.*=.*\(.*/.*\))', line):
-            rules.append(ml_rule.from_string(line))
+            rules.append(Rule.from_string(line))
 
     return rules
 # End def extract_rules_from_classifier

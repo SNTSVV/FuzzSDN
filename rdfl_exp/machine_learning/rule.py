@@ -3,9 +3,10 @@
 import math
 import operator
 import re
-
+from copy import deepcopy
 
 # ==== ( Lookup tables ) =======================================================
+from rdfl_exp.utils.interval import Interval, Union
 
 COND_TO_FUZZER_ACTION_DICT = {
     # Regular fields
@@ -38,11 +39,73 @@ COND_TO_FUZZER_ACTION_DICT = {
     "arp_spa"       : {"loc": 70, "size": 4},
     "arp_tha"       : {"loc": 74, "size": 6},
     "arp_tpa"       : {"loc": 80, "size": 4},
+}
 
+CUSTOM_FIELDS_TO_CDT = {
+    "match_type_is_valid": {
+        "True"  : {"field": "match_type", "op": operator.eq, "value": 1},
+        "False" : {"field": "match_type", "op": operator.ne, "value": 1},
+    },
+    "reason_NoMatch": {
+        "True"  : {"field": "reason", "op": operator.eq, "value": 0},
+        "False" : {"field": "reason", "op": operator.ne, "value": 0},
+    },
+    "reason_Action": {
+        "True"  : {"field": "reason", "op": operator.eq, "value": 1},
+        "False" : {"field": "reason", "op": operator.ne, "value": 1},
+    },
+    "reason_InvalidTTL": {
+        "True"  : {"field": "reason", "op": operator.eq, "value": 2},
+        "False" : {"field": "reason", "op": operator.ne, "value": 2},
+    },
+    "reason_Illegal": {
+        "True"  : {"field": "reason", "op": operator.gt, "value": 2},
+        "False" : {"field": "reason", "op": operator.le, "value": 2},
+    },
+    "oxm_class_NXM_0": {
+        "True": {"field": "oxm_class", "op": operator.eq, "value": 0x0000},
+        "False": {"field": "oxm_class", "op": operator.ne, "value": 0x0000},
+    },
+    "oxm_class_NXM_1": {
+        "True": {"field": "oxm_class", "op": operator.eq, "value": 0x0001},
+        "False": {"field": "oxm_class", "op": operator.ne, "value": 0x0001},
+    },
+    "oxm_class_OPENFLOW_BASIC": {
+        "True": {"field": "oxm_class", "op": operator.eq, "value": 0x8000},
+        "False": {"field": "oxm_class", "op": operator.ne, "value": 0x8000},
+    },
+    "oxm_class_EXPERIMENTER": {
+        "True": {"field": "oxm_class", "op": operator.eq, "value": 0xFFFF},
+        "False": {"field": "oxm_class", "op": operator.ne, "value": 0xFFFF},
+    },
+    "oxm_class_INVALID": {
+        "True":  [
+            {"field": "oxm_class", "op": operator.ne, "value": 0x0000},
+            {"field": "oxm_class", "op": operator.ne, "value": 0x0001},
+            {"field": "oxm_class", "op": operator.ne, "value": 0x8000},
+            {"field": "oxm_class", "op": operator.ne, "value": 0xFFFF}
+        ],
+        "False": {"field": "oxm_class", "op": operator.eq, "value": 0x0000},
+    },
+    "match_pad_is_zero": {
+        "True":  {"field": "match_pad", "op": operator.eq,  "value": 0},
+        "False": {"field": "match_pad", "op": operator.ne, "value": 0}
+    },
+    "pad_is_zero": {
+        "True":  {"field": "pad", "op": operator.eq, "value": 0},
+        "False": {"field": "pad", "op": operator.ne, "value": 0}
+    },
+    "ethertype_is_arp": {
+        "True":   {"field": "ethertype", "op": operator.eq, "value": 0x0806},
+        "False":  {"field": "ethertype", "op": operator.ne, "value": 0x0806},
+    },
+
+    # TODO: Add fields for the pads
 }
 
 STR_TO_OP_DICT = {
     "=" : operator.eq,
+    "!=": operator.ne,
     ">=": operator.ge,
     ">" : operator.gt,
     "<=": operator.le,
@@ -51,13 +114,14 @@ STR_TO_OP_DICT = {
 
 OP_TO_STR_DICT = {
     operator.eq: "=",
+    operator.ne: "!=",
     operator.ge: ">=",
     operator.gt: ">",
     operator.le: "<=",
     operator.lt: "<"
 }
 
-# ===== ( Class Object ) =======================================================
+# ===== ( Rule class ) =========================================================
 
 
 class Rule(object):
@@ -71,6 +135,59 @@ class Rule(object):
         self.__class = ""
         self.__conditions = list()
     # End def __init__
+
+    @classmethod
+    def from_string(cls, rule_str: str):
+        """
+        Create a Rule object from a rule string
+        :param rule_str:
+        :return:
+        """
+
+        # Create the new rule
+        new_rule = Rule()
+
+        # Define regex
+        rgx_cdt = r"\(([^(/)]+)\)"
+        rgx_cls_1 = r"(?<==>).*=.*(?=\()"
+        rgx_cls_2 = r"(?<==>).*=.*"
+
+        # Find all criteria and store them in a list
+        criteria_found = re.findall(rgx_cdt, rule_str)
+        for criterion in criteria_found:
+            params = criterion.split(" ")
+            new_rule.add_condition(field=params[0],
+                                   op=STR_TO_OP_DICT.get(params[1], "="),
+                                   value=params[2])
+
+        # Find to which class the rules applies
+        class_match = re.search(rgx_cls_1, rule_str)
+        if class_match:
+            new_rule.set_class(class_match.group(0).split("=")[1].strip())
+        else:
+            class_match = re.search(rgx_cls_2, rule_str)
+            if class_match:
+                new_rule.set_class(class_match.group(0).split("=")[1].strip())
+
+        return new_rule
+    # End def from_string
+
+    @classmethod
+    def from_dict(cls, rule_dict: dict):
+        """
+        Create a Rule object from a rule dict object
+
+        :param rule_dict:
+        :return:
+        """
+
+        new_rule = cls.from_string(rule_dict["conditions"])
+        new_rule.set_class(rule_dict["class"])
+
+        return new_rule
+    # End def from_dict
+
+    # ===== ( Overload ) =======================================================
 
     def __repr__(self):
         repr_str = ""
@@ -87,6 +204,7 @@ class Rule(object):
 
         repr_str += " => class={}".format(self.__class)
         return repr_str
+    # End __repr__
 
     # ===== ( Getters ) ======================================================
 
@@ -100,14 +218,29 @@ class Rule(object):
 
     # ===== ( Setters ) ========================================================
 
-    def add_condition(self, field, op, value):
-        self.__conditions.append(
-            {
-                "field": field,
-                "op": op,
-                "value": value
-            }
-        )
+    def add_condition(self, field, op, value) -> None:
+        # Check if it is a custom field
+        if field in CUSTOM_FIELDS_TO_CDT:
+            field_dict = deepcopy(CUSTOM_FIELDS_TO_CDT[field][value])
+            if isinstance(field_dict, list):
+                for field in field_dict:
+                    self.__conditions.append(field)
+            else:
+                self.__conditions.append(field_dict)
+
+        # Check if the field is known
+        elif field in COND_TO_FUZZER_ACTION_DICT:
+            self.__conditions.append(
+                {
+                    "field": field,
+                    "op": op,
+                    "value": value
+                }
+            )
+
+        # Else raise an error
+        else:
+            pass  # TODO: Raise an error
     # End def add_condition
 
     def set_class(self, lb_cls):
@@ -138,22 +271,20 @@ class Rule(object):
         out_dict["class"] = self.get_class()
 
         return out_dict
+    # End def to_dict
 
     def to_fuzzer_actions(self):
         """
         """
-        # TODO: handle custom made fields
         # TODO: handle poorly defined conditions, like "(field > value) and (field < value - 1)" (which is impossible)
 
         fuzz_action = list()
         for c in self.__conditions:
-
             # 1. get the dict for the action
-            action_dict = COND_TO_FUZZER_ACTION_DICT[c["field"]]
+            action_dict = deepcopy(COND_TO_FUZZER_ACTION_DICT[c["field"]])
 
             # 2 Find if there is already an action on the same field
             act_ind = next((i for i, item in enumerate(fuzz_action) if item["field"] == c["field"]), None)
-            print(act_ind)
             # 3.1 If we already found an action we merge them if possible
             if act_ind is not None:
                 # 3.1.1 If there is already a set action, we skip all futher steps
@@ -164,17 +295,32 @@ class Rule(object):
                 # the new type as "set"
                 if c["op"] == operator.eq:  # Operator is "="
                     fuzz_action[act_ind]["type"] = "set"
-                    fuzz_action[act_ind]["value"] = c["value"]
+                    fuzz_action[act_ind]["value"] = int(c["value"])
                     if "range" in fuzz_action[act_ind]:
                         del fuzz_action[act_ind]["range"]  # We remove the range key
                 # 3.1.3 Otherwise, we update the range
                 else:
                     fuzz_action[act_ind]["type"] = "scramble_in_range"
-                    # Create modify the range of act_range
-                    if not c["op"](fuzz_action[act_ind]["range"][0], int(c["value"])):
-                        fuzz_action[act_ind]["range"][0] = int(c["value"])
-                    elif not c["op"](fuzz_action[act_ind]["range"][1], int(c["value"])):
-                        fuzz_action[act_ind]["range"][1] = int(c["value"])
+
+                    # Update the range
+                    op_range = None
+                    if c["op"] == operator.ne:
+                        op_range = Union(Interval((-math.inf, int(c["value"])-1)),
+                                         Interval((int(c["value"])+1, math.inf)))
+
+                    elif c["op"] == operator.ge:
+                        op_range = Union(Interval((int(c["value"]), math.inf)))
+
+                    elif c["op"] == operator.gt:
+                        op_range = Union(Interval((int(c["value"])+1, math.inf)))
+
+                    elif c["op"] == operator.le:
+                        op_range = Union(Interval((-math.inf, int(c["value"]))))
+
+                    elif c["op"] == operator.lt:
+                        op_range = Union(Interval((-math.inf, int(c["value"])-1)))
+
+                    fuzz_action[act_ind]["range"].inter(op_range, inplace=True)
 
             # 3.2 Otherwise we create a new action
             else:
@@ -189,72 +335,42 @@ class Rule(object):
                 # 2.3.1 determine the type of operation:
                 if c["op"] == operator.eq:  # Operator is "="
                     action["type"] = "set"
-                    action["value"] = c["value"]
+                    action["value"] = int(c["value"])
 
                 else:  # Operator is ">", ">=", "<" or "<="
                     action["type"] = "scramble_in_range"
                     ul = int(math.pow(2, 8 * int(action_dict["size"])) - 1)  # Create the range depending on the size of the field
-                    action["range"] = [0, ul]
+                    action["range"] = Union(Interval((0, ul)))
 
                     # Update the range
-                    if not c["op"](action["range"][0], int(c["value"])):
-                        action["range"][0] = int(c["value"])
-                    elif not c["op"](action["range"][1], int(c["value"])):
-                        action["range"][1] = int(c["value"])
+                    op_range = None
+                    if c["op"] == operator.ne:
+                        op_range = Union(Interval((-math.inf, int(c["value"])-1)),
+                                         Interval((int(c["value"])+1, math.inf)))
+
+                    elif c["op"] == operator.ge:
+                        op_range = Union(Interval((int(c["value"]), math.inf)))
+
+                    elif c["op"] == operator.gt:
+                        op_range = Union(Interval((int(c["value"])+1, math.inf)))
+
+                    elif c["op"] == operator.le:
+                        op_range = Union(Interval((-math.inf, int(c["value"]))))
+
+                    elif c["op"] == operator.lt:
+                        op_range = Union(Interval((-math.inf, int(c["value"])-1)))
+
+                    action["range"].inter(op_range, inplace=True)
 
                 # 3.2.2 We add the new action to the action list
                 fuzz_action.append(action)
 
+        # Convert all the unions ranges to a list of ranges
+        for act in fuzz_action:
+            if "range" in act:
+                if isinstance(act["range"], Union):
+                    act["range"] = [[x.inf, x.sup] for x in list(act["range"])]
         return fuzz_action
     # End def to_fuzzer_actions
 
 # End class Rule
-
-
-# ===== ( Methods ) ============================================================
-
-
-def from_string(rule_str):
-    """
-    Create a Rule object from a rule string
-    :param rule_str:
-    :return:
-    """
-
-    # Create the new rule
-    new_rule = Rule()
-
-    # Define regex
-    rgx_cdt = r"\(([^(/)]+)\)"
-    rgx_cls = r"(?<==>).*=.*(?=\()"
-
-    # Find all criteria and store them in a list
-    criteria_found = re.findall(rgx_cdt, rule_str)
-    for criterion in criteria_found:
-        params = criterion.split(" ")
-        new_rule.add_condition(field=params[0],
-                               op=STR_TO_OP_DICT.get(params[1], "="),
-                               value=params[2])
-
-    # Find to which class the rules applies
-    class_match = re.search(rgx_cls, rule_str)
-    if class_match is not None:
-        new_rule.set_class(class_match.group(0).split("=")[1].strip())
-
-    return new_rule
-# End def from_string
-
-
-def from_dict(rule_dict: dict):
-    """
-    Create a Rule object from a rule dict object
-
-    :param rule_dict:
-    :return:
-    """
-
-    new_rule = from_string(rule_dict["conditions"])
-    new_rule.set_class(rule_dict["class"])
-
-    return new_rule
-# End def from_string

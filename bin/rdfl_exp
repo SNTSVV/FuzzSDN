@@ -3,6 +3,7 @@
 
 import argparse
 import grp
+import logging
 import os
 import pwd
 import signal
@@ -110,6 +111,7 @@ if __name__ == '__main__':
     setup(args)
 
     try:
+        jvm.logger.setLevel(logging.WARNING)
         jvm.start()  # Start the JVM
         core.run(args)
     except (Exception,):  # using '(Exception,)' instead of 'Exception' to trick PEP8

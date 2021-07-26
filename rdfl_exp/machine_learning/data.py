@@ -153,13 +153,11 @@ def format_csv(csv_path, out_path=None, sep=','):
     :param out_path:
     """
     # Load a dataset from the data folder or use the output of the previous pipeline
-    raw_df = pd.read_csv(csv_path, sep=sep)
+    df = pd.read_csv(csv_path, sep=sep)
 
     # --------------------------------------------------------------------------
     # Make Field as features
     # --------------------------------------------------------------------------
-
-    df = raw_df.copy(deep=True)
 
     # Interpret the field from the byte string
     field_features = df['data'].apply(_bytes_to_ofp_fields)
@@ -176,10 +174,6 @@ def format_csv(csv_path, out_path=None, sep=','):
     df["arp_tha"] = df["arp_tha"].apply(lambda x: int.from_bytes(x, byteorder='big'))
     df["arp_tpa"] = df["arp_tpa"].apply(lambda x: int.from_bytes(x, byteorder='big'))
     df['error_type']    = df['error_type'].apply(lambda x: x if x == "parsing_error" else "non_parsing_error")
-
-    # Drop error_trace column if it exists
-    if 'error_trace' in df.columns:
-        df.drop('error_trace', axis='columns')
 
     # --------------------------------------------------------------------------
     # Apply Domain Knowledge
@@ -217,9 +211,8 @@ def format_csv(csv_path, out_path=None, sep=','):
                 'oxm_class_EXPERIMENTER',
                 'oxm_class_INVALID']
     for i in range(len(oxm_cols)):
-        if oxm_cols[i] not in one_hot_reason:
-            one_hot_reason.insert(min(i, len(oxm_cols) - 1), oxm_cols[i], False)
-
+        if oxm_cols[i] not in one_hot_oxm_class:
+            one_hot_oxm_class.insert(min(i, len(oxm_cols) - 1), oxm_cols[i], False)
     ### Add the columns to the dataframe
     df = pd.concat([df.iloc[:, :df.columns.get_loc("oxm_class")],
                     one_hot_oxm_class,
@@ -247,21 +240,23 @@ def format_csv(csv_path, out_path=None, sep=','):
     df.rename(columns={'ethertype': 'ethertype_is_arp'}, inplace=True)
 
     # Drop the unused columns
-    df = df.drop([
-        'cookie',       # cookie is a unique identifier for a fuzzed message. It is irrelevant to use it.
-        'buffer_id',    #
-        'table_id',     #
-        'error_reason',
-        'error_effect'
-    ],
-        axis='columns')
+    df.drop(['cookie',       # cookie is a unique identifier for a fuzzed message. It is irrelevant to use it.
+             'buffer_id',
+             'table_id',
+             'error_reason',
+             'error_effect'],
+            axis='columns',
+            inplace=True)
 
     # Drop error_trace column if it exists
     if 'error_trace' in df.columns:
         df.drop(['error_trace'], axis='columns', inplace=True)
 
+    # Rename error_type into class column
+    df.rename(columns={'error_type': 'class'}, inplace=True)
+
     # Ensure that the error_type column is at the end
-    cols_at_end = ['error_type']
+    cols_at_end = ['class']
     df = df[[c for c in df if c not in cols_at_end]
             + [c for c in cols_at_end if c in df]]
 

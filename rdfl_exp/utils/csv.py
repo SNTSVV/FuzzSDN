@@ -1,4 +1,9 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+
 import ast
+
 import arff
 import pandas as pd
 
@@ -47,7 +52,11 @@ def to_arff(csv_path, arff_path, relation, description='', csv_sep=','):
         # By default, all values are numeric
         att = (c, 'NUMERIC')
         # Find if some are booleans
-        var_eval = ast.literal_eval(str(df[c].iloc[0]))
+        try:
+            var_eval = ast.literal_eval(str(df[c].iloc[0]))
+        except ValueError as e:
+            print("Failed evaluation: {} for col '{}' ({})".format(df[c].iloc[0], c, str(df[c].iloc[0])))
+            raise e
         if type(var_eval) is bool:
             att = (c, ['True', 'False'])
         # Add the attribute tuple to the attributes

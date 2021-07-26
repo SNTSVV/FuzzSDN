@@ -5,8 +5,9 @@ A class to manipulate all operations with a database
 """
 
 import copy
-import MySQLdb
 import logging
+
+import MySQLdb
 
 
 class Database:
