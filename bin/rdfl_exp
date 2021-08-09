@@ -55,15 +55,15 @@ def cleanup(*args):
         # Ensure the APP_DIR as the user's permissions
         uid = pwd.getpwnam(config.get_user()).pw_uid
         gid = grp.getgrnam(config.get_user()).gr_gid
-        file.recursive_chown(config.APP_DIR, uid, gid)
+        file.recursive_chown(config.RDFL_ROOT, uid, gid)
 
         # Clean the temporary directory
         config.tmp_dir(get_obj=True).cleanup()
 
         # Clean the run directory
-        for filename in os.listdir(config.RUN_DIR):
-            os.remove(join(config.RUN_DIR, filename))
-        os.rmdir(config.RUN_DIR)
+        for filename in os.listdir(config.RUN_PATH):
+            os.remove(join(config.RUN_PATH, filename))
+        os.rmdir(config.RUN_PATH)
 
         # Check if the JVM is started and stop it otherwise
         if jvm.started:
@@ -113,7 +113,8 @@ if __name__ == '__main__':
     try:
         jvm.logger.setLevel(logging.WARNING)
         jvm.start()  # Start the JVM
-        core.run(args)
+        core.init(args)
+        core.run()
     except (Exception,):  # using '(Exception,)' instead of 'Exception' to trick PEP8
         print(traceback.format_exc())
     finally:

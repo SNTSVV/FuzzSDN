@@ -13,16 +13,20 @@ from os.path import join
 
 from rdfl_exp.utils.terminal import Fore, Style
 
+import logging
+
 # ===== ( Globals ) ============================================================
 
 # Directories
-RESOURCE_DIR = os.path.join(os.path.split(__file__)[0], "resources")
-HOME_DIR = os.path.expanduser('~')
-APP_DIR = os.path.join(HOME_DIR, ".rdfl_exp")
-OUT_DIR = os.path.join(APP_DIR, "out")
-RUN_DIR = "/var/run/rdfl_exp"
-EXP_DIR = str()
-CLEANUP = True
+USR_HOME    = os.path.expanduser('~')               # Path to user home directory
+RDFL_ROOT   = os.path.join(USR_HOME, ".rdfl_exp")   # Root path of the application
+LOG_PATH    = os.path.join(RDFL_ROOT, "log")        # Path to the log directory
+OUT_PATH    = os.path.join(RDFL_ROOT, "out")        # Path to the output directory
+RUN_PATH    = "/var/run/rdfl_exp"                   # Path to the run directory
+EXP_PATH    = str()                                 # Path to the experiment folder. Defined when running config.init
+
+# Variables
+CLEANUP     = True  # Whether or not a cleanup should be performed
 
 
 # ===== ( Init ) ===============================================================
@@ -36,8 +40,10 @@ def init(force=False):
                            "once. Set \"force=True\" should be set to bypass"
                            "this error")
 
-    __setup_directories()
-    __setup_pid()
+    _setup_dir_structure()
+    _setup_pid()
+    _setup_logger()
+# End def init
 
 
 # ===== ( Functions ) ==========================================================
@@ -63,7 +69,7 @@ def get_user():
     Try to find the user who called sudo/pkexec.
     :return: The user called by sudo or None if it cannot be found.
     """
-    user = None
+
     try:
         return os.getlogin()
     except OSError:
@@ -96,70 +102,80 @@ def get_user():
 # ===== ( Private config functions ) ===========================================
 
 
-def __setup_directories():
+def _setup_dir_structure():
     """
     Check the availability of the run folder.
     """
-    global RUN_DIR
-    global APP_DIR
-    global OUT_DIR
-    global EXP_DIR
+    global RUN_PATH
+    global RDFL_ROOT
+    global OUT_PATH
+    global EXP_PATH
 
     # First we check if the run folder already exists or we create one
-    if not os.path.exists(RUN_DIR):
+    if not os.path.exists(RUN_PATH):
         try:
-            os.mkdir(RUN_DIR)
+            os.mkdir(RUN_PATH)
         except Exception:
             raise SystemExit(
                 Fore.RED + Style.BOLD + "Error" + Style.RESET
-                + ": Cannot create run direction under {}. ".format(RUN_DIR)
+                + ": Cannot create run direction under {}. ".format(RUN_PATH)
                 + "Please verify the script got root permissions"
             )
 
-    # Then check if the APP_DIR exists
-    if not os.path.exists(APP_DIR):
+    # Then check if the root folder exists
+    if not os.path.exists(RDFL_ROOT):
         try:
-            os.mkdir(APP_DIR)
+            os.mkdir(RDFL_ROOT)
         except Exception:
             raise SystemExit(
                 Fore.RED + Style.BOLD + "Error" + Style.RESET
-                + ": Cannot create application directory at {}. ".format(
-                    APP_DIR)
+                + ": Cannot create root application directory at {}. ".format(
+                    RDFL_ROOT)
+            )
+
+    # Then check if the log folder exists
+    if not os.path.exists(LOG_PATH):
+        try:
+            os.mkdir(LOG_PATH)
+        except Exception:
+            raise SystemExit(
+                Fore.RED + Style.BOLD + "Error" + Style.RESET
+                + ": Cannot create log directory at {}. ".format(LOG_PATH)
             )
 
     # Then check if the out folder exists
-    if not os.path.exists(OUT_DIR):
+    if not os.path.exists(OUT_PATH):
         try:
-            os.mkdir(OUT_DIR)
+            os.mkdir(OUT_PATH)
         except Exception:
             raise SystemExit(
                 Fore.RED + Style.BOLD + "Error" + Style.RESET
-                + ": Cannot create output directory under {}. ".format(OUT_DIR)
+                + ": Cannot create output directory under {}. ".format(OUT_PATH)
             )
 
     # Create the folder for the current experiment
-    EXP_DIR = join(OUT_DIR, datetime.now().strftime("%Y%m%d_%H%M%S"))
-    if not os.path.exists(EXP_DIR):
+    EXP_PATH = join(OUT_PATH, datetime.now().strftime("%Y%m%d_%H%M%S"))
+    if not os.path.exists(EXP_PATH):
         try:
-            os.mkdir(EXP_DIR)
-            os.mkdir(join(EXP_DIR, "datasets"))
+            os.mkdir(EXP_PATH)
+            os.mkdir(join(EXP_PATH, "datasets"))
         except Exception:
             raise SystemExit(
                 Fore.RED + Style.BOLD + "Error" + Style.RESET
-                + ": Cannot create experience directory under {}.".format(EXP_DIR)
+                + ": Cannot create experience directory under {}.".format(EXP_PATH)
             )
 # End def setup_directories
 
 
-def __setup_pid():
+def _setup_pid():
     """
     Check the presence of a pid file and verify if another experiment isn't
     running.
     """
 
-    if os.path.isfile("{}/pid".format(RUN_DIR)):
+    if os.path.isfile("{}/pid".format(RUN_PATH)):
         # There is a PID
-        with open("{}/pid".format(RUN_DIR), 'r') as pid_file:
+        with open("{}/pid".format(RUN_PATH), 'r') as pid_file:
             pid = int(pid_file.readline().rstrip())
 
         # If the pid is different, we exit the system and notify the user
@@ -184,9 +200,33 @@ def __setup_pid():
                       + "process: {}.\n".format(pid)
                       + "Overwriting old pid_file.")
 
-                os.remove("{}/pid".format(RUN_DIR))
+                os.remove("{}/pid".format(RUN_PATH))
 
     # If there is no pid we create one for this program
-    with open("{}/pid".format(RUN_DIR), 'w') as pid_file:
+    with open("{}/pid".format(RUN_PATH), 'w') as pid_file:
         pid_file.write(str(os.getpid()))
-# End def setup_pid
+# End def +_setup_pid
+
+
+def _setup_logger():
+
+    # TODO: add a header
+
+    # determine the log path
+    log_file = "{}.log".format(datetime.now().strftime("%Y%m%d_%H%M%S"))
+    path_to_logfile = join(LOG_PATH, log_file)
+
+    # Remove all handlers associated with the root logger object.
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
+    # Add the basic configuration
+    logging.basicConfig(
+        filename=path_to_logfile,
+        filemode='a',
+        format='%(asctime)s,%(msecs)d | %(name)s | %(levelname)s | %(message)s',
+        datefmt='%H:%M:%S',
+        level=logging.DEBUG,
+    )
+
+    logging.info("Running Urban Planning")
+# End def _setup_logger

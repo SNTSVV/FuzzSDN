@@ -1,0 +1,212 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+import json
+import os
+import shutil
+import tempfile
+from os import listdir
+from os.path import isfile, join
+
+import numpy as np
+import pandas as pd
+import paramiko
+from matplotlib import pyplot as plt
+
+from rdfl_exp.utils import csv
+
+host = "10.240.5.104"
+port = 22
+username = "ubuntu"
+password = "ubuntu"
+
+exp_to_fetch = "20210806_130424"
+
+out_dir = "/home/ubuntu/.rdfl_exp/out"
+res_dir = os.path.join("/Users/raphael.ollando", "rdfl_exp_summary_{}".format(exp_to_fetch))
+
+
+if __name__ == '__main__':
+
+    if os.path.exists(res_dir):
+        shutil.rmtree(res_dir)
+    os.mkdir(res_dir)
+
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(host, port, username, password)
+
+    stdin, stdout, stderr = ssh.exec_command("ls {}".format(out_dir))
+    experiments = sorted([x.strip() for x in stdout.readlines()])
+
+    last_exp = experiments[experiments.index(exp_to_fetch)]
+
+    json_local = join(res_dir, "stats.json")
+    os.mkdir(join(res_dir, "datasets"))
+    datasets_path = join(res_dir, "datasets")
+    transport = paramiko.Transport((host, port))
+    sftp = None
+    try:
+        transport.connect(username=username, password=password)
+        sftp = paramiko.SFTPClient.from_transport(transport)
+        sftp.get(join(out_dir, last_exp, "stats.json"), json_local)
+        # Get the datasets
+        file_list = sftp.listdir(join(out_dir, last_exp, "datasets"))
+        it = 1
+        for item in file_list:
+            print("getting: {} ({}/{})".format(item, it, len(file_list)))
+            sftp.get(join(out_dir, last_exp, "datasets", item), join(datasets_path, item))
+            it += 1
+    finally:
+        if transport: transport.close()
+        if sftp: sftp.close()
+
+    # Take care of the datasets
+    raw_files = [join(datasets_path, f) for f in listdir(datasets_path) if isfile(join(datasets_path, f)) and f.endswith("raw.csv")]
+
+    csv.merge(csv_in=raw_files,
+              csv_out=join(res_dir, "raw_csv"),
+              in_sep=[';'] * len(raw_files),
+              out_sep=';')
+
+    csv.merge(csv_in=raw_files,
+              csv_out=join("~/", "all_raw.csv"),
+              in_sep=[';'] * len(raw_files),
+              out_sep=';')
+
+    df = pd.read_csv(join(res_dir, "raw_csv"), sep=";")
+
+    total = df.shape[0]
+    nb_of_traces = df["error_trace"].count()
+    nb_of_unknown_err = (df.error_reason == 'Unknown').sum()
+    nb_of_unknown_eff = (df.error_effect == 'Unknown').sum()
+    nb_of_error_type = (df.error_type == 'Unknown').sum()
+    nb_switch_disconnected = (
+                df.error_effect == 'switch_disconnected').sum()
+
+    print("total:", total)
+    print("nb_of_traces:", nb_of_traces)
+    print("nb_of_unknown_err:", nb_of_unknown_err,
+          nb_of_unknown_err / total)
+    print("nb_of_unknown_eff:", nb_of_unknown_eff,
+          nb_of_unknown_eff / total)
+    print("nb_of_error_type:", nb_of_error_type, nb_of_error_type / total)
+    print("nb_switch_disconnected:", nb_switch_disconnected,
+          nb_switch_disconnected / total)
+    print("ratio:", nb_of_traces / total)
+
+    npe_ratio = []
+    for i in range(len([x for x in file_list if 'raw' not in x])):
+        df = pd.read_csv(join(datasets_path, "it_{}.csv".format(i)), sep=";")
+
+        nb_pe = df['class'].value_counts()
+        npe_ratio.append(nb_pe['non_parsing_error']/(nb_pe['non_parsing_error'] + nb_pe['parsing_error']))
+
+    # Take care of stats.json
+    with open(json_local, 'r') as jl:
+        stats = json.load(jl)
+
+    # Get the parameters
+    nb_of_instances = stats["machine_learning"]['nb_of_instances']
+    tp_rate         = stats["machine_learning"]["tp_rate"]
+    fp_rate         = stats["machine_learning"]["fp_rate"]
+    accuracy_score  = stats["machine_learning"]["accuracy"]
+    precision_score = stats["machine_learning"]["precision_score"]
+    recall_score    = stats["machine_learning"]["recall_score"]
+    f1_score        = stats["machine_learning"]["f_measure"]
+    mcc_score       = stats["machine_learning"]["mcc"]
+    roc_score       = stats["machine_learning"]["roc"]
+    prc_score       = stats["machine_learning"]["prc"]
+    rules           = stats["machine_learning"]["rules"]
+
+    #
+    for i in range(len(rules)):
+        print("iteration {}:".format(i))
+        rule_str = ""
+        nb_of_rules = 0
+        for r in rules[i]:
+            nb_of_rules += 1
+            rule_str += "\t\t{}\n".format(r)
+
+        print("\tNumber of Rules: {}".format(nb_of_rules))
+        print("\tRules:")
+        print(rule_str)
+
+    print("Final precision: ", precision_score[-1])
+    print("Final recall: ", recall_score[-1])
+
+    # Print graphs
+    it_ax = list(range(stats["context"]["nb_of_it"]))
+    smp_ax = [300 * x for x in range(stats["context"]["nb_of_it"])]
+    # 3 graphs in a row and 4 rows
+    fig, axs = plt.subplots(4, 3, figsize=(15, 12))
+
+    ## 1st row
+    ### Print number of instances
+    axs[0, 0].plot(it_ax, nb_of_instances, '-x')
+    axs[0, 0].locator_params(axis="x", integer=True, tight=True)
+    axs[0, 0].set_title('Number of instances')
+
+    ### Print True positive rate
+    axs[0, 1].plot(it_ax, tp_rate, '-x')
+    axs[0, 1].locator_params(axis="x", integer=True, tight=True)
+    axs[0, 1].set_title('True Positives rate')
+
+    ### Print False positive rate
+    axs[0, 2].plot(it_ax, fp_rate, '-x')
+    axs[0, 2].locator_params(axis="x", integer=True, tight=True)
+    axs[0, 2].set_title('False Positives rate')
+
+    ## 2nd row
+    ### Print accuracy graph
+    axs[1, 0].plot(it_ax, accuracy_score, '-x')
+    axs[1, 0].locator_params(axis="x", integer=True, tight=True)
+    axs[1, 0].set_title('Accuracy Score')
+
+    ### Print recall graph
+    axs[1, 1].plot(it_ax, recall_score, '-x')
+    axs[1, 1].locator_params(axis="x", integer=True, tight=True)
+    axs[1, 1].set_title('Recall Score')
+
+    ### Print precision graph
+    axs[1, 2].plot(it_ax, precision_score, '-x')
+    axs[1, 2].locator_params(axis="x", integer=True, tight=True)
+    axs[1, 2].set_title('Precision Score')
+
+    ## 3rd row
+    ### print Area under ROC Score
+    axs[2, 0].plot(it_ax, roc_score, '-x')
+    axs[2, 0].locator_params(axis="x", integer=True, tight=True)
+    axs[2, 0].set_title('Area under ROC')
+
+    ### print MCC Score
+    axs[2, 1].plot(it_ax, mcc_score, '-x')
+    axs[2, 1].locator_params(axis="x", integer=True, tight=True)
+    axs[2, 1].set_title('MCC Score')
+
+    ### print Area under PRC Score
+    axs[2, 2].plot(it_ax, prc_score, '-x')
+    axs[2, 2].locator_params(axis="x", integer=True, tight=True)
+    axs[2, 2].set_title('Area under PRC')
+
+    ## 4th row
+    ### print F1 Score
+    axs[3, 0].plot(it_ax, f1_score, '-x')
+    axs[3, 0].locator_params(axis="x", integer=True, tight=True)
+    axs[3, 0].set_title('F1 Score')
+
+    ### print precision vs recall
+    y = np.array([precision_score for _, precision_score in sorted(zip(precision_score, recall_score))])
+    x = np.array(sorted(precision_score))
+    a, b, c = np.polyfit(x, y, 2)
+    axs[3, 1].scatter(precision_score, recall_score)
+    axs[3, 1].plot(x, a*(x**2) + b*x + c, 'r-')
+    axs[3, 1].set_title('Precision vs Recall Curve')
+
+    ### print ratio non_parsing_error
+    axs[3, 2].plot(it_ax, npe_ratio, '-x')
+    axs[3, 2].locator_params(axis="x", integer=True, tight=True)
+    axs[3, 2].set_title('Ration non parsing error')
+
+    plt.tight_layout()
+    plt.show()
+    fig.savefig(os.path.join(res_dir,'graphs.png'))

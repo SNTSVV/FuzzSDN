@@ -23,6 +23,7 @@ setup(
         'pandas~=1.2.4',
         'numpy>=1.20.3',
         'matplotlib~=3.4.2',
+        'sympy~=1.8',
         # 'scikit-learn~=0.24.2',
         # 'javabrigde>=1.0.16',
         # 'python-weka-wrapper3>=0.2.3',

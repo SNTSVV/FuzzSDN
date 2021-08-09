@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import itertools
 import math
 from collections.abc import Iterable
+from copy import copy, deepcopy
 
 
 class Interval:
@@ -89,7 +91,7 @@ class Interval:
         if self.inf == self.sup:
             return "[{}]".format(self.inf)
         else:
-            return "[{}, {}]".format(self.inf, self.sup)
+            return "({}, {})".format(self.inf, self.sup)
 
     def __len__(self):
         return abs(self._inf - self._sup) + 1
@@ -151,7 +153,7 @@ class Interval:
         return self.overlaps(other) or self.is_adjacent(other)
 
 
-class Union:
+class IntervalSet:
     """
     Represents an Union of Intervals
     """
@@ -167,7 +169,7 @@ class Union:
                 self._intervals.append(args[i])
 
             # From a union class
-            elif isinstance(args[i], Union):
+            elif isinstance(args[i], IntervalSet):
                 for j in args[i].intervals:
                     self._intervals.append(j)
 
@@ -183,13 +185,13 @@ class Union:
 
     @property
     def intervals(self):
-        return self._intervals
+        return [copy(x) for x in self._intervals]
 
     # ===== ( Builtins Overloads ) =============================================
 
     def __repr__(self):
         """ Return repr(self). """
-        repr_str = "Union("
+        repr_str = "IntervalSet("
         first = True
         for i in self._intervals:
             if first is True:
@@ -230,12 +232,8 @@ class Union:
         :param other:
         :return:
         """
-        if isinstance(other, Interval):
-            return_value = Union(*self._intervals, other)
-
-        elif isinstance(other, Union):
-            return_value = Union(self, other)
-
+        if isinstance(other, (Interval, IntervalSet)):
+            return_value = IntervalSet(self, other)
         else:
             raise TypeError("Unsupported operation 'union' for: "
                             "'{}' and '{}'".format(type(self).__name__,
@@ -248,7 +246,7 @@ class Union:
             return return_value
     # End def union
 
-    def inter(self, other, inplace=False):
+    def intersection(self, other, inplace=False):
         """
         Performs an intersection between the Union and the Interval / Union
         :param inplace:
@@ -259,32 +257,16 @@ class Union:
         self._canonicalize()
         intervals = list()
 
-        if isinstance(other, Interval):
-            for i in self:
-                if i.overlaps(other):
-                    intervals.append(
-                        Interval(
-                            (
-                                max(i.inf, other.inf),
-                                min(i.sup, other.sup)
-                            )
-                        )
-                    )
-
-        elif isinstance(other, Union):
+        if isinstance(other, (Interval, IntervalSet)):
+            if isinstance(other, Interval):
+                other = IntervalSet(other)
             other._canonicalize()
 
             for i in self:
                 for j in other:
                     if i.overlaps(j):
                         intervals.append(
-                            Interval(
-                                (
-                                    max(i.inf, j.inf),
-                                    min(i.sup, j.sup)
-                                )
-                            )
-                        )
+                            Interval((max(i.inf, j.inf), min(i.sup, j.sup))))
         else:
             raise TypeError("Unsupported operation 'intersection' for: "
                             "'{}' and '{}'".format(type(self).__name__,
@@ -294,8 +276,96 @@ class Union:
             self._intervals = intervals
             self._canonicalize()
         else:
-            return Union(*intervals)
-    # End def inter
+            return IntervalSet(*intervals)
+    # End def intersection
+
+    def subtract(self, other, inplace=False):
+        """ Subtract two Union from one each other"""
+        self._canonicalize()
+        if isinstance(other, Interval):
+            other = IntervalSet(other)
+
+        other._canonicalize()
+
+        # Define locally a function to compute the subtraction of two intervals
+        def interval_diff(i1, i2):
+
+            it1 = (i1.inf, i2.inf - 1)
+            it2 = (i2.sup + 1, i1.sup)
+
+            result = []
+            if it1[1] >= it1[0]:  # Otherwise the interval is not valid
+                result.append(it1)
+            if it2[1] >= it2[0]:  # Otherwise the interval is not valid
+                result.append(it2)
+
+            print(i1, i2, *result)
+            return result
+
+        new_intervals = other.intervals
+        for i2 in other:
+            new_intervals = list(
+                itertools.chain(*[interval_diff(i1, i2) for i1 in self])
+            )
+
+        if inplace is True:
+            self._intervals = new_intervals
+            self._canonicalize()
+        else:
+            return IntervalSet(*new_intervals)
+    # End def subtract
+
+    def invert(self):
+        """ Invert the IntervalSet """
+
+        self._canonicalize()
+
+        new_intervals = list()
+        min_ = -math.inf
+        for i in self:
+            # If the lower bound is the infinity, we ignore it
+            if i.inf != -math.inf:
+                new_intervals.append(Interval(min_, i.inf - 1))
+            min_ = i.sup + 1
+
+        # If the upper bound is the infinity, we ignore it
+        if min_ != math.inf:
+            new_intervals.append(Interval(min_, math.inf))
+
+        return IntervalSet(*new_intervals)
+
+    # ===== ( Operators overload ) =============================================
+
+    def __or__(self, other):
+        """ Overload '|' operator"""
+        return self.union(other)
+
+    def __ior__(self, other):
+        """ Overload '|=' operator"""
+        self.union(other, inplace=True)
+        return self
+
+    def __and__(self, other):
+        """ Overload '&' operator"""
+        return self.intersection(other, inplace=False)
+
+    def __iand__(self, other):
+        """ Overload '&=' operator"""
+        self.intersection(other, inplace=True)
+        return self
+
+    def __sub__(self, other):
+        """ Overload '-' operator"""
+        return self & ~other
+
+    def __isub__(self, other):
+        """ Overload '-=' operator"""
+        self.intersection(~other, inplace=True)
+        return self
+
+    def __invert__(self):
+        """ Overload operator '~' """
+        return self.invert()
 
     # ===== ( Private Methods ) ================================================
 
@@ -323,4 +393,4 @@ class Union:
         # Assign the new list of intervals to self._intervals
         self._intervals = new_ints
     # End def _canonicalize
-# End class Union
+# End class IntervalSet

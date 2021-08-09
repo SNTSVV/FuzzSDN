@@ -190,6 +190,8 @@ def format_csv(csv_path, out_path=None, sep=','):
     for i in range(len(reason_cols)):
         if reason_cols[i] not in one_hot_reason:
             one_hot_reason.insert(min(i, len(reason_cols) - 1), reason_cols[i], False)
+    ### Reorder the columns by name
+    one_hot_reason.sort_index(axis='columns', inplace=True)
     ### Add the columns to the dataframe
     df = pd.concat([df.iloc[:, :df.columns.get_loc("reason")],  # Insert reasons before total_len
                     one_hot_reason,
@@ -213,6 +215,8 @@ def format_csv(csv_path, out_path=None, sep=','):
     for i in range(len(oxm_cols)):
         if oxm_cols[i] not in one_hot_oxm_class:
             one_hot_oxm_class.insert(min(i, len(oxm_cols) - 1), oxm_cols[i], False)
+    ### Reorder the columns by name
+    one_hot_oxm_class.sort_index(axis='columns', inplace=True)
     ### Add the columns to the dataframe
     df = pd.concat([df.iloc[:, :df.columns.get_loc("oxm_class")],
                     one_hot_oxm_class,

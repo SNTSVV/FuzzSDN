@@ -7,3 +7,5 @@ python-weka-wrapper3>=0.2.3
 mysqlclient~=2.0.3
 mininet~=2.3.0.dev6
 liac-arff>=2.5.0
+sympy~=1.8
+setuptools~=57.0.0
