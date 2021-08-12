@@ -7,11 +7,11 @@ from rdfl_exp.utils.database import Database as SqlDb
 from rdfl_exp.utils.terminal import progress_bar
 
 ## Settings
-PRINT_STATISTICS = False  # default=True
-KEEP_TRACE_ON_UNKNOWN = True  # default=True
-SQL_DB_ADDRESS = "10.240.5.104"
-SQL_DB_USER = "dev"
-SQL_DB_PASSWORD = "b14724x"
+PRINT_STATISTICS        = False  # default=True
+KEEP_TRACE_ON_UNKNOWN   = True  # default=True
+SQL_DB_ADDRESS          = "10.240.5.104"
+SQL_DB_USER             = "dev"
+SQL_DB_PASSWORD         = "b14724x"
 
 # ---------
 # Main code
@@ -264,7 +264,6 @@ def fetch(csv_path: str):
             for key2 in rep_dict[key]:
                 print("\t\t- {}: {} ({:.3f}%)".format(key2, rep_dict[key][key2],
                                                       float(rep_dict[key][key2]) / float(nb_fm) * 100.0))
-
 
 # -----
 # Leftover

@@ -219,6 +219,22 @@ def _setup_logger():
     # Remove all handlers associated with the root logger object.
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
+
+    # Add a trace level to logging
+    trace_level = logging.DEBUG - 5
+
+    def log_to_trace(self, msg, *args, **kwargs):
+        if self.isEnabledFor(trace_level):
+            self._log(trace_level, msg, args, **kwargs)
+
+    def log_to_root(msg, *args, **kwargs):
+        logging.log(trace_level, msg, *args, **kwargs)
+
+    logging.addLevelName(trace_level, 'TRACE')
+    setattr(logging, 'TRACE', trace_level)
+    setattr(logging.getLoggerClass(), 'trace', log_to_trace)
+    setattr(logging, 'trace', log_to_root)
+
     # Add the basic configuration
     logging.basicConfig(
         filename=path_to_logfile,
@@ -227,6 +243,4 @@ def _setup_logger():
         datefmt='%H:%M:%S',
         level=logging.DEBUG,
     )
-
-    logging.info("Running Urban Planning")
 # End def _setup_logger

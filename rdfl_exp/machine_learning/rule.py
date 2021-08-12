@@ -4,7 +4,8 @@ import math
 import operator
 import random
 from copy import deepcopy
-from re import findall, search
+from re import search
+from re import search
 
 from sympy import *
 
@@ -13,99 +14,37 @@ from rdfl_exp.utils.interval import IntervalSet
 # ==== ( Lookup tables ) =======================================================
 
 
-COND_TO_FUZZER_ACTION_DICT = {
+COND_TO_FUZZER_ACTION_LUT = {
     # Regular fields
-    "of_version": {"loc": 0, "size": 1},
-    "of_type": {"loc": 1, "size": 1},
-    "length": {"loc": 2, "size": 2},
-    "xid": {"loc": 4, "size": 4},
-    "buffer_id": {"loc": 8, "size": 4},
-    "total_len": {"loc": 12, "size": 2},
-    "reason": {"loc": 14, "size": 1},
-    "table_id": {"loc": 15, "size": 1},
-    "cookie": {"loc": 16, "size": 8},
-    "match_type": {"loc": 24, "size": 2},
-    "match_length": {"loc": 26, "size": 2},
-    "match_pad": {"loc": 28, "size": 4},
-    "oxm_class": {"loc": 32, "size": 2},
-    "oxm_field": {"loc": 34, "size": 1},
-    "oxm_length": {"loc": 35, "size": 1},
-    "oxm_value": {"loc": 36, "size": 4},
-    "pad": {"loc": 40, "size": 2},
-    "eth_dst": {"loc": 42, "size": 6},
-    "eth_src": {"loc": 48, "size": 6},
-    "ethertype": {"loc": 54, "size": 2},
-    "arp_htype": {"loc": 56, "size": 2},
-    "arp_ptype": {"loc": 58, "size": 2},
-    "arp_hlen": {"loc": 60, "size": 1},
-    "arp_plen": {"loc": 61, "size": 1},
-    "arp_oper": {"loc": 62, "size": 2},
-    "arp_sha": {"loc": 64, "size": 6},
-    "arp_spa": {"loc": 70, "size": 4},
-    "arp_tha": {"loc": 74, "size": 6},
-    "arp_tpa": {"loc": 80, "size": 4},
-}
-
-CUSTOM_FIELDS_TO_CDT = {
-    "match_type_is_valid": {
-        "True": {"field": "match_type", "op": operator.eq, "value": 1},
-        "False": {"field": "match_type", "op": operator.ne, "value": 1},
-    },
-    "reason_NoMatch": {
-        "True": {"field": "reason", "op": operator.eq, "value": 0},
-        "False": {"field": "reason", "op": operator.ne, "value": 0},
-    },
-    "reason_Action": {
-        "True": {"field": "reason", "op": operator.eq, "value": 1},
-        "False": {"field": "reason", "op": operator.ne, "value": 1},
-    },
-    "reason_InvalidTTL": {
-        "True": {"field": "reason", "op": operator.eq, "value": 2},
-        "False": {"field": "reason", "op": operator.ne, "value": 2},
-    },
-    "reason_Illegal": {
-        "True": {"field": "reason", "op": operator.gt, "value": 2},
-        "False": {"field": "reason", "op": operator.le, "value": 2},
-    },
-    "oxm_class_NXM_0": {
-        "True": {"field": "oxm_class", "op": operator.eq, "value": 0x0000},
-        "False": {"field": "oxm_class", "op": operator.ne, "value": 0x0000},
-    },
-    "oxm_class_NXM_1": {
-        "True": {"field": "oxm_class", "op": operator.eq, "value": 0x0001},
-        "False": {"field": "oxm_class", "op": operator.ne, "value": 0x0001},
-    },
-    "oxm_class_OPENFLOW_BASIC": {
-        "True": {"field": "oxm_class", "op": operator.eq, "value": 0x8000},
-        "False": {"field": "oxm_class", "op": operator.ne, "value": 0x8000},
-    },
-    "oxm_class_EXPERIMENTER": {
-        "True": {"field": "oxm_class", "op": operator.eq, "value": 0xFFFF},
-        "False": {"field": "oxm_class", "op": operator.ne, "value": 0xFFFF},
-    },
-    "oxm_class_INVALID": {
-        "True": [
-            {"field": "oxm_class", "op": operator.ne, "value": 0x0000},
-            {"field": "oxm_class", "op": operator.ne, "value": 0x0001},
-            {"field": "oxm_class", "op": operator.ne, "value": 0x8000},
-            {"field": "oxm_class", "op": operator.ne, "value": 0xFFFF}
-        ],
-        "False": {"field": "oxm_class", "op": operator.eq, "value": 0x0000},
-    },
-    "match_pad_is_zero": {
-        "True": {"field": "match_pad", "op": operator.eq, "value": 0},
-        "False": {"field": "match_pad", "op": operator.ne, "value": 0}
-    },
-    "pad_is_zero": {
-        "True": {"field": "pad", "op": operator.eq, "value": 0},
-        "False": {"field": "pad", "op": operator.ne, "value": 0}
-    },
-    "ethertype_is_arp": {
-        "True": {"field": "ethertype", "op": operator.eq, "value": 0x0806},
-        "False": {"field": "ethertype", "op": operator.ne, "value": 0x0806},
-    },
-
-    # TODO: Add fields for the pads
+    "of_version"    : {"loc": 0, "size": 1},
+    "of_type"       : {"loc": 1, "size": 1},
+    "length"        : {"loc": 2, "size": 2},
+    "xid"           : {"loc": 4, "size": 4},
+    "buffer_id"     : {"loc": 8, "size": 4},
+    "total_len"     : {"loc": 12, "size": 2},
+    "reason"        : {"loc": 14, "size": 1},
+    "table_id"      : {"loc": 15, "size": 1},
+    "cookie"        : {"loc": 16, "size": 8},
+    "match_type"    : {"loc": 24, "size": 2},
+    "match_length"  : {"loc": 26, "size": 2},
+    "match_pad"     : {"loc": 28, "size": 4},
+    "oxm_class"     : {"loc": 32, "size": 2},
+    "oxm_field"     : {"loc": 34, "size": 1},
+    "oxm_length"    : {"loc": 35, "size": 1},
+    "oxm_value"     : {"loc": 36, "size": 4},
+    "pad"           : {"loc": 40, "size": 2},
+    "eth_dst"       : {"loc": 42, "size": 6},
+    "eth_src"       : {"loc": 48, "size": 6},
+    "ethertype"     : {"loc": 54, "size": 2},
+    "arp_htype"     : {"loc": 56, "size": 2},
+    "arp_ptype"     : {"loc": 58, "size": 2},
+    "arp_hlen"      : {"loc": 60, "size": 1},
+    "arp_plen"      : {"loc": 61, "size": 1},
+    "arp_oper"      : {"loc": 62, "size": 2},
+    "arp_sha"       : {"loc": 64, "size": 6},
+    "arp_spa"       : {"loc": 70, "size": 4},
+    "arp_tha"       : {"loc": 74, "size": 6},
+    "arp_tpa"       : {"loc": 80, "size": 4},
 }
 
 CDT_REPLACEMENT_LUT = {
@@ -177,7 +116,6 @@ class Rule(object):
     @classmethod
     def from_string(cls, rule_str: str):
 
-        expr = None
         rule_class = None
 
         # Copy the rule string
@@ -202,7 +140,7 @@ class Rule(object):
 
         # Infer the expression from the rule.
 
-        tmp_rule = tmp_rule.replace(' ', '') # Remove all spaces
+        tmp_rule = tmp_rule.replace(' ', '')  # Remove all spaces
 
         # Replace the ands and ors by their symbols
         tmp_rule = tmp_rule.replace("and", "&")
@@ -309,8 +247,7 @@ def convert_to_fuzzer_actions(rule: Rule):
             bounds = IntervalSet((0, int(math.pow(2, 8 * size - 1))))
             # Get the absolute range from the operator and the value
             _range = get_range_op_val(op, value)
-            # Intersect the action's range with the range of the
-            # condition
+            # Intersect the action's range with the range of the new condition
             new_act["range"] = bounds & _range
 
         return new_act
@@ -326,7 +263,7 @@ def convert_to_fuzzer_actions(rule: Rule):
         cdt_str = str(key)
         cdt = dict()
 
-        if '>' in cdt_str and not ">=" in cdt_str:
+        if '>' in cdt_str and ">=" not in cdt_str:
             cdt["field"], cdt["value"] = cdt_str.split('>')
             cdt["value"] = int(cdt["value"])
             cdt["op"] = operator.gt if not negate else operator.le
@@ -336,7 +273,7 @@ def convert_to_fuzzer_actions(rule: Rule):
             cdt["value"] = int(cdt["value"])
             cdt["op"] = operator.ge if not negate else operator.lt
 
-        elif '<' in cdt_str and not "<=" in cdt_str:
+        elif '<' in cdt_str and "<=" not in cdt_str:
             cdt["field"], cdt["value"] = cdt_str.split('<')
             cdt["value"] = int(cdt["value"])
             cdt["op"] = operator.lt if not negate else operator.ge
@@ -346,7 +283,7 @@ def convert_to_fuzzer_actions(rule: Rule):
             cdt["value"] = int(cdt["value"])
             cdt["op"] = operator.le if not negate else operator.gt
 
-        elif '=' in cdt_str and not '!=' in cdt_str:
+        elif '=' in cdt_str and '!=' not in cdt_str:
             cdt["field"], cdt["value"] = cdt_str.split('=')
             cdt["value"] = int(cdt["value"])
             cdt["op"] = operator.eq if not negate else operator.ne
@@ -362,7 +299,7 @@ def convert_to_fuzzer_actions(rule: Rule):
     for c in conditions:
 
         # 1. get the dict for the action
-        action_dict = COND_TO_FUZZER_ACTION_DICT[c["field"]]
+        action_dict = COND_TO_FUZZER_ACTION_LUT[c["field"]]
 
         # 2 Find if there is already an action on the same field
         act_ind = next((i for i, item in enumerate(fuzz_action) if
@@ -381,6 +318,7 @@ def convert_to_fuzzer_actions(rule: Rule):
                 if "range" in fuzz_action[act_ind]:
                     del fuzz_action[act_ind][
                         "range"]  # We remove the range key
+
             # 3.1.3 Otherwise, we update the range
             else:
                 fuzz_action[act_ind]["type"] = "scramble_in_range"
@@ -392,7 +330,7 @@ def convert_to_fuzzer_actions(rule: Rule):
 
         # 3.2 Otherwise we create a new action
         else:
-            # 3.2.1 Get the new acction
+            # 3.2.1 Get the new action
             action = get_new_action(field=c['field'],
                                     loc=action_dict['loc'],
                                     size=action_dict["size"],
@@ -406,6 +344,9 @@ def convert_to_fuzzer_actions(rule: Rule):
         if "range" in act:
             if isinstance(act["range"], IntervalSet):
                 act["range"] = [[x.inf, x.sup] for x in list(act["range"])]
+                if len(act["range"]) == 0:
+                    size = COND_TO_FUZZER_ACTION_LUT[act["field"]]["size"]
+                    act["range"] = [[x.inf, x.sup] for x in list(IntervalSet((0, int(math.pow(2, 8 * size - 1)))))]
 
     return fuzz_action
 # End def convert_to_fuzzer_actions
@@ -413,6 +354,66 @@ def convert_to_fuzzer_actions(rule: Rule):
 
 # ===== ( Leftover ) ===================================================================================================
 
+# CUSTOM_FIELDS_TO_CDT = {
+#     "match_type_is_valid": {
+#         "True": {"field": "match_type", "op": operator.eq, "value": 1},
+#         "False": {"field": "match_type", "op": operator.ne, "value": 1},
+#     },
+#     "reason_NoMatch": {
+#         "True": {"field": "reason", "op": operator.eq, "value": 0},
+#         "False": {"field": "reason", "op": operator.ne, "value": 0},
+#     },
+#     "reason_Action": {
+#         "True": {"field": "reason", "op": operator.eq, "value": 1},
+#         "False": {"field": "reason", "op": operator.ne, "value": 1},
+#     },
+#     "reason_InvalidTTL": {
+#         "True": {"field": "reason", "op": operator.eq, "value": 2},
+#         "False": {"field": "reason", "op": operator.ne, "value": 2},
+#     },
+#     "reason_Illegal": {
+#         "True": {"field": "reason", "op": operator.gt, "value": 2},
+#         "False": {"field": "reason", "op": operator.le, "value": 2},
+#     },
+#     "oxm_class_NXM_0": {
+#         "True": {"field": "oxm_class", "op": operator.eq, "value": 0x0000},
+#         "False": {"field": "oxm_class", "op": operator.ne, "value": 0x0000},
+#     },
+#     "oxm_class_NXM_1": {
+#         "True": {"field": "oxm_class", "op": operator.eq, "value": 0x0001},
+#         "False": {"field": "oxm_class", "op": operator.ne, "value": 0x0001},
+#     },
+#     "oxm_class_OPENFLOW_BASIC": {
+#         "True": {"field": "oxm_class", "op": operator.eq, "value": 0x8000},
+#         "False": {"field": "oxm_class", "op": operator.ne, "value": 0x8000},
+#     },
+#     "oxm_class_EXPERIMENTER": {
+#         "True": {"field": "oxm_class", "op": operator.eq, "value": 0xFFFF},
+#         "False": {"field": "oxm_class", "op": operator.ne, "value": 0xFFFF},
+#     },
+#     "oxm_class_INVALID": {
+#         "True": [
+#             {"field": "oxm_class", "op": operator.ne, "value": 0x0000},
+#             {"field": "oxm_class", "op": operator.ne, "value": 0x0001},
+#             {"field": "oxm_class", "op": operator.ne, "value": 0x8000},
+#             {"field": "oxm_class", "op": operator.ne, "value": 0xFFFF}
+#         ],
+#         "False": {"field": "oxm_class", "op": operator.eq, "value": 0x0000},
+#     },
+#     "match_pad_is_zero": {
+#         "True": {"field": "match_pad", "op": operator.eq, "value": 0},
+#         "False": {"field": "match_pad", "op": operator.ne, "value": 0}
+#     },
+#     "pad_is_zero": {
+#         "True": {"field": "pad", "op": operator.eq, "value": 0},
+#         "False": {"field": "pad", "op": operator.ne, "value": 0}
+#     },
+#     "ethertype_is_arp": {
+#         "True": {"field": "ethertype", "op": operator.eq, "value": 0x0806},
+#         "False": {"field": "ethertype", "op": operator.ne, "value": 0x0806},
+#     },
+#
+# }
 # class Rule(object):
 #     """
 #     An object which role is to store a rule
@@ -708,4 +709,3 @@ def convert_to_fuzzer_actions(rule: Rule):
 #         return fuzz_action
 #     # End def to_fuzzer_actions
 # End class Rule
-

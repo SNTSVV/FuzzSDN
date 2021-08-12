@@ -4,10 +4,11 @@ from weka.classifiers import Classifier, Evaluation
 from weka.core.classes import Random
 from weka.core.converters import Loader
 
-from rdfl_exp.machine_learning.rule import Rule, Rule
+from rdfl_exp.machine_learning.rule import Rule
 import logging
 
-log = logging.getLogger("ML algorithm")
+logger = logging.getLogger(__name__)
+
 
 def standard(data_path, tt_split=66.0, cv_folds=None, seed=1, classes=('1', '2')):
     """
@@ -21,25 +22,25 @@ def standard(data_path, tt_split=66.0, cv_folds=None, seed=1, classes=('1', '2')
     """
 
     # load data from arff file
-    log.info("Loading data from {}".format(data_path))
+    logger.info("Loading data from {}".format(data_path))
     loader = Loader("weka.core.converters.ArffLoader")
     data = loader.load_file(data_path)
     data.class_is_last()
 
     # generate train/test split of randomized data
-    log.info("Splitting train and test data with ratio {}%".format(tt_split))
+    logger.info("Splitting train and test data with ratio {}%".format(tt_split))
     train, test = data.train_test_split(tt_split, Random(seed))
 
     # build classifier
     print("Building the classifier")
-    log.info("Building the classifier")
+    logger.info("Building the classifier")
     cls = Classifier(classname="weka.classifiers.rules.JRip")
     cls.build_classifier(train)
-    log.info(cls)
+    logger.debug("Classifier:\n{}".format(cls))
 
     # evaluate and record predictions in memory
     print("Evaluating the classifier")
-    log.info("Evaluating the classifier")
+    logger.info("Evaluating the classifier")
     evl = Evaluation(train)
 
     # If cv_folds > 0, perform cross validation
@@ -49,12 +50,15 @@ def standard(data_path, tt_split=66.0, cv_folds=None, seed=1, classes=('1', '2')
         evl.crossvalidate_model(cls, data, cv_folds, Random(seed))
     else:
         evl.test_model(cls, test)
-    # print(evl.summary())
+
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("Evaluator:\n{}\n{}".format(evl.summary(), evl.class_details()))
 
     # Extract the rules
     rules = extract_rules_from_classifier(cls)
+    stats = extract_evaluator_stats(evl, classes=classes)
 
-    return rules, extract_evaluator_stats(evl, classes=classes)
+    return rules, stats
 # End def standard
 
 

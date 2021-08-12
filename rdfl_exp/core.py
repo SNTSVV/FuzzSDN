@@ -161,8 +161,8 @@ def run() -> None:
 
         # Write headers
         print(Style.BOLD, "*** Iteration {}/{}".format(it + 1, _context["it_max"]), Style.RESET)
-        print(Style.BOLD, "*** recall: {}/{}".format(recall, _context["recall_th"]), Style.RESET)
-        print(Style.BOLD, "*** precision: {}/{}".format(precision, _context["precision_th"]), Style.RESET)
+        print(Style.BOLD, "*** recall: {:.2f}/{:.2f}".format(recall, _context["recall_th"]), Style.RESET)
+        print(Style.BOLD, "*** precision: {:.2f}/{:.2f}".format(precision, _context["precision_th"]), Style.RESET)
 
         generate_rules(rules)
 
@@ -216,29 +216,31 @@ def run() -> None:
         )
         end_of_ml = time.time()
 
+        # Get recall and precision from the evaluator results
+        recall    = evl_result[_context["class_to_predict"]]['recall']
+        precision = evl_result[_context["class_to_predict"]]['precision']
+
         # Avoid cases where precision or recall are NaN values
-        if math.isnan(evl_result[_context["class_to_predict"]]['recall']):
+        if math.isnan(recall):
             recall = 0.0
-        if math.isnan(evl_result[_context["class_to_predict"]]['precision']):
+        if math.isnan(precision):
             precision = 0.0
 
-        # Assign results from machine learning if it has at least one condition
-        print("out_rules:", out_rules)
-        rules = [r for r in out_rules if r.get_class() == _context["class_to_predict"]]
-        print("final_rules:", rules)
-        other_rule = None
-        for r in rules:
-            if r.get_class() == _context["class_to_predict"]:
-                if other_rule is None:
-                    other_rule = ~r
-                else:
-                    other_rule = other_rule & ~r
+        print("Recall: {:.2f}%, Precision: {:.2f}%".format(recall*100, precision*100))
 
-        print(other_rule)
+        # Assign results from machine learning if it has at least one condition
+        rules = [r for r in out_rules if r.get_class() == _context["class_to_predict"]]
+
+        other_rule = None
+        for r in [r for r in out_rules if r.get_class() != _context["class_to_predict"]]:
+            if other_rule is None:
+                other_rule = ~r
+            else:
+                other_rule = other_rule & ~r
+
         if other_rule is not None:
             rules.append(other_rule)
 
-        print(rules)
         # End of iteration total time
         end_of_it = time.time()
 
@@ -297,7 +299,6 @@ def generate_rules(rules: List[Rule]) -> None:
         exp_script.run(
             count=_context["nb_of_samples"],
             instructions=json.dumps({"instructions": [fuzz_instr]}),
-            print_progress_bar=True,
             clear_db=True  # Clear the database before the experiment on the first iteration
         )
 
@@ -313,7 +314,7 @@ def generate_rules(rules: List[Rule]) -> None:
             progress_bar(0, samples_per_rule,
                          prefix='Progress:',
                          suffix='Complete ({}/{})'.format(0, samples_per_rule),
-                         length = 100)
+                         length=100)
 
             # If a rule is of the class to predict,  we apply the rule
             # and run the experiment for "nb_of_samples" times
@@ -337,7 +338,7 @@ def generate_rules(rules: List[Rule]) -> None:
                             "criteria": _context["default_criteria"],
                             "matchLimit": _context["default_match_limit"],
                             "actions": [
-                                _context["default_actions"],
+                                *_context["default_actions"],
                                 *convert_to_fuzzer_actions(rule)
                             ]
                         }
@@ -352,7 +353,7 @@ def generate_rules(rules: List[Rule]) -> None:
                     count=1,
                     instructions=json.dumps(fuzz_instr),
                     clear_db=clear_db,
-                    print_progress_bar=False
+                    quiet=True
                     # Clear the database before the experiment if it is the first rule
                 )
                 clear_db = False  # disable the clearing of the database

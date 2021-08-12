@@ -6,14 +6,19 @@ import struct
 import traceback
 
 import pandas as pd
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # ==== ( Filters ) =============================================================
+
 def filter_boolean(x):
     if x == "None":
         return False
     else:
         return x
+# End def filter_boolean
 
 
 def filter_reason(x):
@@ -24,7 +29,7 @@ def filter_reason(x):
             0x02: 'reason_InvalidTTL'
         }
     return filter_reason.table.get(int(x), 'reason_Illegal')
-##############################################
+# End def filter_reason
 
 
 def filter_oxm_class(x):
@@ -37,7 +42,7 @@ def filter_oxm_class(x):
         }
 
     return filter_oxm_class.table.get(int(x), 'oxm_class_INVALID')
-############################
+# End def filter_oxm_class
 
 
 def eth_adr_to_int(x):
@@ -48,6 +53,7 @@ def eth_adr_to_int(x):
         return 0x00
     else:
         return int(x.translate(eth_adr_to_int.table), 16)
+# End def eth_adr_to_int
 
 
 def int_to_eth_adr(macint):
@@ -56,6 +62,7 @@ def int_to_eth_adr(macint):
     return ':'.join(['{}{}'.format(a, b)
                      for a, b
                      in zip(*[iter('{:012x}'.format(macint))] * 2)])
+# End def int_to_eth_dar
 
 
 def filter_eth_type(x):
@@ -63,6 +70,7 @@ def filter_eth_type(x):
         return 0x00
     else:
         return int(x, 16)
+# End def filter_eth_type
 
 
 def filter_ipv4_adr(x):
@@ -71,6 +79,7 @@ def filter_ipv4_adr(x):
     else:
         ip = x.split('.')
         return int(''.join((hex(int(i))[2:] for i in ip)), 16)
+# End def filter_ipv4_adr
 
 
 def filter_hex(x):
@@ -78,41 +87,42 @@ def filter_hex(x):
         return 0x00
     else:
         return int(x, 16)
+# End def filter_hex
 
 
 def _bytes_to_ofp_fields(data):
 
     if not hasattr(_bytes_to_ofp_fields, "fields"):
         _bytes_to_ofp_fields.fields = (
-            ("of_version", "B"),
-            ("of_type", "B"),
-            ("length", "H"),
-            ("xid", "I"),
-            ("buffer_id", "I"),
-            ("total_len", "H"),
-            ("reason", "B"),
-            ("table_id", "B"),
-            ("cookie", "Q"),
-            ("match_type", "H"),
-            ("match_length", "H"),
-            ("oxm_class", "H"),
-            ("oxm_field", "B"),
-            ("oxm_length", "B"),
-            ("oxm_value", "I"),
-            ("match_pad", "I"),
-            ("pad", "H"),
-            ("eth_dst", "6s"),
-            ("eth_src", "6s"),
-            ("ethertype", "H"),
-            ("arp_htype", "H"),
-            ("arp_ptype", "H"),
-            ("arp_hlen", "B"),
-            ("arp_plen", "B"),
-            ("arp_oper", "H"),
-            ("arp_sha", "6s"),
-            ("arp_spa", "4s"),
-            ("arp_tha", "6s"),
-            ("arp_tpa", "4s"),
+            ("of_version",      "B"),
+            ("of_type",         "B"),
+            ("length",          "H"),
+            ("xid",             "I"),
+            ("buffer_id",       "I"),
+            ("total_len",       "H"),
+            ("reason",          "B"),
+            ("table_id",        "B"),
+            ("cookie",          "Q"),
+            ("match_type",      "H"),
+            ("match_length",    "H"),
+            ("match_pad",       "I"),
+            ("oxm_class",       "H"),
+            ("oxm_field",       "B"),
+            ("oxm_length",      "B"),
+            ("oxm_value",       "I"),
+            ("pad",             "H"),
+            ("eth_dst",         "6s"),
+            ("eth_src",         "6s"),
+            ("ethertype",       "H"),
+            ("arp_htype",       "H"),
+            ("arp_ptype",       "H"),
+            ("arp_hlen",        "B"),
+            ("arp_plen",        "B"),
+            ("arp_oper",        "H"),
+            ("arp_sha",         "6s"),
+            ("arp_spa",         "4s"),
+            ("arp_tha",         "6s"),
+            ("arp_tpa",         "4s"),
         )
 
     # Decode packet to a byte string
@@ -139,10 +149,12 @@ def _bytes_to_ofp_fields(data):
                 packet_dict[_bytes_to_ofp_fields.fields[i][0]] = ofp_packet[i]
 
     return pd.Series(packet_dict)
+# End def _bytes_to_ofp_fields
 
 
 def decode_byte_data(data):
     return pd.Series(list(binascii.a2b_base64(data)))
+# End def decode_byte_data
 
 
 def format_csv(csv_path, out_path=None, sep=','):
@@ -152,6 +164,7 @@ def format_csv(csv_path, out_path=None, sep=','):
     :param sep:
     :param out_path:
     """
+
     # Load a dataset from the data folder or use the output of the previous pipeline
     df = pd.read_csv(csv_path, sep=sep)
 
@@ -269,3 +282,4 @@ def format_csv(csv_path, out_path=None, sep=','):
               sep=sep,
               index=False,
               encoding='utf-8-sig')
+# End def format_csv
