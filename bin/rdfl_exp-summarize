@@ -1,212 +1,419 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import datetime
 import json
 import os
 import shutil
-import tempfile
 from os import listdir
 from os.path import isfile, join
 
-import numpy as np
 import pandas as pd
 import paramiko
 from matplotlib import pyplot as plt
 
+from rdfl_exp import config
 from rdfl_exp.utils import csv
+from rdfl_exp.utils.terminal import progress_bar
 
 host = "10.240.5.104"
 port = 22
 username = "ubuntu"
 password = "ubuntu"
 
-exp_to_fetch = "20210806_130424"
 
-out_dir = "/home/ubuntu/.rdfl_exp/out"
-res_dir = os.path.join("/Users/raphael.ollando", "rdfl_exp_summary_{}".format(exp_to_fetch))
+# exp_to_fetch = "20210813_132154"  # faf + dk
+# exp_to_fetch = "20210817_095456"  # faf
+exp_to_fetch = "20210817_211215"  # baf
 
 
-if __name__ == '__main__':
+report_dir      = os.path.join(config.RDFL_ROOT, "report")
+res_dir         = os.path.join(report_dir, "rdfl_exp_summary_{}".format(exp_to_fetch))
+datasets_dir   = join(res_dir, "datasets")
+remote_out_dir  = "/home/ubuntu/.rdfl_exp/out"
+
+# ===== ( Helper functions ) ===========================================================================================
+
+def _create_folder_structure():
+
+    # Create root and report folder
+    dirs = [config.RDFL_ROOT, report_dir]
+
+    for d in dirs:
+        try:
+            os.mkdir(d)
+        except OSError:
+            pass
 
     if os.path.exists(res_dir):
         shutil.rmtree(res_dir)
     os.mkdir(res_dir)
+    os.mkdir(datasets_dir)
+# End def create_folder_structure
 
+
+def _fetch_output_files():
+    # Create the ssh connection
+    print("Establishing SSH connection to {}@{}:{}".format(username, host, port))
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.connect(host, port, username, password)
 
-    stdin, stdout, stderr = ssh.exec_command("ls {}".format(out_dir))
+    # List all the experiments that can be listed
+    stdin, stdout, stderr = ssh.exec_command("ls {}".format(remote_out_dir))
     experiments = sorted([x.strip() for x in stdout.readlines()])
 
+    # Get the experiment we want to fetch
     last_exp = experiments[experiments.index(exp_to_fetch)]
 
-    json_local = join(res_dir, "stats.json")
-    os.mkdir(join(res_dir, "datasets"))
-    datasets_path = join(res_dir, "datasets")
+    # Get the file from the experiment we want to fetch
     transport = paramiko.Transport((host, port))
     sftp = None
     try:
+        print("Establishing the transport pipe")
         transport.connect(username=username, password=password)
         sftp = paramiko.SFTPClient.from_transport(transport)
-        sftp.get(join(out_dir, last_exp, "stats.json"), json_local)
+
+        print("Getting the statistics file")
+        sftp.get(join(remote_out_dir, last_exp, "stats.json"), join(res_dir, "stats.json"))
         # Get the datasets
-        file_list = sftp.listdir(join(out_dir, last_exp, "datasets"))
+
+        print("Getting the datasets")
+        file_list = sftp.listdir(join(remote_out_dir, last_exp, "datasets"))
         it = 1
+        progress_bar(0, len(file_list),
+                     prefix='Progress:',
+                     suffix='Complete ({}/{})'.format(0, len(file_list)),
+                     decimals=1,
+                     length=100)
         for item in file_list:
-            print("getting: {} ({}/{})".format(item, it, len(file_list)))
-            sftp.get(join(out_dir, last_exp, "datasets", item), join(datasets_path, item))
+            sftp.get(join(remote_out_dir, last_exp, "datasets", item), join(datasets_dir, item))
             it += 1
+            progress_bar(it, len(file_list),
+                         prefix='Progress:',
+                         suffix='Complete ({}/{})'.format(it, len(file_list)),
+                         decimals=1,
+                         length=100)
     finally:
-        if transport: transport.close()
-        if sftp: sftp.close()
+        if transport:
+            transport.close()
+        if sftp:
+            sftp.close()
+# End def fetch_output_files
 
-    # Take care of the datasets
-    raw_files = [join(datasets_path, f) for f in listdir(datasets_path) if isfile(join(datasets_path, f)) and f.endswith("raw.csv")]
 
-    csv.merge(csv_in=raw_files,
-              csv_out=join(res_dir, "raw_csv"),
-              in_sep=[';'] * len(raw_files),
-              out_sep=';')
-
-    csv.merge(csv_in=raw_files,
-              csv_out=join("~/", "all_raw.csv"),
-              in_sep=[';'] * len(raw_files),
-              out_sep=';')
-
-    df = pd.read_csv(join(res_dir, "raw_csv"), sep=";")
-
-    total = df.shape[0]
-    nb_of_traces = df["error_trace"].count()
-    nb_of_unknown_err = (df.error_reason == 'Unknown').sum()
-    nb_of_unknown_eff = (df.error_effect == 'Unknown').sum()
-    nb_of_error_type = (df.error_type == 'Unknown').sum()
-    nb_switch_disconnected = (
-                df.error_effect == 'switch_disconnected').sum()
-
-    print("total:", total)
-    print("nb_of_traces:", nb_of_traces)
-    print("nb_of_unknown_err:", nb_of_unknown_err,
-          nb_of_unknown_err / total)
-    print("nb_of_unknown_eff:", nb_of_unknown_eff,
-          nb_of_unknown_eff / total)
-    print("nb_of_error_type:", nb_of_error_type, nb_of_error_type / total)
-    print("nb_switch_disconnected:", nb_switch_disconnected,
-          nb_switch_disconnected / total)
-    print("ratio:", nb_of_traces / total)
-
-    npe_ratio = []
-    for i in range(len([x for x in file_list if 'raw' not in x])):
-        df = pd.read_csv(join(datasets_path, "it_{}.csv".format(i)), sep=";")
-
-        nb_pe = df['class'].value_counts()
-        npe_ratio.append(nb_pe['non_parsing_error']/(nb_pe['non_parsing_error'] + nb_pe['parsing_error']))
-
-    # Take care of stats.json
-    with open(json_local, 'r') as jl:
-        stats = json.load(jl)
-
-    # Get the parameters
-    nb_of_instances = stats["machine_learning"]['nb_of_instances']
-    tp_rate         = stats["machine_learning"]["tp_rate"]
-    fp_rate         = stats["machine_learning"]["fp_rate"]
-    accuracy_score  = stats["machine_learning"]["accuracy"]
-    precision_score = stats["machine_learning"]["precision_score"]
-    recall_score    = stats["machine_learning"]["recall_score"]
-    f1_score        = stats["machine_learning"]["f_measure"]
-    mcc_score       = stats["machine_learning"]["mcc"]
-    roc_score       = stats["machine_learning"]["roc"]
-    prc_score       = stats["machine_learning"]["prc"]
-    rules           = stats["machine_learning"]["rules"]
+def _generate_report(stats: dict):
 
     #
-    for i in range(len(rules)):
-        print("iteration {}:".format(i))
+    rules = stats["classifier"]["rules"]
+    target_class = stats['context']['target_class']
+
+    # Write about the context
+    lines = [
+        "======== Context ========\n\n",
+        "Precision Threshold: {:.2f}%\n".format(stats['context']['precision_threshold'] * 100.0),
+        "Recall Threshold: {:.2f}%\n".format(stats['context']['recall_threshold'] * 100.0),
+        "target_class: {}\n".format(stats['context']['target_class']),
+        "Samples generated per iterations: {}\n".format(stats['context']['samples_per_iteration']),
+        "Data formatting method used: {}\n".format(stats['context']['data_format_method']),
+        "======== Iteration Summary ========\n\n"
+    ]
+    for i in range(stats["context"]["iterations"]):
+        # First compute the rule string
         rule_str = ""
         nb_of_rules = 0
         for r in rules[i]:
             nb_of_rules += 1
             rule_str += "\t\t{}\n".format(r)
 
-        print("\tNumber of Rules: {}".format(nb_of_rules))
-        print("\tRules:")
-        print(rule_str)
+        # Iteration header
+        lines.append("=> iteration :{}\n\n".format(i))
 
-    print("Final precision: ", precision_score[-1])
-    print("Final recall: ", recall_score[-1])
+        # Write the precision and recall stats achieved
+        lines.append("\tPrecision for target class: {}\n".format(stats["classifier"][target_class]["precision"][i]))
+        lines.append("\tRecall for target class: {}\n\n".format(stats["classifier"][target_class]["recall"][i]))
 
-    # Print graphs
-    it_ax = list(range(stats["context"]["nb_of_it"]))
-    smp_ax = [300 * x for x in range(stats["context"]["nb_of_it"])]
-    # 3 graphs in a row and 4 rows
-    fig, axs = plt.subplots(4, 3, figsize=(15, 12))
+        # Write the time used per iteration:
+        iteration_time = str(datetime.timedelta(seconds=float(stats["timing"]["iteration"][i])))
+        learning_time = str(datetime.timedelta(seconds=float(stats["timing"]["learning"][i])))
+        lines.append("\tTime taken to finish the iteration: {}\n".format(iteration_time))
+        lines.append("\ttime taken to generate the classifier: {}\n\n".format(learning_time))
 
-    ## 1st row
-    ### Print number of instances
-    axs[0, 0].plot(it_ax, nb_of_instances, '-x')
-    axs[0, 0].locator_params(axis="x", integer=True, tight=True)
-    axs[0, 0].set_title('Number of instances')
+        # Add the rules
+        lines.append("\tNumber of Rules generated: {}\n".format(nb_of_rules))
+        if nb_of_rules > 0:
+            lines.append("\tRules:\n")
+            lines.append(rule_str)
 
-    ### Print True positive rate
-    axs[0, 1].plot(it_ax, tp_rate, '-x')
-    axs[0, 1].locator_params(axis="x", integer=True, tight=True)
-    axs[0, 1].set_title('True Positives rate')
+    # Write the lines to the report file
+    with open(os.path.join(res_dir, "report.txt"), 'w') as f:
+        f.writelines(lines)
 
-    ### Print False positive rate
-    axs[0, 2].plot(it_ax, fp_rate, '-x')
-    axs[0, 2].locator_params(axis="x", integer=True, tight=True)
-    axs[0, 2].set_title('False Positives rate')
+# End def generate_report
 
-    ## 2nd row
-    ### Print accuracy graph
-    axs[1, 0].plot(it_ax, accuracy_score, '-x')
-    axs[1, 0].locator_params(axis="x", integer=True, tight=True)
-    axs[1, 0].set_title('Accuracy Score')
 
-    ### Print recall graph
-    axs[1, 1].plot(it_ax, recall_score, '-x')
-    axs[1, 1].locator_params(axis="x", integer=True, tight=True)
-    axs[1, 1].set_title('Recall Score')
+def _generate_graphics(stats: dict, show=False):
+    """Generate the graphics for the report
+    :param stats: The statistics dictionnary
+    :param show: If set to True, the graphs are display using plt
+    """
 
-    ### Print precision graph
-    axs[1, 2].plot(it_ax, precision_score, '-x')
-    axs[1, 2].locator_params(axis="x", integer=True, tight=True)
-    axs[1, 2].set_title('Precision Score')
+    it_ax = list(range(stats["context"]["iterations"]))
+    print(stats)
+    target_class = stats["context"]["target_class"]
+    other_class  = stats["context"]["other_class"]
 
-    ## 3rd row
-    ### print Area under ROC Score
-    axs[2, 0].plot(it_ax, roc_score, '-x')
-    axs[2, 0].locator_params(axis="x", integer=True, tight=True)
-    axs[2, 0].set_title('Area under ROC')
+    # 1st Graph: Accuracy, TP/FP rate for target_class, TP/FP rate for other class
+    fig, axs = plt.subplots(1, 3, figsize=(32, 7), dpi=96)
+    ### Draw the precision graph
+    axs[0].plot(it_ax,
+                stats['classifier']["accuracy"],
+                ls='-',
+                marker='x',
+                color='blue',
+                label="accuracy_score")
+    axs[0].locator_params(axis="x", integer=True, tight=True)
+    axs[0].legend(loc="lower right")
+    axs[0].set_title('Classifier Accuracy per iteration')
 
-    ### print MCC Score
-    axs[2, 1].plot(it_ax, mcc_score, '-x')
-    axs[2, 1].locator_params(axis="x", integer=True, tight=True)
-    axs[2, 1].set_title('MCC Score')
+    ### Draw the recall graph
+    axs[1].plot(it_ax,
+                stats['classifier'][target_class]["tp_rate"],
+                ls='-',
+                marker='x',
+                color='blue',
+                label="TP Rate")
+    axs[1].plot(it_ax,
+                stats['classifier'][target_class]["fp_rate"],
+                ls='-',
+                marker='x',
+                color='red',
+                label="FP Rate")
+    axs[1].locator_params(axis="x", integer=True, tight=True)
+    axs[1].legend(loc="lower right")
+    axs[1].set_title('TP/FP Rate for {} per iteration'.format(target_class))
 
-    ### print Area under PRC Score
-    axs[2, 2].plot(it_ax, prc_score, '-x')
-    axs[2, 2].locator_params(axis="x", integer=True, tight=True)
-    axs[2, 2].set_title('Area under PRC')
-
-    ## 4th row
-    ### print F1 Score
-    axs[3, 0].plot(it_ax, f1_score, '-x')
-    axs[3, 0].locator_params(axis="x", integer=True, tight=True)
-    axs[3, 0].set_title('F1 Score')
-
-    ### print precision vs recall
-    y = np.array([precision_score for _, precision_score in sorted(zip(precision_score, recall_score))])
-    x = np.array(sorted(precision_score))
-    a, b, c = np.polyfit(x, y, 2)
-    axs[3, 1].scatter(precision_score, recall_score)
-    axs[3, 1].plot(x, a*(x**2) + b*x + c, 'r-')
-    axs[3, 1].set_title('Precision vs Recall Curve')
-
-    ### print ratio non_parsing_error
-    axs[3, 2].plot(it_ax, npe_ratio, '-x')
-    axs[3, 2].locator_params(axis="x", integer=True, tight=True)
-    axs[3, 2].set_title('Ration non parsing error')
+    ### Draw the recall graph
+    axs[2].plot(it_ax,
+                stats['classifier'][other_class]["tp_rate"],
+                ls='-',
+                marker='x',
+                color='blue',
+                label="TP Rate")
+    axs[2].plot(it_ax,
+                stats['classifier'][other_class]["fp_rate"],
+                ls='-',
+                marker='x',
+                color='red',
+                label="FP Rate")
+    axs[2].locator_params(axis="x", integer=True, tight=True)
+    axs[2].legend(loc="lower right")
+    axs[2].set_title('TP/FP Rate for {} per iteration'.format(other_class))
 
     plt.tight_layout()
-    plt.show()
-    fig.savefig(os.path.join(res_dir,'graphs.png'))
+    plt.plot()
+    if show is True:
+        plt.show()
+    fig.savefig(os.path.join(res_dir, 'classifier_accuracy_graph.png'))
+
+    # 2nd Graph: precision, recall, PRC graph
+    fig, axs = plt.subplots(1, 3, figsize=(32, 7), dpi=96)
+    ### Draw the precision graph
+    axs[0].axhline(y=stats["context"]["precision_threshold"], color='r', linestyle='-')
+    axs[0].plot(it_ax,
+                stats['classifier'][target_class]["precision"],
+                ls='-',
+                marker='x',
+                color='blue',
+                label=target_class)
+    axs[0].plot(it_ax,
+                stats['classifier'][other_class]["precision"],
+                ls='-',
+                marker='^',
+                color='orange',
+                label=other_class)
+    axs[0].locator_params(axis="x", integer=True, tight=True)
+    axs[0].legend(loc="lower right")
+    axs[0].set_title('Precision per iteration')
+
+    ### Draw the recall graph
+    axs[1].axhline(y=stats["context"]["recall_threshold"], color='r', linestyle='-')
+    axs[1].plot(it_ax,
+                stats['classifier'][target_class]["recall"],
+                ls='-',
+                marker='x',
+                color='blue',
+                label=target_class)
+    axs[1].plot(it_ax,
+                stats['classifier'][other_class]["recall"],
+                ls='-',
+                marker='^',
+                color='orange',
+                label=other_class)
+    axs[1].locator_params(axis="x", integer=True, tight=True)
+    axs[1].legend(loc="lower right")
+    axs[1].set_title('Recall per iteration')
+
+    ### Draw the Area under PRC graph
+    axs[2].plot(it_ax,
+                stats['classifier'][target_class]["prc"],
+                ls='-',
+                marker='x',
+                color='blue',
+                label=target_class)
+    axs[2].plot(it_ax,
+                stats['classifier'][other_class]["prc"],
+                ls='-',
+                marker='^',
+                color='orange',
+                label=other_class)
+    axs[2].locator_params(axis="x", integer=True, tight=True)
+    axs[2].legend(loc="lower right")
+    axs[2].set_title('Area under PRC per iteration')
+
+    plt.tight_layout()
+    plt.plot()
+    if show is True:
+        plt.show()
+    fig.savefig(os.path.join(res_dir, 'precision_recall_graph.png'))
+
+    # 3rd Graph: F1-Score, Area under ROC, and MCC score
+    fig, axs = plt.subplots(1, 3, figsize=(32, 7), dpi=96)
+    ### Draw the F1-Score graph
+    axs[0].plot(it_ax,
+                stats['classifier'][target_class]["f_measure"],
+                ls='-',
+                marker='x',
+                color='blue',
+                label=target_class)
+    axs[0].plot(it_ax,
+                stats['classifier'][other_class]["f_measure"],
+                ls='-',
+                marker='^',
+                color='orange',
+                label=other_class)
+    axs[0].locator_params(axis="x", integer=True, tight=True)
+    axs[0].legend(loc="lower right")
+    axs[0].set_title('F1-Score per iteration')
+
+    ### Draw the recall graph
+    axs[1].plot(it_ax,
+                stats['classifier'][target_class]["roc"],
+                ls='-',
+                marker='x',
+                color='blue')
+    axs[1].plot(it_ax,
+                stats['classifier'][other_class]["roc"],
+                ls='-',
+                marker='^',
+                color='orange',
+                label=other_class)
+    axs[1].locator_params(axis="x", integer=True, tight=True)
+    axs[1].legend(loc="lower right")
+    axs[1].set_title('Area under ROC per iteration')
+
+    ### Draw the MCC Score
+    axs[2].plot(it_ax,
+                stats['classifier'][target_class]["mcc"],
+                ls='-',
+                marker='x',
+                color='blue',
+                label=target_class)
+    axs[2].plot(it_ax,
+                stats['classifier'][other_class]["mcc"],
+                ls='-',
+                marker='^',
+                color='orange',
+                label=other_class)
+    axs[2].locator_params(axis="x", integer=True, tight=True)
+    axs[2].legend(loc="lower right")
+    axs[2].set_title('MCC score per iteration')
+
+    plt.tight_layout()
+    plt.plot()
+    if show is True:
+        plt.show()
+    fig.savefig(os.path.join(res_dir, 'f1_roc_mcc_graph.png'))
+
+    # 4th graph: ratio of class and other class per iteration
+    fig, ax = plt.subplots(1, 1, figsize=(10, 7), dpi=96)
+    ### Draw the F1-Score graph
+    ax.plot(it_ax,
+            stats['datasets']["target_class_ratio"],
+            ls='-',
+            marker='x',
+            color='blue',
+            label=target_class)
+    ax.plot(it_ax,
+            stats['datasets']["other_class_ratio"],
+            ls='-',
+            marker='^',
+            color='orange',
+            label=other_class)
+    ax.locator_params(axis="x", integer=True, tight=True)
+    ax.legend(loc="lower right")
+    ax.set_title("Ratio of classes per iteration")
+
+    plt.tight_layout()
+    plt.plot()
+    if show is True:
+        plt.show()
+    fig.savefig(os.path.join(res_dir, 'class_ratio_graph.png'))
+# End def generate_graphics
+
+
+# ===== ( Main Loop ) ==================================================================================================
+
+if __name__ == '__main__':
+
+    # Create the folder structure and fetch the output files
+    _create_folder_structure()
+    _fetch_output_files()
+
+    file_list = os.listdir(datasets_dir)
+
+    # Get the statistics
+    with open(join(res_dir, "stats.json"), 'r') as jl:
+        stats = json.load(jl)
+
+    # Extract some more statistics from the datasets
+    print("Extracting information from the datasets")
+    raw_files = [join(datasets_dir, f) for f in listdir(datasets_dir) if isfile(join(datasets_dir, f)) and f.endswith("raw.csv")]
+    csv.merge(csv_in=raw_files,
+              csv_out=join(datasets_dir, "merged_raw.csv"),
+              in_sep=[';'] * len(raw_files),
+              out_sep=';')
+    df = pd.read_csv(join(datasets_dir, "merged_raw.csv"), sep=";")
+
+    target_class = stats["context"]["target_class"]
+    other_class  = stats["context"]["other_class"]
+    stats["datasets"] = dict()
+    stats["datasets"]["nb_of_instances"]        = df.shape[0]
+    stats["datasets"]["nb_of_traces"]           = df["error_trace"].count()
+    stats["datasets"]["nb_of_unknown_err"]      = (df.error_reason == 'Unknown').sum()
+    stats["datasets"]["nb_of_unknown_eff"]      = (df.error_effect == 'Unknown').sum()
+    stats["datasets"]["nb_of_error_type"]       = (df.error_type == 'Unknown').sum()
+    stats["datasets"]["nb_switch_disc"]         = (df.error_effect == 'switch_disconnected').sum()
+    stats["datasets"]["target_class_ratio"]     = list()
+    stats["datasets"]["other_class_ratio"]      = list()
+
+    # Extract the ratio of each class
+    for i in range(len([x for x in file_list if 'raw' not in x])):
+        # Read the csv file corresponding to the iteration
+        df = pd.read_csv(join(datasets_dir, "it_{}.csv".format(i)), sep=";")
+        # Get the class count
+        classes_count = df['class'].value_counts()
+        total = classes_count[target_class] + classes_count[other_class]
+        stats["datasets"]["target_class_ratio"] += [classes_count[target_class] / total]
+        stats["datasets"]["other_class_ratio"]  += [classes_count[other_class] / total]
+
+    # Create the report
+    print("Generating the report")
+    _generate_report(stats)
+
+    # Create the graph
+    print("Generating the graphs")
+    _generate_graphics(stats)
+
+    print("Done")
+
+# End main

@@ -30,13 +30,14 @@ _context = {
     # Thresholds
     "precision_th"          : 0,
     "recall_th"             : 0,
+    "data_format_method"    : '',
     # Defaults
     "default_criteria"      : [],
     "default_match_limit"   : [],
     "default_actions"       : [],
     # Classes
     "class_to_predict"      : None,
-    "class_other"           : None,
+    "other_class"           : None,
     # Maximum iterations to do
     "it_max"                : 0,
     # Number of samples to generate per iterations
@@ -70,13 +71,15 @@ _stats = {
 }
 
 _default_input = {
-    "n_samples":            500,
-    "max_iterations":       50,
-    "precision_threshold":  0.85,
-    "recall_threshold":     0.85,
-    "class_to_predict":     "non_parsing_error",
-    "class_other":          "parsing_error",
+    "n_samples"             : 500,
+    "max_iterations"        : 50,
+    "precision_threshold"   : 0.85,
+    "recall_threshold"      : 0.85,
+    "data_format_method"    : 'baf',
+    "class_to_predict"      : "non_parsing_error",
+    "other_class"           : "parsing_error",
     "fuzzer": {
+        "default_match_limit": 1,
         "default_criteria" : [
                 {
                     "packetType": "packet_in",
@@ -99,9 +102,8 @@ _default_input = {
 # ===== ( init function ) ==============================================================================================
 
 def init(args) -> None:
-    global _log
+    
     global _context
-    global _default_input
 
     # Parse the input file
     if args.in_file:
@@ -112,17 +114,25 @@ def init(args) -> None:
         _log.info("Using the default input")
 
     _log.info("Parsing the context")
+    # Check that the data format method is known
+    data_format_method = input_data["data_format_method"]
+    if data_format_method not in ('faf', 'faf+dk', 'baf'):
+        _log.error("data_format_method should be 'faf', 'faf+dk' or 'baf' (not {})".format(data_format_method))
+        raise ValueError("data_format_method should be 'faf', 'faf+dk' or 'baf' (not {})".format(data_format_method))
+
+    # Fill the context dictionary
     _context = {
         # Thresholds
         "precision_th"          : input_data["precision_threshold"],  # Precision Threshold
         "recall_th"             : input_data["recall_threshold"],  # Recall Threshold
+        "data_format_method"    : input_data["data_format_method"],
         # Defaults
         "default_criteria"      : input_data["fuzzer"]["default_criteria"],
         "default_match_limit"   : input_data["fuzzer"]["default_match_limit"],
         "default_actions"       : input_data["fuzzer"]["default_actions"],
         # Classes
         "class_to_predict"      : input_data["class_to_predict"],  # Class to predict
-        "class_other"           : input_data["class_other"],  # Class to predict
+        "other_class"           : input_data["other_class"],  # Class to predict
         # Maximum iterations to do
         "it_max"                : input_data["max_iterations"],
         # Number of samples to generate per iterations
@@ -130,8 +140,7 @@ def init(args) -> None:
     }
 
     ## Initialize the statistics
-    _stats["context"]["max_it"] = _context["it_max"]
-
+    Stats.init(_context)
 # End def init
 
 
@@ -139,11 +148,7 @@ def init(args) -> None:
 
 def run() -> None:
 
-    global _log
-    global _context
-
     # Run the main loop
-
     rules = list()  # List of rules
     precision = 0   # Algorithm precision
     recall = 0      # Algorithm recall
@@ -212,7 +217,7 @@ def run() -> None:
             tt_split=70.0,
             cv_folds=10,
             seed=12345,
-            classes=(_context["class_to_predict"], _context["class_other"])
+            classes=(_context["class_to_predict"], _context["other_class"])
         )
         end_of_ml = time.time()
 
@@ -244,30 +249,12 @@ def run() -> None:
         # End of iteration total time
         end_of_it = time.time()
 
-        # Update the timing statistics
-        _stats["time"]["iteration"] += [str(end_of_it - start_of_it)]
-        _stats["time"]["learning"] += [str(end_of_ml - start_of_ml)]
-        # Update the ml statistics
-        cls_to_predict = _context["class_to_predict"]
-        accuracy = evl_result['correctly_classified'] / evl_result['total_num_instances']
-        _stats["machine_learning"]['nb_of_instances']    += [evl_result['total_num_instances']]
-        _stats["machine_learning"]["accuracy"]           += [accuracy]
-        _stats["machine_learning"]["tp_rate"]            += [evl_result[cls_to_predict]['tp_rate']]
-        _stats["machine_learning"]["fp_rate"]            += [evl_result[cls_to_predict]['fp_rate']]
-        _stats["machine_learning"]["precision_score"]    += [evl_result[cls_to_predict]['precision']]
-        _stats["machine_learning"]["recall_score"]       += [evl_result[cls_to_predict]['recall']]
-        _stats["machine_learning"]["f_measure"]          += [evl_result[cls_to_predict]['f_measure']]
-        _stats["machine_learning"]["mcc"]                += [evl_result[cls_to_predict]['mcc']]
-        _stats["machine_learning"]["roc"]                += [evl_result[cls_to_predict]['roc']]
-        _stats["machine_learning"]["prc"]                += [evl_result[cls_to_predict]['prc']]
-
-        _stats["machine_learning"]["rules"] += [[str(r) for r in out_rules]]
-        # Update the context statistics
-        _stats["context"]["nb_of_it"] = it + 1
-
-        # Save the statistics to the stats
-        with open(join(config.EXP_PATH, 'stats.json'), 'w') as stats_file:
-            json.dump(_stats, stats_file)
+        # Update the timing statistics and classifier statistics statistics and save the statistics
+        Stats.add_iteration_statistics(learning_time=end_of_ml - start_of_ml,
+                                       iteration_time=end_of_it - start_of_it,
+                                       clsf_res=evl_result,
+                                       rules=rules)
+        Stats.save(join(config.EXP_PATH, 'stats.json'))
 
         # Increment the number of iterations
         it += 1
