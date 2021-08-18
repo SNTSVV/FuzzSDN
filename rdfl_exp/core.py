@@ -36,7 +36,7 @@ _context = {
     "default_match_limit"   : [],
     "default_actions"       : [],
     # Classes
-    "class_to_predict"      : None,
+    "target_class"          : None,
     "other_class"           : None,
     # Maximum iterations to do
     "it_max"                : 0,
@@ -50,7 +50,7 @@ _default_input = {
     "precision_threshold"   : 0.85,
     "recall_threshold"      : 0.85,
     "data_format_method"    : 'baf',
-    "class_to_predict"      : "non_parsing_error",
+    "target_class"      : "non_parsing_error",
     "other_class"           : "parsing_error",
     "fuzzer": {
         "default_match_limit": 1,
@@ -104,7 +104,7 @@ def init(args) -> None:
         "default_match_limit"   : input_data["fuzzer"]["default_match_limit"],
         "default_actions"       : input_data["fuzzer"]["default_actions"],
         # Classes
-        "class_to_predict"      : input_data["class_to_predict"],  # Class to predict
+        "target_class"          : input_data["target_class"],  # Class to predict
         "other_class"           : input_data["other_class"],  # Class to predict
         # Maximum iterations to do
         "it_max"                : input_data["max_iterations"],
@@ -194,13 +194,13 @@ def run() -> None:
             tt_split=70.0,
             cv_folds=10,
             seed=12345,
-            classes=(_context["class_to_predict"], _context["other_class"])
+            classes=(_context["target_class"], _context["other_class"])
         )
         end_of_ml = time.time()
 
         # Get recall and precision from the evaluator results
-        recall    = evl_result[_context["class_to_predict"]]['recall']
-        precision = evl_result[_context["class_to_predict"]]['precision']
+        recall    = evl_result[_context["target_class"]]['recall']
+        precision = evl_result[_context["target_class"]]['precision']
 
         # Avoid cases where precision or recall are NaN values
         if math.isnan(recall):
@@ -210,17 +210,20 @@ def run() -> None:
 
         print("Recall: {:.2f}%, Precision: {:.2f}%".format(recall*100, precision*100))
 
-        # Assign results from machine learning if it has at least one condition
-        rules = [r for r in out_rules if r.get_class() == _context["class_to_predict"]]
+        # Get the rules that correspond to the target class
+        rules = [r for r in out_rules if r.get_class() == _context["target_class"]]
 
+        # Create a new rule which will be a the negation of all the rules for the other class
+        # example: For R1 = a and b, R2 = c and d, we'll have a new rule R = ~R1 and ~R2 = (a or b) and (c or d)
         other_rule = None
-        for r in [r for r in out_rules if r.get_class() != _context["class_to_predict"]]:
+        for r in [r for r in out_rules if r.get_class() != _context["target_class"]]:
             if other_rule is None:
                 other_rule = ~r
             else:
                 other_rule = other_rule & ~r
 
         if other_rule is not None:
+            other_rule.set_class(_context['target_class'])
             rules.append(other_rule)
 
         # End of iteration total time
@@ -230,7 +233,7 @@ def run() -> None:
         Stats.add_iteration_statistics(learning_time=end_of_ml - start_of_ml,
                                        iteration_time=end_of_it - start_of_it,
                                        clsf_res=evl_result,
-                                       rules=rules)
+                                       rules=out_rules)  # Add out_rules instead of rules
         Stats.save(join(config.EXP_PATH, 'stats.json'))
 
         # Increment the number of iterations
@@ -282,7 +285,7 @@ def generate_rules(rules: List[Rule]) -> None:
 
             # If a rule is of the class to predict,  we apply the rule
             # and run the experiment for "nb_of_samples" times
-            if rule.get_class() == _context["class_to_predict"]:
+            if rule.get_class() == _context["target_class"]:
                 fuzz_instr = {
                     "instructions": [
                         {
@@ -299,12 +302,9 @@ def generate_rules(rules: List[Rule]) -> None:
                 fuzz_instr = {
                     "instructions": [
                         {
-                            "criteria": _context["default_criteria"],
-                            "matchLimit": _context["default_match_limit"],
-                            "actions": [
-                                *_context["default_actions"],
-                                *convert_to_fuzzer_actions(rule)
-                            ]
+                            "criteria"      : _context["default_criteria"],
+                            "matchLimit"    : _context["default_match_limit"],
+                            "actions"       : [*_context["default_actions"], *convert_to_fuzzer_actions(rule)]
                         }
                     ]
                 }

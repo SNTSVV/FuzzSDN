@@ -182,6 +182,13 @@ class Rule(object):
     def get_class(self):
         return self.class_
 
+    # ====== ( Setters ) ===============================================================================================
+
+    def set_class(self, class_: str):
+        self.class_ = class_
+
+    # ====== ( Methods ) ===============================================================================================
+
     def apply(self):
         models = list(m for m in satisfiable(self.expr, all_models=True))
         # Return a sample of the rule

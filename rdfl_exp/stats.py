@@ -7,7 +7,7 @@ class Stats:
     
     @classmethod
     def init(cls, context: dict):
-        cls._stats = cls._create_stats_dict(context["class_to_predict"], context["other_class"])
+        cls._stats = cls._create_stats_dict(context["target_class"], context["other_class"])
         cls._stats["context"]["precision_threshold"]   = context["precision_th"]
         cls._stats["context"]["recall_threshold"]      = context["recall_th"]
         cls._stats["context"]["iteration_limit"]       = context["it_max"]
