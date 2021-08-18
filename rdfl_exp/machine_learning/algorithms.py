@@ -1,3 +1,4 @@
+import logging
 import re
 
 from weka.classifiers import Classifier, Evaluation
@@ -5,7 +6,6 @@ from weka.core.classes import Random
 from weka.core.converters import Loader
 
 from rdfl_exp.machine_learning.rule import Rule
-import logging
 
 logger = logging.getLogger(__name__)
 

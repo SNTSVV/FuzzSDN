@@ -5,13 +5,14 @@ import binascii
 import struct
 import traceback
 
+import pandas
 import pandas as pd
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-# ==== ( Filters ) =============================================================
+# ==== ( Filters ) =====================================================================================================
 
 def filter_boolean(x):
     if x == "None":
@@ -90,83 +91,131 @@ def filter_hex(x):
 # End def filter_hex
 
 
-def _bytes_to_ofp_fields(data):
+# ====== ( Module private methods ) ====================================================================================
 
-    if not hasattr(_bytes_to_ofp_fields, "fields"):
-        _bytes_to_ofp_fields.fields = (
-            ("of_version",      "B"),
-            ("of_type",         "B"),
-            ("length",          "H"),
-            ("xid",             "I"),
-            ("buffer_id",       "I"),
-            ("total_len",       "H"),
-            ("reason",          "B"),
-            ("table_id",        "B"),
-            ("cookie",          "Q"),
-            ("match_type",      "H"),
-            ("match_length",    "H"),
-            ("match_pad",       "I"),
-            ("oxm_class",       "H"),
-            ("oxm_field",       "B"),
-            ("oxm_length",      "B"),
-            ("oxm_value",       "I"),
-            ("pad",             "H"),
-            ("eth_dst",         "6s"),
-            ("eth_src",         "6s"),
-            ("ethertype",       "H"),
-            ("arp_htype",       "H"),
-            ("arp_ptype",       "H"),
-            ("arp_hlen",        "B"),
-            ("arp_plen",        "B"),
-            ("arp_oper",        "H"),
-            ("arp_sha",         "6s"),
-            ("arp_spa",         "4s"),
-            ("arp_tha",         "6s"),
-            ("arp_tpa",         "4s"),
-        )
-
-    # Decode packet to a byte string
-    packet_dict = None
-    try:
-        packet = base64.b64decode(data)
-    except binascii.Error as e:
-        print("Couldn't parse packet: {}\n{}".format(data, e))
-        traceback.print_exc()
-    else:
-        # Unpack the byte string according to the fields
-        unpack_string = "!"  # Network byte order
-        for f in _bytes_to_ofp_fields.fields:
-            unpack_string += f[1]
-        ofp_packet = struct.unpack(unpack_string, packet[:struct.calcsize(unpack_string)])
-
-        # Fill up the dict
-        packet_dict = dict()
-        for i in range(len(ofp_packet)):
-            if _bytes_to_ofp_fields.fields[i][0] == "oxm_field":
-                packet_dict["oxm_field"] = ofp_packet[i] >> 1
-                packet_dict["oxm_has_mask"] = ofp_packet[i] & 0x01
-            else:
-                packet_dict[_bytes_to_ofp_fields.fields[i][0]] = ofp_packet[i]
-
-    return pd.Series(packet_dict)
-# End def _bytes_to_ofp_fields
-
-
-def decode_byte_data(data):
-    return pd.Series(list(binascii.a2b_base64(data)))
-# End def decode_byte_data
-
-
-def format_csv(csv_path, out_path=None, sep=','):
-    """
-    Format a dataset csv file.
-    :param csv_path:
-    :param sep:
-    :param out_path:
-    """
+def format_dataset(csv_path, out_path=None, method='faf+dk', csv_sep=','):
 
     # Load a dataset from the data folder or use the output of the previous pipeline
-    df = pd.read_csv(csv_path, sep=sep)
+    df = pd.read_csv(csv_path, sep=csv_sep)
+
+    # Field as feature + domain knowledge
+    if method == 'faf+dk':
+        df = format_field_as_feature_domain_knowledge(df)
+    # Field as feature
+    elif method == 'faf':
+        df = format_field_as_feature(df)
+    # Bytes as feature
+    elif method == 'baf':
+        df = format_bytes_as_feature(df)
+    else:
+        raise ValueError("Unknown method {}. Accepted values are 'faf+dk', 'faf' and 'baf'.")
+
+    # Stores the data
+    df.to_csv(out_path if out_path is not None else csv_path,
+              sep=csv_sep,
+              index=False,
+              encoding='utf-8-sig')
+
+
+def format_bytes_as_feature(dataframe: pandas.DataFrame):
+    """
+    Format a dataset using field as feature and domain knowledge
+    :param dataframe:
+    """
+
+    # Copy the dataframe
+    df = dataframe.copy(deep=True)
+
+    # Interpret the field from the byte string
+    bytes_features = df['data'].apply(_bytes_to_byte_field)
+    df = pd.concat([df.iloc[:, :df.columns.get_loc("data")],
+                    bytes_features,
+                    df.iloc[:, df.columns.get_loc("data"):]], axis="columns")
+    df.drop(['data'], axis='columns', inplace=True)
+
+    # Format error type
+    df['error_type']    = df['error_type'].apply(lambda x: x if x == "parsing_error" else "non_parsing_error")
+
+    # Drop the unused columns
+    df.drop(['error_reason',
+             'error_effect'],
+            axis='columns',
+            inplace=True)
+
+    # Drop error_trace column if it exists
+    if 'error_trace' in df.columns:
+        df.drop(['error_trace'], axis='columns', inplace=True)
+
+    # Rename error_type into class column
+    df.rename(columns={'error_type': 'class'}, inplace=True)
+
+    # Ensure that the class column is at the end
+    cols_at_end = ['class']
+    df = df[[c for c in df if c not in cols_at_end] + [c for c in cols_at_end if c in df]]
+
+    # Return the dataset
+    return df
+# End def format_field_as_feature
+
+
+def format_field_as_feature(dataframe: pandas.DataFrame):
+    """
+    Format a dataset using field as feature and domain knowledge
+    :param dataframe:
+    """
+
+    # Copy the dataframe
+    df = dataframe.copy(deep=True)
+
+    # Interpret the field from the byte string
+    field_features = df['data'].apply(_bytes_to_ofp_fields)
+    df = pd.concat([df.iloc[:, :df.columns.get_loc("data")],  # Insert reasons before total_len
+                    field_features,
+                    df.iloc[:, df.columns.get_loc("data"):]], axis="columns")
+    df.drop(['data'], axis='columns', inplace=True)
+
+    # Format some columns
+    df["eth_dst"] = df["eth_dst"].apply(lambda x: int.from_bytes(x, byteorder='big'))
+    df["eth_src"] = df["eth_src"].apply(lambda x: int.from_bytes(x, byteorder='big'))
+    df["arp_sha"] = df["arp_sha"].apply(lambda x: int.from_bytes(x, byteorder='big'))
+    df["arp_spa"] = df["arp_spa"].apply(lambda x: int.from_bytes(x, byteorder='big'))
+    df["arp_tha"] = df["arp_tha"].apply(lambda x: int.from_bytes(x, byteorder='big'))
+    df["arp_tpa"] = df["arp_tpa"].apply(lambda x: int.from_bytes(x, byteorder='big'))
+    df['error_type']    = df['error_type'].apply(lambda x: x if x == "parsing_error" else "non_parsing_error")
+
+    ## Convert oxm_has_mask to boolean
+    df['oxm_has_mask'] = df['oxm_has_mask'].astype(bool)
+
+    # Drop the unused columns
+    df.drop(['error_reason',
+             'error_effect'],
+            axis='columns',
+            inplace=True)
+
+    # Drop error_trace column if it exists
+    if 'error_trace' in df.columns:
+        df.drop(['error_trace'], axis='columns', inplace=True)
+
+    # Rename error_type into class column
+    df.rename(columns={'error_type': 'class'}, inplace=True)
+
+    # Ensure that the class column is at the end
+    cols_at_end = ['class']
+    df = df[[c for c in df if c not in cols_at_end] + [c for c in cols_at_end if c in df]]
+
+    # Return the dataset
+    return df
+# End def format_field_as_feature
+
+
+def format_field_as_feature_domain_knowledge(dataframe: pandas.DataFrame):
+    """
+    Format a dataset using field as feature and domain knowledge
+    :param dataframe:
+    """
+
+    # Copy the dataframe
+    df = dataframe.copy(deep=True)
 
     # --------------------------------------------------------------------------
     # Make Field as features
@@ -277,9 +326,87 @@ def format_csv(csv_path, out_path=None, sep=','):
     df = df[[c for c in df if c not in cols_at_end]
             + [c for c in cols_at_end if c in df]]
 
-    # Stores the data
-    df.to_csv(out_path if out_path is not None else csv_path,
-              sep=sep,
-              index=False,
-              encoding='utf-8-sig')
-# End def format_csv
+    # Return the dataset
+    return df
+# End def format_field_as_feature_domain_knowledge
+
+
+# ====== ( Module private methods ) ====================================================================================
+
+def _bytes_to_ofp_fields(data):
+
+    if not hasattr(_bytes_to_ofp_fields, "fields"):
+        _bytes_to_ofp_fields.fields = (
+            ("of_version",      "B"),
+            ("of_type",         "B"),
+            ("length",          "H"),
+            ("xid",             "I"),
+            ("buffer_id",       "I"),
+            ("total_len",       "H"),
+            ("reason",          "B"),
+            ("table_id",        "B"),
+            ("cookie",          "Q"),
+            ("match_type",      "H"),
+            ("match_length",    "H"),
+            ("match_pad",       "I"),
+            ("oxm_class",       "H"),
+            ("oxm_field",       "B"),
+            ("oxm_length",      "B"),
+            ("oxm_value",       "I"),
+            ("pad",             "H"),
+            ("eth_dst",         "6s"),
+            ("eth_src",         "6s"),
+            ("ethertype",       "H"),
+            ("arp_htype",       "H"),
+            ("arp_ptype",       "H"),
+            ("arp_hlen",        "B"),
+            ("arp_plen",        "B"),
+            ("arp_oper",        "H"),
+            ("arp_sha",         "6s"),
+            ("arp_spa",         "4s"),
+            ("arp_tha",         "6s"),
+            ("arp_tpa",         "4s"),
+        )
+
+    # Decode packet to a byte string
+    packet_dict = None
+    try:
+        packet = base64.b64decode(data)
+    except binascii.Error as e:
+        print("Couldn't parse packet: {}\n{}".format(data, e))
+        traceback.print_exc()
+    else:
+        # Unpack the byte string according to the fields
+        unpack_string = "!"  # Network byte order
+        for f in _bytes_to_ofp_fields.fields:
+            unpack_string += f[1]
+        ofp_packet = struct.unpack(unpack_string, packet[:struct.calcsize(unpack_string)])
+
+        # Fill up the dict
+        packet_dict = dict()
+        for i in range(len(ofp_packet)):
+            if _bytes_to_ofp_fields.fields[i][0] == "oxm_field":
+                packet_dict["oxm_field"] = ofp_packet[i] >> 1
+                packet_dict["oxm_has_mask"] = ofp_packet[i] & 0x01
+            else:
+                packet_dict[_bytes_to_ofp_fields.fields[i][0]] = ofp_packet[i]
+
+    return pd.Series(packet_dict)
+# End def _bytes_to_ofp_fields
+
+
+def _bytes_to_byte_field(data):
+
+    packet_dict = dict()
+    bytes_ = list(binascii.a2b_base64(data))
+    for i in range(len(bytes_)):
+        packet_dict["byte_{}".format(i)] = bytes_[i]
+
+    return pd.Series(packet_dict)
+# End def _bytes_to_byte_field
+
+
+if __name__ == '__main__':
+
+    # Load a dataset from the data folder or use the output of the previous pipeline
+    format_dataset("it_1_raw.csv", out_path="it_1_baf.csv", method='baf', csv_sep=';')

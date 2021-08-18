@@ -8,7 +8,6 @@ import os
 import shutil
 import time
 from os.path import join
-
 # Local dependencies
 from typing import List
 
@@ -18,6 +17,7 @@ import rdfl_exp.machine_learning.algorithms as ml_alg
 import rdfl_exp.machine_learning.data as ml_data
 from rdfl_exp import config
 from rdfl_exp.machine_learning.rule import Rule, convert_to_fuzzer_actions
+from rdfl_exp.stats import Stats
 from rdfl_exp.utils import csv
 from rdfl_exp.utils.terminal import Style, progress_bar
 
@@ -43,32 +43,6 @@ _context = {
     # Number of samples to generate per iterations
     "nb_of_samples"         : 0
 }
-_stats = {
-    # Context of the test
-    "context": {
-        "pid"        : str(),
-        "max_it"     : int(),
-        "nb_of_it"   : int()
-    },
-    "time" : {
-        "iteration" : list(),
-        "learning"  : list()
-    },
-    # Information about the ml results
-    "machine_learning": {
-        "nb_of_instances"   : list(),
-        "accuracy"          : list(),
-        "tp_rate"           : list(),
-        "fp_rate"           : list(),
-        "precision_score"   : list(),
-        "recall_score"      : list(),
-        "f_measure"         : list(),
-        "mcc"               : list(),
-        "roc"               : list(),
-        "prc"               : list(),
-        "rules"             : list(),
-    }
-}
 
 _default_input = {
     "n_samples"             : 500,
@@ -86,7 +60,6 @@ _default_input = {
                     "ethType": "arp"
                 }
             ],
-        "default_match_limit": 1,
         "default_actions": [
             {
                 "action": "messagePayloadAction",
@@ -180,7 +153,9 @@ def run() -> None:
                         dst=join(config.EXP_PATH, "datasets",
                                  "it_{}_raw.csv".format(it)))
             # Format the dataset
-            ml_data.format_csv(dataset_path, sep=';')
+            ml_data.format_dataset(dataset_path,
+                                   method=_context["data_format_method"],
+                                   csv_sep=';')
         else:
             # Fetch the data into a temporary dictionary
             tmp_dataset_path = join(config.tmp_dir(), "temp_data.csv")
@@ -190,7 +165,9 @@ def run() -> None:
                         dst=join(config.EXP_PATH, "datasets",
                                  "it_{}_raw.csv".format(it)))
             # Format the dataset
-            ml_data.format_csv(tmp_dataset_path, sep=';')
+            ml_data.format_dataset(tmp_dataset_path,
+                                   method=_context["data_format_method"],
+                                   csv_sep=';')
             # Merge the data into the previous dataset
             csv.merge(csv_in=[tmp_dataset_path, dataset_path],
                       csv_out=dataset_path,

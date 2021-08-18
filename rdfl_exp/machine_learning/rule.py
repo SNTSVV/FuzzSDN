@@ -1,21 +1,19 @@
 #!/usr/bin/env python3
 # coding: utf-8
 import math
-import operator
 import random
 from copy import deepcopy
-from re import search
 from re import search
 
 from sympy import *
 
 from rdfl_exp.utils.interval import IntervalSet
 
-# ==== ( Lookup tables ) =======================================================
+# ==== ( Lookup tables ) ==============================================================================================
 
-
-COND_TO_FUZZER_ACTION_LUT = {
-    # Regular fields
+# LUT to convert "field" conditions into fuzzer actions
+FIELD_AS_FEATURE_LUT = {
+    # Fields for Fields as feature
     "of_version"    : {"loc": 0, "size": 1},
     "of_type"       : {"loc": 1, "size": 1},
     "length"        : {"loc": 2, "size": 2},
@@ -47,7 +45,12 @@ COND_TO_FUZZER_ACTION_LUT = {
     "arp_tpa"       : {"loc": 80, "size": 4},
 }
 
-CDT_REPLACEMENT_LUT = {
+# LUT to convert "bytes" condition into fuzzer actions. The LUT must be generated at least once before usage using the
+# function generate_bytes_as_feature_lut
+BYTES_AS_FEATURE_LUT = dict()
+
+# LUT to convert "domain knowledge" based conditions into "field" based conditions
+DOMAIN_KNOWLEDGE_CDT_LUT = {
     "(match_type_is_valid = True)":         "(match_type = 1)",
     "(match_type_is_valid = False)":        "(match_type != 1)",
 
@@ -82,26 +85,16 @@ CDT_REPLACEMENT_LUT = {
     "(ethertype_is_arp = False)":           "(pad != 2054)"
 }
 
-STR_TO_OP_DICT = {
-    "=": operator.eq,
-    "!=": operator.ne,
-    ">=": operator.ge,
-    ">": operator.gt,
-    "<=": operator.le,
-    "<": operator.lt
-}
 
-OP_TO_STR_DICT = {
-    operator.eq: "=",
-    operator.ne: "!=",
-    operator.ge: ">=",
-    operator.gt: ">",
-    operator.le: "<=",
-    operator.lt: "<"
-}
+def generate_bytes_as_feature_lut():
+    """Generate the BYTES_AS_FEATURE_LUT automatically."""
+    global BYTES_AS_FEATURE_LUT
 
-
-# ===== ( Rule class ) =========================================================
+    BYTES_AS_FEATURE_LUT = dict()
+    for i in range(256):
+        BYTES_AS_FEATURE_LUT["byte_{}".format(i)] = {'loc': i, 'size': 1}
+# End def generate_bytes_as_feature_lut
+# ===== ( Rule class ) =================================================================================================
 
 
 class Rule(object):
@@ -122,9 +115,9 @@ class Rule(object):
         tmp_rule = deepcopy(rule_str)
 
         # Replace all the elements according to the LUT
-        for elem in CDT_REPLACEMENT_LUT:
+        for elem in DOMAIN_KNOWLEDGE_CDT_LUT:
             if elem in tmp_rule:
-                tmp_rule = tmp_rule.replace(elem, CDT_REPLACEMENT_LUT[elem])
+                tmp_rule = tmp_rule.replace(elem, DOMAIN_KNOWLEDGE_CDT_LUT[elem])
 
         # Get the class of the rule
         # Regex used to get the rule
@@ -191,37 +184,39 @@ class Rule(object):
 
     def apply(self):
         models = list(m for m in satisfiable(self.expr, all_models=True))
-        for m in models:
-            print(m)
-
         # Return a sample of the rule
         return random.sample(models, 1)[0]
+# End class Rule
 
 
-# End def rule
-
+# ===== ( Rule class ) =================================================================================================
 
 def convert_to_fuzzer_actions(rule: Rule):
     """ Transform the rules into a set of fuzzer interpretable actions """
 
     # TODO: handle poorly defined conditions, like "(field > value) and (field < value - 1)" (which is impossible)
 
+    # First, generate the Bytes-as-Feature LUT if it wasn't done before
+    if len(BYTES_AS_FEATURE_LUT) == 0:
+        generate_bytes_as_feature_lut()
+
     # sub functions
-    def get_range_op_val(op, value):
+    def get_range_from_op_and_val(op, value):
         """ Define a range from the operator and the value"""
         _range = None
 
-        if op == operator.ne:
-            _range = IntervalSet((-math.inf, value - 1),
-                                 (value + 1, math.inf))
-        elif op == operator.ge:
+        if op == '!=':
+            _range = IntervalSet((-math.inf, value - 1), (value + 1, math.inf))
+        elif op == ">=":
             _range = IntervalSet((value, math.inf))
-        elif op == operator.gt:
+        elif op == ">":
             _range = IntervalSet((value + 1, math.inf))
-        elif op == operator.le:
+        elif op == "<=":
             _range = IntervalSet((-math.inf, value))
-        elif op == operator.lt:
+        elif op == "<":
             _range = IntervalSet((-math.inf, value - 1))
+        else:
+            raise ValueError("Unsupported operator '{}'".format(op))
 
         return _range
     # End def get_range_cdt
@@ -237,7 +232,7 @@ def convert_to_fuzzer_actions(rule: Rule):
         }
 
         # 2.3.1 determine the type of operation:
-        if op == operator.eq:  # Operator is "="
+        if op == '=':
             new_act["type"] = "set"
             new_act["value"] = value
 
@@ -246,7 +241,7 @@ def convert_to_fuzzer_actions(rule: Rule):
             # Create the range depending on the size of the field
             bounds = IntervalSet((0, int(math.pow(2, 8 * size - 1))))
             # Get the absolute range from the operator and the value
-            _range = get_range_op_val(op, value)
+            _range = get_range_from_op_and_val(op, value)
             # Intersect the action's range with the range of the new condition
             new_act["range"] = bounds & _range
 
@@ -266,44 +261,48 @@ def convert_to_fuzzer_actions(rule: Rule):
         if '>' in cdt_str and ">=" not in cdt_str:
             cdt["field"], cdt["value"] = cdt_str.split('>')
             cdt["value"] = int(cdt["value"])
-            cdt["op"] = operator.gt if not negate else operator.le
+            cdt["op"] = '>' if not negate else '<='
 
         elif '>=' in cdt_str:
             cdt["field"], cdt["value"] = cdt_str.split('>=')
             cdt["value"] = int(cdt["value"])
-            cdt["op"] = operator.ge if not negate else operator.lt
+            cdt["op"] = '>=' if not negate else '<'
 
         elif '<' in cdt_str and "<=" not in cdt_str:
             cdt["field"], cdt["value"] = cdt_str.split('<')
             cdt["value"] = int(cdt["value"])
-            cdt["op"] = operator.lt if not negate else operator.ge
+            cdt["op"] = '<' if not negate else '>='
 
         elif '<=' in cdt_str:
             cdt["field"], cdt["value"] = cdt_str.split('<=')
             cdt["value"] = int(cdt["value"])
-            cdt["op"] = operator.le if not negate else operator.gt
+            cdt["op"] = '<=' if not negate else '>'
 
         elif '=' in cdt_str and '!=' not in cdt_str:
             cdt["field"], cdt["value"] = cdt_str.split('=')
             cdt["value"] = int(cdt["value"])
-            cdt["op"] = operator.eq if not negate else operator.ne
+            cdt["op"] = '=' if not negate else '!='
 
         elif '!=' in cdt_str:
             cdt["field"], cdt["value"] = cdt_str.split('!=')
             cdt["value"] = int(cdt["value"])
-            cdt["op"] = operator.ne if not negate else operator.eq
+            cdt["op"] = '!=' if not negate else '='
 
         conditions.append(cdt)
 
     fuzz_action = []
     for c in conditions:
-
         # 1. get the dict for the action
-        action_dict = COND_TO_FUZZER_ACTION_LUT[c["field"]]
+        if c["field"] in FIELD_AS_FEATURE_LUT:
+            action_dict = FIELD_AS_FEATURE_LUT[c["field"]]
+        elif c["field"] in BYTES_AS_FEATURE_LUT:
+            action_dict = BYTES_AS_FEATURE_LUT[c["field"]]
+        else:
+            raise RuntimeError("Field {} is not present in the Field-as-Feature's LUT"
+                               "nor the Bytes-as-Feature's LUT".format(c["field"]))
 
         # 2 Find if there is already an action on the same field
-        act_ind = next((i for i, item in enumerate(fuzz_action) if
-                        item["field"] == c["field"]), None)
+        act_ind = next((i for i, item in enumerate(fuzz_action) if item["field"] == c["field"]), None)
         # 3.1 If we already found an action we merge them if possible
         if act_ind is not None:
             # 3.1.1 If there is already a set action, we skip all further steps
@@ -312,18 +311,17 @@ def convert_to_fuzzer_actions(rule: Rule):
 
             # 3.1.2 If the new operator is "=", we remove the range and set
             # the new type as "set"
-            if c["op"] == operator.eq:  # Operator is "="
+            if c["op"] == '=':  # Operator is "="
                 fuzz_action[act_ind]["type"] = "set"
                 fuzz_action[act_ind]["value"] = int(c["value"])
                 if "range" in fuzz_action[act_ind]:
-                    del fuzz_action[act_ind][
-                        "range"]  # We remove the range key
+                    del fuzz_action[act_ind]["range"]  # We remove the range key
 
             # 3.1.3 Otherwise, we update the range
             else:
                 fuzz_action[act_ind]["type"] = "scramble_in_range"
                 # Get the absolute range from the operator and the value
-                op_range = get_range_op_val(c["op"], int(c["value"]))
+                op_range = get_range_from_op_and_val(c["op"], int(c["value"]))
                 # Intersect the action's range with the range of the
                 # condition
                 fuzz_action[act_ind]["range"] &= op_range
@@ -345,367 +343,12 @@ def convert_to_fuzzer_actions(rule: Rule):
             if isinstance(act["range"], IntervalSet):
                 act["range"] = [[x.inf, x.sup] for x in list(act["range"])]
                 if len(act["range"]) == 0:
-                    size = COND_TO_FUZZER_ACTION_LUT[act["field"]]["size"]
+                    if act["field"] in BYTES_AS_FEATURE_LUT:
+                        size = BYTES_AS_FEATURE_LUT[act["field"]]["size"]
+                    elif act["field"] in FIELD_AS_FEATURE_LUT:
+                        size = FIELD_AS_FEATURE_LUT[act["field"]]["size"]
                     act["range"] = [[x.inf, x.sup] for x in list(IntervalSet((0, int(math.pow(2, 8 * size - 1)))))]
 
     return fuzz_action
 # End def convert_to_fuzzer_actions
 
-
-# ===== ( Leftover ) ===================================================================================================
-
-# CUSTOM_FIELDS_TO_CDT = {
-#     "match_type_is_valid": {
-#         "True": {"field": "match_type", "op": operator.eq, "value": 1},
-#         "False": {"field": "match_type", "op": operator.ne, "value": 1},
-#     },
-#     "reason_NoMatch": {
-#         "True": {"field": "reason", "op": operator.eq, "value": 0},
-#         "False": {"field": "reason", "op": operator.ne, "value": 0},
-#     },
-#     "reason_Action": {
-#         "True": {"field": "reason", "op": operator.eq, "value": 1},
-#         "False": {"field": "reason", "op": operator.ne, "value": 1},
-#     },
-#     "reason_InvalidTTL": {
-#         "True": {"field": "reason", "op": operator.eq, "value": 2},
-#         "False": {"field": "reason", "op": operator.ne, "value": 2},
-#     },
-#     "reason_Illegal": {
-#         "True": {"field": "reason", "op": operator.gt, "value": 2},
-#         "False": {"field": "reason", "op": operator.le, "value": 2},
-#     },
-#     "oxm_class_NXM_0": {
-#         "True": {"field": "oxm_class", "op": operator.eq, "value": 0x0000},
-#         "False": {"field": "oxm_class", "op": operator.ne, "value": 0x0000},
-#     },
-#     "oxm_class_NXM_1": {
-#         "True": {"field": "oxm_class", "op": operator.eq, "value": 0x0001},
-#         "False": {"field": "oxm_class", "op": operator.ne, "value": 0x0001},
-#     },
-#     "oxm_class_OPENFLOW_BASIC": {
-#         "True": {"field": "oxm_class", "op": operator.eq, "value": 0x8000},
-#         "False": {"field": "oxm_class", "op": operator.ne, "value": 0x8000},
-#     },
-#     "oxm_class_EXPERIMENTER": {
-#         "True": {"field": "oxm_class", "op": operator.eq, "value": 0xFFFF},
-#         "False": {"field": "oxm_class", "op": operator.ne, "value": 0xFFFF},
-#     },
-#     "oxm_class_INVALID": {
-#         "True": [
-#             {"field": "oxm_class", "op": operator.ne, "value": 0x0000},
-#             {"field": "oxm_class", "op": operator.ne, "value": 0x0001},
-#             {"field": "oxm_class", "op": operator.ne, "value": 0x8000},
-#             {"field": "oxm_class", "op": operator.ne, "value": 0xFFFF}
-#         ],
-#         "False": {"field": "oxm_class", "op": operator.eq, "value": 0x0000},
-#     },
-#     "match_pad_is_zero": {
-#         "True": {"field": "match_pad", "op": operator.eq, "value": 0},
-#         "False": {"field": "match_pad", "op": operator.ne, "value": 0}
-#     },
-#     "pad_is_zero": {
-#         "True": {"field": "pad", "op": operator.eq, "value": 0},
-#         "False": {"field": "pad", "op": operator.ne, "value": 0}
-#     },
-#     "ethertype_is_arp": {
-#         "True": {"field": "ethertype", "op": operator.eq, "value": 0x0806},
-#         "False": {"field": "ethertype", "op": operator.ne, "value": 0x0806},
-#     },
-#
-# }
-# class Rule(object):
-#     """
-#     An object which role is to store a rule
-#     """
-#
-#     # ===== ( Constructor ) ====================================================
-#
-#     def __init__(self):
-#         self.__class = ""
-#         self.__conditions = list()
-#
-#     # End def __init__
-#
-#     @classmethod
-#     def from_string(cls, rule_str: str):
-#         """
-#         Create a Rule object from a rule string
-#         :param rule_str:
-#         :return:
-#         """
-#
-#         # Create the new rule
-#         new_rule = Rule()
-#
-#         # Define regex
-#         rgx_cdt = r"\(([^(/)]+)\)"
-#         rgx_cls_1 = r"(?<==>).*=.*(?=\()"
-#         rgx_cls_2 = r"(?<==>).*=.*"
-#
-#         # Find all criteria and store them in a list
-#         criteria_found = findall(rgx_cdt, rule_str)
-#         for criterion in criteria_found:
-#             params = criterion.split(" ")
-#             new_rule.add_condition(field=params[0],
-#                                    op=STR_TO_OP_DICT.get(params[1], "="),
-#                                    value=params[2])
-#
-#         # Find to which class the rules applies
-#         class_match = search(rgx_cls_1, rule_str)
-#         if class_match:
-#             new_rule.set_class(class_match.group(0).split("=")[1].strip())
-#         else:
-#             class_match = search(rgx_cls_2, rule_str)
-#             if class_match:
-#                 new_rule.set_class(class_match.group(0).split("=")[1].strip())
-#
-#         return new_rule
-#
-#     # End def from_string
-#
-#     @classmethod
-#     def from_dict(cls, rule_dict: dict):
-#         """
-#         Create a Rule object from a rule dict object
-#
-#         :param rule_dict:
-#         :return:
-#         """
-#
-#         new_rule = cls.from_string(rule_dict["conditions"])
-#         new_rule.set_class(rule_dict["class"])
-#
-#         return new_rule
-#
-#     # End def from_dict
-#
-#     # ===== ( Overload ) =======================================================
-#
-#     def __repr__(self):
-#         repr_str = ""
-#         first = True
-#         for cond in self.__conditions:
-#             if not first:
-#                 repr_str += " and "
-#             else:
-#                 first = False
-#
-#             repr_str += "({} {} {})".format(cond["field"],
-#                                             OP_TO_STR_DICT.get(cond["op"], "?"),
-#                                             cond["value"])
-#
-#         repr_str += " => class={}".format(self.__class)
-#         return repr_str
-#
-#     # End __repr__
-#
-#     # ===== ( Getters ) ======================================================
-#
-#     def get_class(self):
-#         return self.__class
-#
-#     # End def get_class
-#
-#     def get_conditions(self):
-#         return self.__conditions
-#
-#     # End def get_conditions
-#
-#     # ===== ( Setters ) ========================================================
-#
-#     def add_condition(self, field, op, value) -> None:
-#         # Check if it is a custom field
-#         if field in CUSTOM_FIELDS_TO_CDT:
-#             field_dict = deepcopy(CUSTOM_FIELDS_TO_CDT[field][value])
-#             if isinstance(field_dict, list):
-#                 for field in field_dict:
-#                     self.__conditions.append(field)
-#             else:
-#                 self.__conditions.append(field_dict)
-#
-#         # Check if the field is known
-#         elif field in COND_TO_FUZZER_ACTION_DICT:
-#             self.__conditions.append(
-#                 {
-#                     "field": field,
-#                     "op": op,
-#                     "value": value
-#                 }
-#             )
-#
-#         # Else raise an error
-#         else:
-#             pass  # TODO: Raise an error
-#
-#     # End def add_condition
-#
-#     def set_class(self, lb_cls):
-#         self.__class = lb_cls
-#
-#     # End def set_class
-#
-#     # ===== ( Methods ) ========================================================
-#
-#     def to_dict(self):
-#         """
-#         Convert the rule to a dictionary
-#         :return: A dictionary representing the rule
-#         """
-#         out_dict = dict()
-#         cond_str = ""
-#         first = True
-#
-#         for cond in self.__conditions:
-#             if not first:
-#                 cond_str += " and "
-#             else:
-#                 first = False
-#             cond_str += "({} {} {})".format(cond["field"],
-#                                             OP_TO_STR_DICT.get(cond["op"], "?"),
-#                                             cond["value"])
-#
-#         out_dict["conditions"] = cond_str
-#         out_dict["class"] = self.get_class()
-#
-#         return out_dict
-#
-#     # End def to_dict
-#
-#     def to_fuzzer_actions(self, negate=False):
-#         """ Transform the rules into a set of fuzzer interpretable actions """
-#
-#         # TODO: handle poorly defined conditions, like "(field > value) and (field < value - 1)" (which is impossible)
-#
-#         # sub functions
-#         def get_range_op_val(op, value):
-#             """ Define a range from the operator and the value"""
-#             _range = None
-#
-#             if op == operator.ne:
-#                 _range = IntervalSet((-math.inf, value - 1),
-#                                      (value + 1, math.inf))
-#             elif op == operator.ge:
-#                 _range = IntervalSet((value, math.inf))
-#             elif op == operator.gt:
-#                 _range = IntervalSet((value + 1, math.inf))
-#             elif op == operator.le:
-#                 _range = IntervalSet((-math.inf, value))
-#             elif op == operator.lt:
-#                 _range = IntervalSet((-math.inf, value - 1))
-#
-#             return _range
-#
-#         # End def get_range_cdt
-#
-#         def get_new_action(field, loc, size, op, value):
-#             new_act = {
-#                 "field": field,
-#                 "firstByte": loc,
-#                 "size": size,
-#                 "action": "ByteFieldAction",
-#                 # Action is always a byte field action
-#                 "type": "unknown"
-#             }
-#
-#             # 2.3.1 determine the type of operation:
-#             if op == operator.eq:  # Operator is "="
-#                 new_act["type"] = "set"
-#                 new_act["value"] = value
-#
-#             else:  # Operator is ">", ">=", "<" or "<="
-#                 new_act["type"] = "scramble_in_range"
-#                 # Create the range depending on the size of the field
-#                 bounds = IntervalSet((0, int(math.pow(2, 8 * size - 1))))
-#                 # Get the absolute range from the operator and the value
-#                 _range = get_range_op_val(op, value)
-#                 # Intersect the action's range with the range of the
-#                 # condition
-#                 new_act["range"] = bounds & _range
-#
-#             return new_act
-#
-#         # End def get_new_action
-#
-#         fuzz_action = list()
-#         # Parse the rule normally
-#         if negate is False:
-#             for c in self.__conditions:
-#                 # 1. get the dict for the action
-#                 action_dict = COND_TO_FUZZER_ACTION_DICT[c["field"]]
-#
-#                 # 2 Find if there is already an action on the same field
-#                 act_ind = next((i for i, item in enumerate(fuzz_action) if
-#                                 item["field"] == c["field"]), None)
-#                 # 3.1 If we already found an action we merge them if possible
-#                 if act_ind is not None:
-#                     # 3.1.1 If there is already a set action, we skip all further steps
-#                     if fuzz_action[act_ind]["type"] == "set":
-#                         continue
-#
-#                     # 3.1.2 If the new operator is "=", we remove the range and set
-#                     # the new type as "set"
-#                     if c["op"] == operator.eq:  # Operator is "="
-#                         fuzz_action[act_ind]["type"] = "set"
-#                         fuzz_action[act_ind]["value"] = int(c["value"])
-#                         if "range" in fuzz_action[act_ind]:
-#                             del fuzz_action[act_ind][
-#                                 "range"]  # We remove the range key
-#                     # 3.1.3 Otherwise, we update the range
-#                     else:
-#                         fuzz_action[act_ind]["type"] = "scramble_in_range"
-#                         # Get the absolute range from the operator and the value
-#                         op_range = get_range_op_val(c["op"], int(c["value"]))
-#                         # Intersect the action's range with the range of the
-#                         # condition
-#                         fuzz_action[act_ind]["range"] &= op_range
-#
-#                 # 3.2 Otherwise we create a new action
-#                 else:
-#                     # 3.2.1 Get the new acction
-#                     action = get_new_action(field=c['field'],
-#                                             loc=action_dict['loc'],
-#                                             size=action_dict["size"],
-#                                             op=c["op"],
-#                                             value=int(c["value"]))
-#                     # 3.2.2 Append it to the action list
-#                     fuzz_action.append(action)
-#
-#         else:
-#             for c in self.__conditions:
-#                 # 1. get the dict for the action
-#                 action_dict = COND_TO_FUZZER_ACTION_DICT[c["field"]]
-#
-#                 # 2. Negate the operator
-#                 cdt = deepcopy(c)
-#                 if cdt["op"] == operator.eq:
-#                     cdt["op"] = operator.ne  # '='  -> '!='
-#                 elif cdt["op"] == operator.ne:
-#                     cdt["op"] = operator.eq  # '!=' -> '='
-#                 elif cdt["op"] == operator.ge:
-#                     cdt["op"] = operator.lt  # '>=' -> '<'
-#                 elif cdt["op"] == operator.le:
-#                     cdt["op"] = operator.gt  # '<=' -> '>'
-#                 elif cdt["op"] == operator.gt:
-#                     cdt["op"] = operator.le  # '>'  -> '<='
-#                 elif cdt["op"] == operator.lt:
-#                     cdt["op"] = operator.ge  # '<'  -> '>='
-#
-#                 # 3. Create an action for the cdt
-#                 action = get_new_action(field=cdt['field'],
-#                                         loc=action_dict['loc'],
-#                                         size=action_dict["size"],
-#                                         op=cdt["op"],
-#                                         value=int(cdt["value"]))
-#                 # 4. Append the action to the action list
-#                 fuzz_action.append(action)
-#
-#         # Finally convert all the IntervalSets to a list of ranges
-#         for act in fuzz_action:
-#             if "range" in act:
-#                 if isinstance(act["range"], IntervalSet):
-#                     act["range"] = [[x.inf, x.sup] for x in list(act["range"])]
-#
-#         return fuzz_action
-#     # End def to_fuzzer_actions
-# End class Rule

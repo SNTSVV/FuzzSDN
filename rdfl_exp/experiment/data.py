@@ -124,8 +124,6 @@ def parse_errors(error_list, row, error_index, reason_index, effect_index, trace
 # End def parse_errors
 
 
-# End def decode_data_field
-
 def fetch(csv_path: str):
     """
     Fetch the data from the experiment database
@@ -150,7 +148,6 @@ def fetch(csv_path: str):
         conn2, cursor2 = SqlDb.get_connection("control_flow_fuzzer")
 
         try:
-
             cursor1.execute("SELECT COUNT(*) FROM fuzzed_of_message")
             STATS["total"] = cursor1.fetchone()[0]
             msg_count = 0
