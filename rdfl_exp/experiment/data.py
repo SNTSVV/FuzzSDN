@@ -2,6 +2,8 @@
 # coding: utf-8
 import binascii
 import csv
+import math
+from copy import deepcopy
 
 from rdfl_exp.utils.database import Database as SqlDb
 from rdfl_exp.utils.terminal import progress_bar
@@ -100,16 +102,20 @@ def parse_errors(error_list, row, error_index, reason_index, effect_index, trace
             if "Switch disconnected callback" in error_line[1]:
                 effect = "switch_disconnected"
 
-    # If we couldn't find an error, say that the error is unknown
-    if error is None:
-        error = "Unknown"
-
-    # If we couldn't find an reason, say that the reason is unknown
-    if reason is None:
-        reason = "Unknown"
-
-    if effect is None:
-        effect = "Unknown"
+    # If there is no effect, reason and error then, there is no error
+    if error is None and reason is None and effect is None:
+        error = "no_error"
+        reason = "no_reason"
+        effect = "no_effect"
+    else:
+        # If we couldn't find an error, say that the error is unknown
+        if error is None:
+            error = "Unknown"
+        # If we couldn't find an reason, say that the reason is unknown
+        if reason is None:
+            reason = "Unknown"
+        if effect is None:
+            effect = "Unknown"
 
     # Finally, add the error, reason, effect and trace to the row
     row[error_index] = error
@@ -166,18 +172,14 @@ def fetch(csv_path: str):
             print("Assembling data...")
             progress_bar(0, STATS["total"], prefix='Progress:', suffix='Complete', length=100)
             while next_message is not None:
-
+                # Get the date of the message, and the one of the next message
                 current_date = current_message[1]
                 next_date = next_message[1]
                 log_match = []
 
-                # # Complexity: O((n^2 - n))
-                # for j in range(len(errors) - 1, -1, -1):
-                #     if current_date <= errors[j][1] < next_date:
-                #         error += errors[j][3] + "|"
-                #         del errors[j]  # Delete errors handled as we proceed
-
-                # Complexity: O(sqrt(n))
+                # starting from the last log (they are ordered by date), checks that the log messages fits the date of
+                # the message. If it does, add it to the match and delete it from the log entry (to reduce complexity).
+                # If the date of the message start to be above the date of the next message, then the loop can be stopped.
                 for j in range(len(log_entry) - 1, -1, -1):
                     if current_date <= log_entry[j][1] < next_date:
                         if log_entry[j][3] is not None:
@@ -191,7 +193,6 @@ def fetch(csv_path: str):
                         # go over the next_date
                         break
 
-                ############
                 # handle data as byte
                 byte_csv_row = [None] * len(BYTES_CSV_COLUMNS) if KEEP_TRACE_ON_UNKNOWN else [None] * (len(BYTES_CSV_COLUMNS) - 1)
                 byte_csv_row[BYTES_CSV_COLUMNS["data"]] = binascii.b2a_base64(current_message[3], newline=False).decode()  # Store the data
@@ -211,11 +212,39 @@ def fetch(csv_path: str):
                 # Update progress bar
                 msg_count += 1
                 progress_bar(msg_count,
-                             STATS["total"] - 1,
+                             STATS["total"],
                              prefix='Progress:',
                              suffix='Complete',
                              length=100)
 
+            # Add all the remaining log entries to the last message
+            # TODO: Simplify this solution. Maybe remove all the log entry inferior to the last message date and then
+            #       add them directly to the log match, instead of looping
+            current_date = current_message[1]
+            for j in range(len(log_entry) - 1, -1, -1):
+                if current_date <= log_entry[j][1]:
+                    if log_entry[j][3] is not None:
+                        # Store a tuple of the level and the error message
+                        log_match += [(log_entry[j][2], log_entry[j][3])]
+                    # Delete errors handled as we proceed
+                    del log_entry[j]
+            byte_csv_row = [None] * len(BYTES_CSV_COLUMNS) if KEEP_TRACE_ON_UNKNOWN else [None] * (
+                        len(BYTES_CSV_COLUMNS) - 1)
+            byte_csv_row[BYTES_CSV_COLUMNS["data"]] = binascii.b2a_base64(current_message[3],
+                                                                          newline=False).decode()  # Store the data
+            parse_errors(log_match, byte_csv_row,
+                         error_index=BYTES_CSV_COLUMNS["error_type"],
+                         reason_index=BYTES_CSV_COLUMNS["error_reason"],
+                         effect_index=BYTES_CSV_COLUMNS["error_effect"],
+                         trace_index=BYTES_CSV_COLUMNS["error_trace"])
+            # Writing data of CSV file
+            csv_writer.writerow(byte_csv_row)
+            msg_count += 1
+            progress_bar(msg_count,
+                         STATS["total"],
+                         prefix='Progress:',
+                         suffix='Complete',
+                         length=100)
         finally:
             # Close the cursors and the connections to avoid any issues
             cursor1.close()

@@ -93,7 +93,7 @@ def filter_hex(x):
 
 # ====== ( Module private methods ) ====================================================================================
 
-def format_dataset(csv_path, out_path=None, method='faf+dk', csv_sep=','):
+def format_dataset(csv_path, out_path=None, method='faf+dk', target_error='non_parsing_error', csv_sep=','):
 
     # Load a dataset from the data folder or use the output of the previous pipeline
     df = pd.read_csv(csv_path, sep=csv_sep)
@@ -109,6 +109,9 @@ def format_dataset(csv_path, out_path=None, method='faf+dk', csv_sep=','):
         df = format_bytes_as_feature(df)
     else:
         raise ValueError("Unknown method {}. Accepted values are 'faf+dk', 'faf' and 'baf'.")
+
+    # Sets the target error
+    df = create_class(dataframe=df, target_error=target_error)
 
     # Stores the data
     df.to_csv(out_path if out_path is not None else csv_path,
@@ -132,26 +135,6 @@ def format_bytes_as_feature(dataframe: pandas.DataFrame):
                     bytes_features,
                     df.iloc[:, df.columns.get_loc("data"):]], axis="columns")
     df.drop(['data'], axis='columns', inplace=True)
-
-    # Format error type
-    df['error_type']    = df['error_type'].apply(lambda x: x if x == "parsing_error" else "non_parsing_error")
-
-    # Drop the unused columns
-    df.drop(['error_reason',
-             'error_effect'],
-            axis='columns',
-            inplace=True)
-
-    # Drop error_trace column if it exists
-    if 'error_trace' in df.columns:
-        df.drop(['error_trace'], axis='columns', inplace=True)
-
-    # Rename error_type into class column
-    df.rename(columns={'error_type': 'class'}, inplace=True)
-
-    # Ensure that the class column is at the end
-    cols_at_end = ['class']
-    df = df[[c for c in df if c not in cols_at_end] + [c for c in cols_at_end if c in df]]
 
     # Return the dataset
     return df
@@ -185,23 +168,6 @@ def format_field_as_feature(dataframe: pandas.DataFrame):
 
     ## Convert oxm_has_mask to boolean
     df['oxm_has_mask'] = df['oxm_has_mask'].astype(bool)
-
-    # Drop the unused columns
-    df.drop(['error_reason',
-             'error_effect'],
-            axis='columns',
-            inplace=True)
-
-    # Drop error_trace column if it exists
-    if 'error_trace' in df.columns:
-        df.drop(['error_trace'], axis='columns', inplace=True)
-
-    # Rename error_type into class column
-    df.rename(columns={'error_type': 'class'}, inplace=True)
-
-    # Ensure that the class column is at the end
-    cols_at_end = ['class']
-    df = df[[c for c in df if c not in cols_at_end] + [c for c in cols_at_end if c in df]]
 
     # Return the dataset
     return df
@@ -245,10 +211,12 @@ def format_field_as_feature_domain_knowledge(dataframe: pandas.DataFrame):
     df['reason'] = df['reason'].apply(filter_reason)
     one_hot_reason = pd.get_dummies(df['reason']).astype(bool)
     ### Ensure that all the reason columns are generated
-    reason_cols = ['reason_NoMatch',
-                   'reason_Action',
-                   'reason_InvalidTTL',
-                   'reason_Illegal']
+    reason_cols = [
+        'reason_NoMatch',
+        'reason_Action',
+        'reason_InvalidTTL',
+        'reason_Illegal'
+    ]
     for i in range(len(reason_cols)):
         if reason_cols[i] not in one_hot_reason:
             one_hot_reason.insert(min(i, len(reason_cols) - 1), reason_cols[i], False)
@@ -269,11 +237,13 @@ def format_field_as_feature_domain_knowledge(dataframe: pandas.DataFrame):
     df['oxm_class'] = df['oxm_class'].apply(filter_oxm_class)
     one_hot_oxm_class = pd.get_dummies(df['oxm_class']).astype(bool)
     ### Ensure that all the oxm columns are generated
-    oxm_cols = ['oxm_class_NXM_0',
-                'oxm_class_NXM_1',
-                'oxm_class_OPENFLOW_BASIC',
-                'oxm_class_EXPERIMENTER',
-                'oxm_class_INVALID']
+    oxm_cols = [
+        'oxm_class_NXM_0',
+        'oxm_class_NXM_1',
+        'oxm_class_OPENFLOW_BASIC',
+        'oxm_class_EXPERIMENTER',
+        'oxm_class_INVALID'
+    ]
     for i in range(len(oxm_cols)):
         if oxm_cols[i] not in one_hot_oxm_class:
             one_hot_oxm_class.insert(min(i, len(oxm_cols) - 1), oxm_cols[i], False)
@@ -308,7 +278,29 @@ def format_field_as_feature_domain_knowledge(dataframe: pandas.DataFrame):
     # Drop the unused columns
     df.drop(['cookie',       # cookie is a unique identifier for a fuzzed message. It is irrelevant to use it.
              'buffer_id',
-             'table_id',
+             'table_id'],
+            axis='columns',
+            inplace=True)
+
+    # Return the dataset
+    return df
+# End def format_field_as_feature_domain_knowledge
+
+
+def create_class(dataframe: pandas.DataFrame, target_error: str):
+    # Copy the dataframe
+    df = dataframe.copy(deep=True)
+
+    # Format error type
+    if target_error in ('non_parsing_error', 'parsing_error'):
+        df['class'] = df['error_type'].apply(lambda x: x if x == "parsing_error" else "non_parsing_error")
+    elif target_error == 'unknown_reason':
+        df['class'] = df['error_reason'].apply(lambda x: 'unknown_reason' if x == 'Unknown' else 'known_reason')
+    else:
+        raise ValueError("Unknown target error '{}'".format(target_error))
+
+    # Drop the error columns
+    df.drop(['error_type',
              'error_reason',
              'error_effect'],
             axis='columns',
@@ -321,14 +313,12 @@ def format_field_as_feature_domain_knowledge(dataframe: pandas.DataFrame):
     # Rename error_type into class column
     df.rename(columns={'error_type': 'class'}, inplace=True)
 
-    # Ensure that the error_type column is at the end
+    # Ensure that the class column is at the end
     cols_at_end = ['class']
-    df = df[[c for c in df if c not in cols_at_end]
-            + [c for c in cols_at_end if c in df]]
+    df = df[[c for c in df if c not in cols_at_end] + [c for c in cols_at_end if c in df]]
 
-    # Return the dataset
     return df
-# End def format_field_as_feature_domain_knowledge
+# End def create_class
 
 
 # ====== ( Module private methods ) ====================================================================================
@@ -404,9 +394,3 @@ def _bytes_to_byte_field(data):
 
     return pd.Series(packet_dict)
 # End def _bytes_to_byte_field
-
-
-if __name__ == '__main__':
-
-    # Load a dataset from the data folder or use the output of the previous pipeline
-    format_dataset("it_1_raw.csv", out_path="it_1_baf.csv", method='baf', csv_sep=';')
