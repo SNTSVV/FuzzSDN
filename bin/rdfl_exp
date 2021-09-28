@@ -36,10 +36,37 @@ def parse_arguments():
                         dest='in_file',
                         help="Path to an input file")
 
+    # Argument to choose the precision threshold
+    parser.add_argument('--precision-threshold',
+                        type=float,
+                        dest='precision_th',
+                        help="Override the precision threshold")
+
+    # Argument to choose the recall threshold
+    parser.add_argument('--recall-threshold',
+                        type=float,
+                        dest='recall_th',
+                        help="Override the recall threshold")
+
+    # Argument to choose the number of sample to generate
     parser.add_argument('-s', '--samples',
                         type=int,
                         dest='samples',
                         help="Override the number of samples")
+
+    # Argument to choose the formatting method
+    parser.add_argument('--data_format',
+                        dest='data_format',
+                        default='faf',
+                        const='faf',
+                        nargs='?',
+                        choices=['faf', 'faf+dk', 'baf'],
+                        help='Choose a data formatting method: FaF, FaF+DK or BaF (default: %(default)s)')
+
+
+
+
+
 
     return parser.parse_args()
 # End def parse_arguments

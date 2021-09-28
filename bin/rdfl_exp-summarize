@@ -23,13 +23,19 @@ password = "ubuntu"
 
 # exp_to_fetch = "20210813_132154"  # faf + dk
 # exp_to_fetch = "20210817_095456"  # faf
-exp_to_fetch = "20210817_211215"  # baf
+# exp_to_fetch = "20210817_211215"  # baf
 
+# exp_to_fetch = "20210818_225415"  # Unknown Reason + faf
+# exp_to_fetch = "20210819_143747"
+# exp_to_fetch = "20210819_173227"
+
+exp_to_fetch = "20210914_211805"
 
 report_dir      = os.path.join(config.RDFL_ROOT, "report")
 res_dir         = os.path.join(report_dir, "rdfl_exp_summary_{}".format(exp_to_fetch))
 datasets_dir   = join(res_dir, "datasets")
 remote_out_dir  = "/home/ubuntu/.rdfl_exp/out"
+
 
 # ===== ( Helper functions ) ===========================================================================================
 
@@ -83,16 +89,15 @@ def _fetch_output_files():
         progress_bar(0, len(file_list),
                      prefix='Progress:',
                      suffix='Complete ({}/{})'.format(0, len(file_list)),
-                     decimals=1,
                      length=100)
         for item in file_list:
             sftp.get(join(remote_out_dir, last_exp, "datasets", item), join(datasets_dir, item))
-            it += 1
             progress_bar(it, len(file_list),
                          prefix='Progress:',
                          suffix='Complete ({}/{})'.format(it, len(file_list)),
-                         decimals=1,
                          length=100)
+            it += 1
+
     finally:
         if transport:
             transport.close()
@@ -114,7 +119,7 @@ def _generate_report(stats: dict):
         "Recall Threshold: {:.2f}%\n".format(stats['context']['recall_threshold'] * 100.0),
         "target_class: {}\n".format(stats['context']['target_class']),
         "Samples generated per iterations: {}\n".format(stats['context']['samples_per_iteration']),
-        "Data formatting method used: {}\n".format(stats['context']['data_format_method']),
+        "Data formatting method used: {}\n\n".format(stats['context']['data_format_method']),
         "======== Iteration Summary ========\n\n"
     ]
     for i in range(stats["context"]["iterations"]):
@@ -143,6 +148,7 @@ def _generate_report(stats: dict):
         if nb_of_rules > 0:
             lines.append("\tRules:\n")
             lines.append(rule_str)
+        lines.append("\n")
 
     # Write the lines to the report file
     with open(os.path.join(res_dir, "report.txt"), 'w') as f:
@@ -161,6 +167,9 @@ def _generate_graphics(stats: dict, show=False):
     print(stats)
     target_class = stats["context"]["target_class"]
     other_class  = stats["context"]["other_class"]
+
+    # update the font size
+    plt.rcParams.update({'font.size': 22})
 
     # 1st Graph: Accuracy, TP/FP rate for target_class, TP/FP rate for other class
     fig, axs = plt.subplots(1, 3, figsize=(32, 7), dpi=96)
@@ -218,7 +227,7 @@ def _generate_graphics(stats: dict, show=False):
     # 2nd Graph: precision, recall, PRC graph
     fig, axs = plt.subplots(1, 3, figsize=(32, 7), dpi=96)
     ### Draw the precision graph
-    axs[0].axhline(y=stats["context"]["precision_threshold"], color='r', linestyle='-')
+    axs[0].axhline(y=stats["context"]["precision_threshold"], color='r', linestyle='--')
     axs[0].plot(it_ax,
                 stats['classifier'][target_class]["precision"],
                 ls='-',
@@ -231,12 +240,17 @@ def _generate_graphics(stats: dict, show=False):
                 marker='^',
                 color='orange',
                 label=other_class)
+    axs[0].set_ylim([0, 1])
+    axs[0].set_xlabel("iteration")
+    axs[0].set_ylabel("precision")
+    axs[0].xaxis.label.set_color('dimgrey')
+    axs[0].yaxis.label.set_color('dimgrey')
     axs[0].locator_params(axis="x", integer=True, tight=True)
     axs[0].legend(loc="lower right")
-    axs[0].set_title('Precision per iteration')
+    # axs[0].set_title('Precision per iteration')
 
     ### Draw the recall graph
-    axs[1].axhline(y=stats["context"]["recall_threshold"], color='r', linestyle='-')
+    axs[1].axhline(y=stats["context"]["recall_threshold"], color='r', linestyle='--')
     axs[1].plot(it_ax,
                 stats['classifier'][target_class]["recall"],
                 ls='-',
@@ -249,9 +263,14 @@ def _generate_graphics(stats: dict, show=False):
                 marker='^',
                 color='orange',
                 label=other_class)
+    axs[1].set_ylim([0, 1])
+    axs[1].set_xlabel("iteration")
+    axs[1].set_ylabel("recall")
+    axs[1].xaxis.label.set_color('dimgrey')
+    axs[1].yaxis.label.set_color('dimgrey')
     axs[1].locator_params(axis="x", integer=True, tight=True)
     axs[1].legend(loc="lower right")
-    axs[1].set_title('Recall per iteration')
+    # axs[1].set_title('Recall per iteration')
 
     ### Draw the Area under PRC graph
     axs[2].plot(it_ax,

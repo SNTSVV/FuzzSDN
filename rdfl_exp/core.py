@@ -11,6 +11,8 @@ from os.path import join
 # Local dependencies
 from typing import List
 
+import pandas as pd
+
 import rdfl_exp.experiment.data as exp_data
 import rdfl_exp.experiment.script as exp_script
 import rdfl_exp.machine_learning.algorithms as ml_alg
@@ -47,11 +49,11 @@ _context = {
 _default_input = {
     "n_samples"             : 500,
     "max_iterations"        : 50,
-    "precision_threshold"   : 0.85,
-    "recall_threshold"      : 0.85,
-    "data_format_method"    : 'baf',
-    "target_class"      : "non_parsing_error",
-    "other_class"           : "parsing_error",
+    "precision_threshold"   : 0.99,
+    "recall_threshold"      : 0.99,
+    "data_format_method"    : 'faf',
+    "target_class"          : "unknown_reason",
+    "other_class"           : "known_reason",
     "fuzzer": {
         "default_match_limit": 1,
         "default_criteria" : [
@@ -88,7 +90,7 @@ def init(args) -> None:
 
     _log.info("Parsing the context")
     # Check that the data format method is known
-    data_format_method = input_data["data_format_method"]
+    data_format_method = args.data_format if args.data_format else input_data["data_format_method"]
     if data_format_method not in ('faf', 'faf+dk', 'baf'):
         _log.error("data_format_method should be 'faf', 'faf+dk' or 'baf' (not {})".format(data_format_method))
         raise ValueError("data_format_method should be 'faf', 'faf+dk' or 'baf' (not {})".format(data_format_method))
@@ -96,8 +98,8 @@ def init(args) -> None:
     # Fill the context dictionary
     _context = {
         # Thresholds
-        "precision_th"          : input_data["precision_threshold"],  # Precision Threshold
-        "recall_th"             : input_data["recall_threshold"],  # Recall Threshold
+        "precision_th"          : args.precision_th if args.precision_th else input_data["precision_threshold"],  # Precision Threshold
+        "recall_th"             : args.recall_th if args.recall_th else input_data["recall_threshold"],  # Recall Threshold
         "data_format_method"    : input_data["data_format_method"],
         # Defaults
         "default_criteria"      : input_data["fuzzer"]["default_criteria"],
@@ -126,12 +128,16 @@ def run() -> None:
     precision = 0   # Algorithm precision
     recall = 0      # Algorithm recall
     dataset_path = join(config.tmp_dir(), "dataset.csv")  # Create a file where the dataset will be stored
+    it = 0  # iteration index
+    target_class_ratio = 0.0
 
     ## Get the initial rules
     # rules = input_data["initial_rules"] if "initial_rules" in input_data else rules
-
     # Display header:
-    it = 0  # iteration index
+    print(Style.BOLD, "*** Precision Threshold: {}".format(_context["precision_th"]), Style.RESET)
+    print(Style.BOLD, "*** Recall Threshold: {}".format(_context["recall_th"]), Style.RESET)
+    print(Style.BOLD, "*** Target class: {}".format(_context["target_class"]), Style.RESET)
+
     while (it < _context["it_max"]) and (recall < _context["recall_th"] or precision < _context["precision_th"]):
 
         # Register timestamp at the beginning of the iteration
@@ -142,7 +148,7 @@ def run() -> None:
         print(Style.BOLD, "*** recall: {:.2f}/{:.2f}".format(recall, _context["recall_th"]), Style.RESET)
         print(Style.BOLD, "*** precision: {:.2f}/{:.2f}".format(precision, _context["precision_th"]), Style.RESET)
 
-        generate_rules(rules)
+        generate_rules(rules, it, target_class_ratio)
 
         # Fetch the experiment data
         if not os.path.exists(dataset_path):
@@ -155,6 +161,7 @@ def run() -> None:
             # Format the dataset
             ml_data.format_dataset(dataset_path,
                                    method=_context["data_format_method"],
+                                   target_error=_context['target_class'],
                                    csv_sep=';')
         else:
             # Fetch the data into a temporary dictionary
@@ -167,12 +174,19 @@ def run() -> None:
             # Format the dataset
             ml_data.format_dataset(tmp_dataset_path,
                                    method=_context["data_format_method"],
+                                   target_error=_context['target_class'],
                                    csv_sep=';')
             # Merge the data into the previous dataset
             csv.merge(csv_in=[tmp_dataset_path, dataset_path],
                       csv_out=dataset_path,
                       out_sep=';',
                       in_sep=[';', ';'])
+            # Get the ratio of target_class
+            df = pd.read_csv(dataset_path, sep=";")
+            # Get the class count
+            classes_count = df['class'].value_counts()
+            total = classes_count[_context['target_class']] + classes_count[_context['other_class']]
+            target_class_ratio = float(float(classes_count[_context['target_class']]) / total)
 
         # Save the dataset to the experience folder
         shutil.copy(src=dataset_path,
@@ -247,7 +261,7 @@ def run() -> None:
 # End def run
 
 
-def generate_rules(rules: List[Rule]) -> None:
+def generate_rules(rules: List[Rule], it_ind, target_class_ratio) -> None:
 
     # If no rules where generated, we use the default fuzzer action and
     # generate the required amount of data
@@ -271,16 +285,103 @@ def generate_rules(rules: List[Rule]) -> None:
 
     # Otherwise, we parse the rules and generate data accordingly
     else:
+
+        nb_of_rules = len(rules)
+        rules_weight = [[r, int(math.floor(_context["nb_of_samples"] / len(rules)))] for r in rules]
+
+        # If the ratio of the target_class is above 0.5, generate half of the data with rule and the other half using
+        # the opposite of the rules. For that we negate each rule and add it to the list of rules
+        print("target_class_ratio:", target_class_ratio)
+
+        if target_class_ratio > 0.5:
+
+            _log.info("target_class_ratio ratio is above 50%")
+            print("target_class_ratio ratio is above 50%")
+
+            target_class_rules = [rule for rule in rules if rule.get_class() == _context['target_class']]
+            # other_class_rules = [rule for rule in rules if rule.get_class() == _context['other_class']]
+
+            opposite_rule = None
+
+            # Negate the rules for the target class
+            if len(target_class_rules) > 0:
+                _log.debug("Negating the rules for the target class...")
+
+                for tcr in target_class_rules:
+                    opposite_rule = ~tcr if opposite_rule is None else opposite_rule | ~tcr
+                opposite_rule.set_class(_context['other_class'])
+
+            # Print log messages with all the rules to be applied
+            _log.debug("Negated rules:")
+            if _log.isEnabledFor(logging.DEBUG):
+                _log.debug("Opposite Rule: {}".format(opposite_rule))
+
+
+            # # First, negate all the rules
+            # negated_rules = []
+            # for rule in rules:
+            #     rule_copy = deepcopy(rule)
+            #     not_rule = ~rule_copy
+            #     # Optional step: Invert the target
+            #     if rule.get_class() == _context['target_class']:
+            #         not_rule.set_class(_context['other_class'])
+            #     else:
+            #         not_rule.set_class(_context['target_class'])
+            #     negated_rules.append(not_rule)
+            # # Add the negated rules to the current set of rules
+            # rules.extend(negated_rules)
+
+            target_ratio = 0.5
+            x_factor = int(
+                math.floor(
+                    target_ratio * _context["nb_of_samples"] * (it_ind + 1) - (_context["nb_of_samples"] * it_ind * target_class_ratio)
+                )
+            )
+
+            target_nb_samples = 0
+            if x_factor <= 0:
+                target_nb_samples = 0
+                other_nb_samples = _context["nb_of_samples"]
+
+            elif x_factor > _context["nb_of_samples"]:
+                target_nb_samples = _context["nb_of_samples"]
+                other_nb_samples = 0
+
+            else:
+                target_nb_samples = x_factor
+                other_nb_samples = int(_context["nb_of_samples"] - x_factor)
+
+            for rule in rules_weight:
+                rule[1] = int(math.floor(target_nb_samples / len(rules_weight)))
+
+            # Add the negated rules to the current set of rules
+            rules_weight.append([opposite_rule, other_nb_samples])
+
+        info_str = "Rules to be applied:"
+        for i in range(len(rules_weight)):
+            info_str += "\n\tRules {}: {}, nb_of_samples: {} ".format(it_ind + 1, rules_weight[i][0], rules_weight[i][1])
+        print(info_str)
+        _log.info(info_str)
+
         # Calculate the number of times the experiment should be run with the rule
-        samples_per_rule = int(math.floor(float(_context["nb_of_samples"]) / len(rules)))
+        # samples_per_rule = int(math.floor(float(_context["nb_of_samples"]) / len(rules)))
         clear_db = True
 
-        for rule in rules:
+        rule_it = 0  # rule iteration counter
+        # weight_sum = sum([item[1] for item in rules_weight])  # Sum of all the weights
+        for rule, nb_of_samples in rules_weight:
+
+            # Skip all those steps if no samples need to be generated
+            if nb_of_samples == 0:
+                continue
+
+            _log.debug("{} samples to be generated for rule {}".format(nb_of_samples, rule_it+1))
+
             # Get Rule properties
-            print(Style.BOLD, "Applying rule: {}".format(rule), Style.RESET)
-            progress_bar(0, samples_per_rule,
+            print(Style.BOLD, "Generating {} samples for Rule {}: ({})".format(nb_of_samples, rule_it+1, rule), Style.RESET)
+            progress_bar(0, nb_of_samples,
                          prefix='Progress:',
-                         suffix='Complete ({}/{})'.format(0, samples_per_rule),
+                         suffix='Complete ({}/{})'.format(0, nb_of_samples),
                          length=100)
 
             # If a rule is of the class to predict,  we apply the rule
@@ -311,7 +412,8 @@ def generate_rules(rules: List[Rule]) -> None:
             # End if_else rule.get_class()
 
             # generate the rules
-            for i in range(samples_per_rule):
+            _log.debug("Fuzzer instructions {}".format(json.dumps(fuzz_instr)))
+            for it_ind in range(nb_of_samples):
                 # Run the script
                 exp_script.run(
                     count=1,
@@ -322,11 +424,12 @@ def generate_rules(rules: List[Rule]) -> None:
                 )
                 clear_db = False  # disable the clearing of the database
                 # Update the progress bar
-                progress_bar(i+1, samples_per_rule,
+                progress_bar(it_ind + 1, nb_of_samples,
                              prefix='Progress:',
-                             suffix='Complete ({}/{})'.format(i+1, samples_per_rule),
+                             suffix='Complete ({}/{})'.format(it_ind + 1, nb_of_samples),
                              length=100)
-
+            # Increment the rule iteration counter
+            rule_it += 1
         # End for rule in rules
     # End if_else len(rule)
 # End def generate_rules
