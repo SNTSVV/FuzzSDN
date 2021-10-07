@@ -199,7 +199,7 @@ def run(count=1, instructions=None, clear_db: bool = False, quiet=False):
             execute_script()
 
             if quiet is False:
-                progress_bar(it+1, delta, prefix='Progress:', suffix='Complete ({}/{})'.format(0, delta), length=100)
+                progress_bar(it+1, delta, prefix='Progress:', suffix='Complete ({}/{})'.format(it + 1, delta), length=100)
         db_count = count_db_entries()
 # End def run
 
@@ -217,7 +217,7 @@ def execute_script():
     subprocess.call(["systemctl", "start", "onos"],
                     stderr=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL)
-    time.sleep(5)  # Wait 10 sec to be sure
+    time.sleep(10)  # Wait 10 sec to be sure
 
     logger.info("Closing all previous instances on control flow fuzzer")
     for pid in get_pid("PacketFuzzer.jar"):
@@ -229,6 +229,8 @@ def execute_script():
     cff_process = subprocess.Popen(["java", "-jar", CFF_PATH],
                                    stderr=exp_stderr_pipe,
                                    stdout=exp_stdout_pipe)
+
+    time.sleep(5)  # Wait 5 sec to be sure
 
     logger.info("Starting Mininet network")
     topo = SingleTopo()

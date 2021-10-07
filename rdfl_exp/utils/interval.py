@@ -93,9 +93,6 @@ class Interval:
         else:
             return "({}, {})".format(self.inf, self.sup)
 
-    def __len__(self):
-        return abs(self._inf - self._sup) + 1
-
     def __contains__(self, item):
         if isinstance(item, Interval):
             return (self.inf <= item.inf <= self.sup and
@@ -120,6 +117,12 @@ class Interval:
         self._sup = math.inf if value is None else value
 
     # ===== ( Methods ) ========================================================
+
+    def length(self):
+        return abs(self._inf - self._sup) + 1
+
+    def is_empty(self):
+        return self.length == 0
 
     def overlaps(self, other):
         return (
@@ -223,7 +226,7 @@ class IntervalSet:
             yield i
     # End def __iter__
 
-    # ===== ( Operators ) ======================================================
+    # ===== ( Methods ) ======================================================
 
     def union(self, other, inplace=False):
         """
@@ -333,6 +336,24 @@ class IntervalSet:
             new_intervals.append(Interval(min_, math.inf))
 
         return IntervalSet(*new_intervals)
+    # End def invert
+
+    def length(self):
+        length = 0
+        for inter in self:
+            length += inter.length()
+        return length
+    # End def length
+
+    def is_empty(self):
+        empty = True
+        for inter in self:
+            if inter.is_empty() is False:
+                empty = False
+                break
+
+        return empty
+    # End def is_empty
 
     # ===== ( Operators overload ) =============================================
 

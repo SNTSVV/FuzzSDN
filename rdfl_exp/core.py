@@ -64,9 +64,10 @@ _default_input = {
             ],
         "default_actions": [
             {
-                "action": "messagePayloadAction",
-                "type": "scramble",
-                "percentage": 0.2
+                "intent": "mutate_packet",
+                "all": False,
+                "includeHeader": False,
+                "fieldsToMutateCount": 1
             }
         ]
     },
@@ -316,7 +317,6 @@ def generate_rules(rules: List[Rule], it_ind, target_class_ratio) -> None:
             if _log.isEnabledFor(logging.DEBUG):
                 _log.debug("Opposite Rule: {}".format(opposite_rule))
 
-
             # # First, negate all the rules
             # negated_rules = []
             # for rule in rules:
@@ -359,7 +359,7 @@ def generate_rules(rules: List[Rule], it_ind, target_class_ratio) -> None:
 
         info_str = "Rules to be applied:"
         for i in range(len(rules_weight)):
-            info_str += "\n\tRules {}: {}, nb_of_samples: {} ".format(it_ind + 1, rules_weight[i][0], rules_weight[i][1])
+            info_str += "\n\tRules {}: {}, nb_of_samples: {} ".format(i + 1, rules_weight[i][0], rules_weight[i][1])
         print(info_str)
         _log.info(info_str)
 

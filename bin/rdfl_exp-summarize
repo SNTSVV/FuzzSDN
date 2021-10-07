@@ -20,16 +20,7 @@ port = 22
 username = "ubuntu"
 password = "ubuntu"
 
-
-# exp_to_fetch = "20210813_132154"  # faf + dk
-# exp_to_fetch = "20210817_095456"  # faf
-# exp_to_fetch = "20210817_211215"  # baf
-
-# exp_to_fetch = "20210818_225415"  # Unknown Reason + faf
-# exp_to_fetch = "20210819_143747"
-# exp_to_fetch = "20210819_173227"
-
-exp_to_fetch = "20210914_211805"
+exp_to_fetch = "20211006_150117"
 
 report_dir      = os.path.join(config.RDFL_ROOT, "report")
 res_dir         = os.path.join(report_dir, "rdfl_exp_summary_{}".format(exp_to_fetch))
@@ -356,6 +347,8 @@ def _generate_graphics(stats: dict, show=False):
     # 4th graph: ratio of class and other class per iteration
     fig, ax = plt.subplots(1, 1, figsize=(10, 7), dpi=96)
     ### Draw the F1-Score graph
+    ax.set_ylim([0, 1])
+    ax.axhline(y=0.5, color='grey', linestyle='--')
     ax.plot(it_ax,
             stats['datasets']["target_class_ratio"],
             ls='-',

@@ -26,10 +26,10 @@ FIELD_AS_FEATURE_LUT = {
     "match_type"    : {"loc": 24, "size": 2},
     "match_length"  : {"loc": 26, "size": 2},
     "match_pad"     : {"loc": 28, "size": 4},
-    "oxm_class"     : {"loc": 32, "size": 2},
-    "oxm_field"     : {"loc": 34, "size": 1},
-    "oxm_length"    : {"loc": 35, "size": 1},
-    "oxm_value"     : {"loc": 36, "size": 4},
+    "oxm_0_class"   : {"loc": 32, "size": 2},
+    "oxm_0_field"   : {"loc": 34, "size": 1},
+    "oxm_0_length"  : {"loc": 35, "size": 1},
+    "oxm_0_value"   : {"loc": 36, "size": 4},
     "pad"           : {"loc": 40, "size": 2},
     "eth_dst"       : {"loc": 42, "size": 6},
     "eth_src"       : {"loc": 48, "size": 6},
@@ -228,23 +228,19 @@ def convert_to_fuzzer_actions(rule: Rule):
         return _range
     # End def get_range_cdt
 
-    def get_new_action(field, loc, size, op, value):
+    def get_new_action(field, size, op, value):
         new_act = {
-            "field": field,
-            "firstByte": loc,
-            "size": size,
-            "action": "ByteFieldAction",
-            # Action is always a byte field action
-            "type": "unknown"
+            "intent": "MUTATE_FIELD",
+            "fieldName": field,
         }
 
         # 2.3.1 determine the type of operation:
         if op == '=':
-            new_act["type"] = "set"
+            new_act["intent"] = "SET_FIELD"
             new_act["value"] = value
 
         else:  # Operator is ">", ">=", "<" or "<="
-            new_act["type"] = "scramble_in_range"
+            new_act["range"] = None
             # Create the range depending on the size of the field
             bounds = IntervalSet((0, int(math.pow(2, 8 * size - 1))))
             # Get the absolute range from the operator and the value
@@ -253,9 +249,10 @@ def convert_to_fuzzer_actions(rule: Rule):
             new_act["range"] = bounds & _range
 
         return new_act
-    # End def get_new_action
+        # End def get_new_action
 
-    # 1. Get an application of the rule
+        # 1. Get an application of the rule
+
     app_dict = rule.apply()
 
     # 2. Create a condition table
@@ -309,24 +306,24 @@ def convert_to_fuzzer_actions(rule: Rule):
                                "nor the Bytes-as-Feature's LUT".format(c["field"]))
 
         # 2 Find if there is already an action on the same field
-        act_ind = next((i for i, item in enumerate(fuzz_action) if item["field"] == c["field"]), None)
+        act_ind = next((i for i, item in enumerate(fuzz_action) if item["fieldName"] == c["field"]), None)
         # 3.1 If we already found an action we merge them if possible
         if act_ind is not None:
             # 3.1.1 If there is already a set action, we skip all further steps
-            if fuzz_action[act_ind]["type"] == "set":
+            if fuzz_action[act_ind]["intent"] == "SET_FIELD":
                 continue
 
             # 3.1.2 If the new operator is "=", we remove the range and set
             # the new type as "set"
             if c["op"] == '=':  # Operator is "="
-                fuzz_action[act_ind]["type"] = "set"
+                fuzz_action[act_ind]["intent"] = "SET_FIELD"
                 fuzz_action[act_ind]["value"] = int(c["value"])
                 if "range" in fuzz_action[act_ind]:
                     del fuzz_action[act_ind]["range"]  # We remove the range key
 
             # 3.1.3 Otherwise, we update the range
             else:
-                fuzz_action[act_ind]["type"] = "scramble_in_range"
+                fuzz_action[act_ind]["intent"] = "MUTATE_FIELD"
                 # Get the absolute range from the operator and the value
                 op_range = get_range_from_op_and_val(c["op"], int(c["value"]))
                 # Intersect the action's range with the range of the
@@ -337,7 +334,6 @@ def convert_to_fuzzer_actions(rule: Rule):
         else:
             # 3.2.1 Get the new action
             action = get_new_action(field=c['field'],
-                                    loc=action_dict['loc'],
                                     size=action_dict["size"],
                                     op=c["op"],
                                     value=int(c["value"]))
@@ -347,15 +343,11 @@ def convert_to_fuzzer_actions(rule: Rule):
     # Finally convert all the IntervalSets to a list of ranges
     for act in fuzz_action:
         if "range" in act:
-            if isinstance(act["range"], IntervalSet):
-                act["range"] = [[x.inf, x.sup] for x in list(act["range"])]
-                if len(act["range"]) == 0:
-                    if act["field"] in BYTES_AS_FEATURE_LUT:
-                        size = BYTES_AS_FEATURE_LUT[act["field"]]["size"]
-                    elif act["field"] in FIELD_AS_FEATURE_LUT:
-                        size = FIELD_AS_FEATURE_LUT[act["field"]]["size"]
-                    act["range"] = [[x.inf, x.sup] for x in list(IntervalSet((0, int(math.pow(2, 8 * size - 1)))))]
+            if isinstance(act['range'], IntervalSet):
+                if act['range'].is_empty() is True:
+                    act.pop('range', None)  # then the range is no longer needed
+                else:
+                    act['range'] = [[x.inf, x.sup] for x in list(act['range'])]
 
     return fuzz_action
 # End def convert_to_fuzzer_actions
-

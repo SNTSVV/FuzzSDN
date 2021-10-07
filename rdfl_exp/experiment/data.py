@@ -20,11 +20,12 @@ SQL_DB_PASSWORD         = "b14724x"
 # ---------
 
 BYTES_CSV_COLUMNS = {
-    "data"          : 0,
-    "error_type"    : 1,
-    "error_reason"  : 2,
-    "error_effect"  : 3,
-    "error_trace"   : 4
+    "pkt_struct"    : 0,
+    "data"          : 1,
+    "error_type"    : 2,
+    "error_reason"  : 3,
+    "error_effect"  : 4,
+    "error_trace"   : 5
 }
 
 # Dictionary used to produce statistics about the quantity of errors
@@ -173,6 +174,7 @@ def fetch(csv_path: str):
             progress_bar(0, STATS["total"], prefix='Progress:', suffix='Complete', length=100)
             while next_message is not None:
                 # Get the date of the message, and the one of the next message
+
                 current_date = current_message[1]
                 next_date = next_message[1]
                 log_match = []
@@ -193,15 +195,22 @@ def fetch(csv_path: str):
                         # go over the next_date
                         break
 
-                # handle data as byte
+                # create the row csv file
                 byte_csv_row = [None] * len(BYTES_CSV_COLUMNS) if KEEP_TRACE_ON_UNKNOWN else [None] * (len(BYTES_CSV_COLUMNS) - 1)
+                # Add the packet structure
+                byte_csv_row[BYTES_CSV_COLUMNS["pkt_struct"]] = current_message[2].replace("\\\"", "\"")
+                # Add the data
                 byte_csv_row[BYTES_CSV_COLUMNS["data"]] = binascii.b2a_base64(current_message[3], newline=False).decode()  # Store the data
+
+                # Add the error
                 parse_errors(log_match, byte_csv_row,
                              error_index=BYTES_CSV_COLUMNS["error_type"],
                              reason_index=BYTES_CSV_COLUMNS["error_reason"],
                              effect_index=BYTES_CSV_COLUMNS["error_effect"],
                              trace_index=BYTES_CSV_COLUMNS["error_trace"])
 
+                byte_csv_row[BYTES_CSV_COLUMNS["data"]] = binascii.b2a_base64(current_message[3],
+                                                                              newline=False).decode()
                 # Writing data of CSV file
                 csv_writer.writerow(byte_csv_row)
 
@@ -228,10 +237,9 @@ def fetch(csv_path: str):
                         log_match += [(log_entry[j][2], log_entry[j][3])]
                     # Delete errors handled as we proceed
                     del log_entry[j]
-            byte_csv_row = [None] * len(BYTES_CSV_COLUMNS) if KEEP_TRACE_ON_UNKNOWN else [None] * (
-                        len(BYTES_CSV_COLUMNS) - 1)
-            byte_csv_row[BYTES_CSV_COLUMNS["data"]] = binascii.b2a_base64(current_message[3],
-                                                                          newline=False).decode()  # Store the data
+            byte_csv_row = [None] * len(BYTES_CSV_COLUMNS) if KEEP_TRACE_ON_UNKNOWN else [None] * (len(BYTES_CSV_COLUMNS) - 1)
+            byte_csv_row[BYTES_CSV_COLUMNS["pkt_struct"]] = current_message[2].replace("\\\"", "\"") # Add the packet structure
+            byte_csv_row[BYTES_CSV_COLUMNS["data"]] = binascii.b2a_base64(current_message[3], newline=False).decode()  # Store the data
             parse_errors(log_match, byte_csv_row,
                          error_index=BYTES_CSV_COLUMNS["error_type"],
                          reason_index=BYTES_CSV_COLUMNS["error_reason"],

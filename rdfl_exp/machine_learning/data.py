@@ -2,6 +2,7 @@
 # coding: utf-8
 import base64
 import binascii
+import json
 import struct
 import traceback
 
@@ -151,23 +152,18 @@ def format_field_as_feature(dataframe: pandas.DataFrame):
     df = dataframe.copy(deep=True)
 
     # Interpret the field from the byte string
-    field_features = df['data'].apply(_bytes_to_ofp_fields)
+    field_features = df.apply(lambda row: _convert_data(row.pkt_struct, row.data), axis='columns')
     df = pd.concat([df.iloc[:, :df.columns.get_loc("data")],  # Insert reasons before total_len
                     field_features,
                     df.iloc[:, df.columns.get_loc("data"):]], axis="columns")
+    df.drop(['pkt_struct'], axis='columns', inplace=True)
     df.drop(['data'], axis='columns', inplace=True)
 
     # Format some columns
-    df["eth_dst"] = df["eth_dst"].apply(lambda x: int.from_bytes(x, byteorder='big'))
-    df["eth_src"] = df["eth_src"].apply(lambda x: int.from_bytes(x, byteorder='big'))
-    df["arp_sha"] = df["arp_sha"].apply(lambda x: int.from_bytes(x, byteorder='big'))
-    df["arp_spa"] = df["arp_spa"].apply(lambda x: int.from_bytes(x, byteorder='big'))
-    df["arp_tha"] = df["arp_tha"].apply(lambda x: int.from_bytes(x, byteorder='big'))
-    df["arp_tpa"] = df["arp_tpa"].apply(lambda x: int.from_bytes(x, byteorder='big'))
     df['error_type']    = df['error_type'].apply(lambda x: x if x == "parsing_error" else "non_parsing_error")
 
     ## Convert oxm_has_mask to boolean
-    df['oxm_has_mask'] = df['oxm_has_mask'].astype(bool)
+    # df['oxm_has_mask'] = df['oxm_has_mask'].astype(bool)
 
     # Return the dataset
     return df
@@ -394,3 +390,41 @@ def _bytes_to_byte_field(data):
 
     return pd.Series(packet_dict)
 # End def _bytes_to_byte_field
+
+
+def _convert_data(pkt_struct, data):
+
+    pkt_struct = json.loads(pkt_struct)
+
+    # Create a dictionary to store the data
+    fields = list()
+    for f in pkt_struct["fields"]:
+        fields.append((f["name"], int(f["length"])))
+
+    # Decode packet to a byte string
+    packet_dict = None
+    try:
+        packet = base64.b64decode(data)
+    except binascii.Error as e:
+        print("Couldn't parse packet: {}\n{}".format(data, e))
+        traceback.print_exc()
+    else:
+        # Unpack the byte string according to the fields
+        unpack_string = "!"  # Network byte order
+        for f in fields:
+            unpack_string += "{}s".format(f[1])
+        ofp_packet = struct.unpack(unpack_string, packet[:struct.calcsize(unpack_string)])
+
+        # Fill up the dict
+        packet_dict = dict()
+
+        for i in range(len(ofp_packet)):
+            if "oxm_" in fields[i][0] and "_field" in fields[i][0]:
+                field_name = fields[i][0]
+                packet_dict[field_name] = int.from_bytes(ofp_packet[i], byteorder='big') >> 1
+                packet_dict[field_name.replace("field", "has_mask")] = int.from_bytes(ofp_packet[i], byteorder='big')  & 0x01
+            else:
+                packet_dict[fields[i][0]] = int.from_bytes(ofp_packet[i], byteorder='big')
+
+    return pd.Series(packet_dict)
+# End def _convert_data
