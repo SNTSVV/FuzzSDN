@@ -1,5 +1,7 @@
 import json
 
+from rdfl_exp.machine_learning.rule import RuleSet
+
 
 class Stats:
 
@@ -34,7 +36,7 @@ class Stats:
     # End def save
 
     @classmethod
-    def add_iteration_statistics(cls, learning_time, iteration_time, clsf_res, rules):
+    def add_iteration_statistics(cls, learning_time, iteration_time, clsf_res, rule_set : RuleSet):
 
         # List the classes
         classes = (cls._stats["context"]["target_class"],
@@ -50,7 +52,8 @@ class Stats:
         # Update the classifier results
         cls._stats["classifier"]["instances"]  += [clsf_res['total_num_instances']]
         cls._stats["classifier"]["accuracy"]   += [clsf_res['correctly_classified'] / clsf_res['total_num_instances']]
-        cls._stats["classifier"]["rules"]      += [[str(r) for r in rules]]
+        cls._stats["classifier"]["confidence"] += [rule_set.confidence()]
+        cls._stats["classifier"]["rules"]      += [[str(r) for r in rule_set]]
 
         for class_ in classes:
             if class_ in clsf_res:
@@ -92,6 +95,7 @@ class Stats:
         stats["classifier"]                 = dict()
         stats["classifier"]["instances"]    = list()
         stats["classifier"]["accuracy"]     = list()
+        stats["classifier"]["confidence"]   = list()
         stats["classifier"]["rules"]        = list()
 
         for class_ in (target_class, other_class):

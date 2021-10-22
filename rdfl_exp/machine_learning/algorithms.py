@@ -10,13 +10,12 @@ from rdfl_exp.machine_learning.rule import Rule
 logger = logging.getLogger(__name__)
 
 
-def standard(data_path, tt_split=66.0, cv_folds=None, seed=1, classes=('1', '2')):
+def ripper_cross_validation(data_path, cv_folds=10, seed=1, classes=('1', '2')):
     """
     Perform a feature selection +
     :param classes:
     :param cv_folds:
     :param data_path:
-    :param tt_split:
     :param seed:
     :return:
     """
@@ -27,32 +26,24 @@ def standard(data_path, tt_split=66.0, cv_folds=None, seed=1, classes=('1', '2')
     data = loader.load_file(data_path)
     data.class_is_last()
 
-    # generate train/test split of randomized data
-    logger.info("Splitting train and test data with ratio {}%".format(tt_split))
-    train, test = data.train_test_split(tt_split, Random(seed))
-
     # build classifier
     print("Building the classifier")
     logger.info("Building the classifier")
     cls = Classifier(classname="weka.classifiers.rules.JRip")
-    cls.build_classifier(train)
+    cls.build_classifier(data)
     logger.debug("Classifier:\n{}".format(cls))
 
     # evaluate and record predictions in memory
     print("Evaluating the classifier")
     logger.info("Evaluating the classifier")
-    evl = Evaluation(train)
+    evl = Evaluation(data)
 
     # If cv_folds > 0, perform cross validation
-    if cv_folds:
-        if not isinstance(cv_folds, int) or cv_folds < 1:
-            ValueError("Argument \"cv_folds\" must be None or an integer >= 1 (not \"{}\")".format(cv_folds))
-        evl.crossvalidate_model(cls, data, cv_folds, Random(seed))
-    else:
-        evl.test_model(cls, test)
+    if not isinstance(cv_folds, int) or cv_folds < 1:
+        ValueError("Argument \"cv_folds\" must be an integer >= 1 (not \"{}\")".format(cv_folds))
+    evl.crossvalidate_model(cls, data, cv_folds, Random(seed))
 
-    if logger.isEnabledFor(logging.DEBUG):
-        logger.debug("Evaluator:\n{}\n{}".format(evl.summary(), evl.class_details()))
+    logger.debug("Evaluator:\n{}\n{}".format(evl.summary(), evl.class_details()))
 
     # Extract the rules
     rules = extract_rules_from_classifier(cls)
@@ -103,3 +94,4 @@ def extract_evaluator_stats(evl, classes):
             evaluator_stats[d[-1]]["prc"]       = float(d[7]) if d[7] != "?" else 0
 
     return evaluator_stats
+# End def extract_evaluator_stats
