@@ -3,7 +3,7 @@
 import math
 import random
 from copy import deepcopy
-from re import search
+import re as RegEx
 
 from sympy import *
 from sympy.logic.boolalg import Boolean, BooleanTrue
@@ -29,6 +29,7 @@ FIELD_AS_FEATURE_LUT = {
     "match_pad"     : {"loc": 28, "size": 4},
     "oxm_0_class"   : {"loc": 32, "size": 2},
     "oxm_0_field"   : {"loc": 34, "size": 1},
+    "oxm_0_has_mask": {"loc": 34, "size": 1},
     "oxm_0_length"  : {"loc": 35, "size": 1},
     "oxm_0_value"   : {"loc": 36, "size": 4},
     "pad"           : {"loc": 40, "size": 2},
@@ -104,16 +105,16 @@ class RuleSet(object):
     # ===== ( Constructor ) ============================================================================================
 
     def __init__(self, rules=None):
-        self.target_class = 'unknown_error'
-        self.other_class  = 'known_error'
+        self.target_class = 'unknown_reason'
+        self.other_class  = 'known_reason'
         self.rules = list() if rules is None else list(rules)
     # End def __init__
 
     # ===== ( Overrides ) ==============================================================================================
 
     def __str__(self):
-        string = "Ruleset:\n"
-        string += "\n".join(str(rule) for rule in self.rules)
+        string = "Rules:\n"
+        string += "\n".join("\t" + str(rule) for rule in self.rules)
         string += "\nNumber of Rules: {}\n".format(len(self.rules))
         string += "Support: {}\n".format(self.support())
         string += "Confidence: {}\n".format(self.confidence())
@@ -200,57 +201,42 @@ class RuleSet(object):
     # TODO: Privatize method
     def canonicalize(self):
         """
-        Canonicalize the ruleset according to the target
+        Canonicalize the ruleset.
 
-        Canonicalization means that the rule set is reworked to have only rules that are relevant to the class we want to predict.
-        Which means n detailed rules that predicts the target class and 1 bold rule that predicts the other classes.
+        A ruleset is in its canon form when the bold rules clauses is the proper neagation of all the other rules. and not None
         """
 
-        target_rules = list()
-        other_rules = list()
+        std_rules = list()
+        bold_rule = None
 
         for rule in self:
-            if rule.get_class() == self.target_class:
-                target_rules.append(rule)
+            if rule.expr is None:
+                bold_rule = rule
             else:
-                other_rules.append(rule)
+                std_rules.append(rule)
 
-        other_rules_cvg     = sum(r.coverage for r in other_rules)
-        other_rules_fp      = sum(r.false_positives for r in other_rules)
-        target_rules_cvg    = sum(r.coverage for r in target_rules)
-        target_rules_fp     = sum(r.false_positives for r in target_rules)
+        # Not in canon form and not a single bold rule
+        if bold_rule is not None and len(std_rules) > 0:
+            # If the target rule is single and is a bold rule, then we change its expression
+            bold_rule_cvg = bold_rule.coverage
+            bold_rule_fp  = bold_rule.false_positives
+            bold_rule_cls = bold_rule.class_
 
-        # If the target rule is single and is a bold rule, then we change its expression
-        if len(target_rules) == 1 and target_rules[0].expr == None:
-
-            new_target_rule = None
-            for other_rule in other_rules:
-                if new_target_rule is None:
-                    new_target_rule = ~other_rule
+            bold_rule = None
+            for rule in std_rules:
+                if bold_rule is None:
+                    bold_rule = ~rule
                 else:
-                    new_target_rule &= ~other_rule
-            new_target_rule.coverage = target_rules_cvg
-            new_target_rule.false_positives = target_rules_fp
-            new_target_rule.class_ = self.target_class
-            target_rules = list([new_target_rule])
+                    bold_rule &= ~rule
 
-        new_other_rule = None
-        for target_rule in target_rules:
-            if new_other_rule is None:
-                new_other_rule = ~target_rule
-            else:
-                new_other_rule &= ~target_rule
+            bold_rule.coverage = bold_rule_cvg
+            bold_rule.false_positives = bold_rule_fp
+            bold_rule.class_ = bold_rule_cls
 
-        new_other_rule.coverage = other_rules_cvg
-        new_other_rule.false_positives = other_rules_fp
-        new_other_rule.class_ = self.other_class
-        other_rules = list([new_other_rule])
-
-        self.rules.clear()
-        for r in target_rules:
-            self.rules.append(r)
-        for r in other_rules:
-            self.rules.append(r)
+            self.rules.clear()
+            for r in std_rules:
+                self.rules.append(r)
+            self.rules.append(bold_rule)
     # End def __canonicalize
 # End class RuleSet
 
@@ -261,8 +247,8 @@ class Rule(object):
 
     # ===== ( Constructor ) ====================================================
 
-    def __init__(self, expr, class_=None, cvg=0, fp=0):
-        self.expr = to_dnf(expr, simplify=True, force=True)
+    def __init__(self, expr, class_=None, cvg: float = 0.0, fp: float = 0.0):
+        self.expr = expr
         self.class_ = class_
         self.coverage = cvg
         self.false_positives = fp
@@ -279,7 +265,7 @@ class Rule(object):
         # Define the regex used for matching different part if the string
         rgx_rules = r"(?P<rule>.*)(?==>)"  # Regex used to find the class. Matches patterns like "word=word" located after a "=>"
         rgx_cls = r"(?<==>\s)(?P<lbl>\w*)=(?P<cls>\w*)"  # Regex used to find the class. Matches patterns like "word=word" located after a "=>"
-        rgx_stats = r"(?<=\()(?P<cvg>\d*.\d*)\/(?P<fp>\d*.\d*)(?=\))"
+        rgx_stats = r"(?<=\()(?P<cvg>\d+.\d+)\/(?P<fp>\d+.\d+)(?=\))"
 
         # Copy the rule string
         tmp_rule = deepcopy(rule_str)
@@ -290,31 +276,31 @@ class Rule(object):
                 tmp_rule = tmp_rule.replace(elem, DOMAIN_KNOWLEDGE_CDT_LUT[elem])
 
         # Get the class of the rule
-        match = search(rgx_cls, rule_str)
+        match = RegEx.search(rgx_cls, str(rule_str))
         if match:
             rule_cls = match.group("cls").strip()
 
         # Get the stats of the rule
-        match = search(rgx_stats, rule_str)
+        match = RegEx.search(rgx_stats, rule_str)
         if match:
-            rule_cvg = int(match.group("cvg").split('.')[0])
-            rule_fp = int(match.group("fp").split('.')[0])
+            rule_cvg = float(match.group("cvg"))
+            rule_fp = float(match.group("fp"))
 
         # Match the rules conditions
-        match = search(rgx_rules, rule_str)
+        match = RegEx.search(rgx_rules, rule_str)
         if match:
             rule_cdt = match.group("rule").replace(' ', '')  # Remove all spaces
+
             # Replace the ands and ors by their symbols
             rule_cdt = rule_cdt.replace("and", "&")
             rule_cdt = rule_cdt.replace("or", "|")
-            # First replace the parenthesis by brackets and then transform them back
-            # to parenthesis. This avoid a parenthesis being handled several times
-            rule_cdt = rule_cdt.replace("((", "[symbols['")
-            rule_cdt = rule_cdt.replace("))", "']]")
-            rule_cdt = rule_cdt.replace("(", "symbols['")
-            rule_cdt = rule_cdt.replace(")", "']")
-            rule_cdt = rule_cdt.replace("[", "(")
-            rule_cdt = rule_cdt.replace("]", ")")
+
+            match = RegEx.findall(r'(\w+[><=!].{1,2}\d+)', rule_cdt)
+            processed_match = list()
+            for m in match:
+                if m not in processed_match:
+                    rule_cdt = rule_cdt.replace(m, "symbols('{}')".format(m))
+                    processed_match.append(m)
 
             if rule_cdt != '':
                 rule_cdt = eval(rule_cdt)
@@ -331,32 +317,32 @@ class Rule(object):
         if self.expr is None and other.expr is None:
             return self
         elif self.expr is None:
-            return Rule(to_dnf(other.expr, simplify=True, force=True))
+            return Rule(other.expr)
         elif other.expr is None:
-            return Rule(to_dnf(self.expr, simplify=True, force=True))
+            return Rule(self.expr)
         else:
-            return Rule(to_dnf(self.expr & other.expr, simplify=True, force=True))
+            return Rule(self.expr & other.expr)
 
     def __or__(self, other):
         if self.expr is None and other.expr is None:
             return self
         elif self.expr is None:
-            return Rule(to_dnf(other.expr, simplify=True, force=True))
+            return Rule(other.expr)
         elif other.expr is None:
-            return Rule(to_dnf(self.expr, simplify=True, force=True))
+            return Rule(self.expr)
         else:
-            return Rule(to_dnf(self.expr | other.expr, simplify=True, force=True))
+            return Rule(self.expr | other.expr)
 
     def __invert__(self):
         if self.expr is None:
             return self
         else:
-            return Rule(to_dnf(~self.expr, simplify=True, force=True))
+            return Rule(~self.expr)
 
     # ====== ( Overloading ) ===========================================================================================
 
     def __repr__(self):
-        r_str = str(to_dnf(self.expr, simplify=True, force=True))
+        r_str = str(self.expr)
         if self.class_ is not None:
             r_str += " => class={} ({}/{})".format(self.class_, self.coverage, self.false_positives)
         return r_str
@@ -374,9 +360,37 @@ class Rule(object):
     # ====== ( Methods ) ===============================================================================================
 
     def apply(self):
-        models = list(m for m in satisfiable(self.expr, all_models=True))
+        # models = list(m for m in satisfiable(self.expr, all_models=True))
         # Return a sample of the rule
-        return random.sample(models, 1)[0]
+        # return random.sample(models, 1)[0]
+
+        # for DNFs only
+        def __clauses(expr) -> tuple:
+            if not isinstance(expr, Or):
+                return expr,
+            return expr.args
+
+        clauses = __clauses(to_dnf(self.expr))
+        it_count = 0
+        it_limit = 10 * len(clauses)
+        model = None
+
+        while (type(model) == bool or model is None) and it_count < it_limit:
+            clause_set = random.sample(clauses, random.randint(1, len(clauses)))
+            new_expr = None
+            for clause in clause_set:
+                if new_expr is None:
+                    new_expr = clause
+                else:
+                    new_expr &= clause
+            # End for
+
+            model = satisfiable(new_expr)
+            it_count += 1
+
+        return model
+    # End def apply
+
 # End class Rule
 
 
@@ -443,6 +457,8 @@ def convert_to_fuzzer_actions(rule: Rule):
         # 1. Get an application of the rule
 
     app_dict = rule.apply()
+    if app_dict is None:
+        raise ValueError("The rule \"{}\"cannot be translated to fuzzer action".format(r))
 
     # 2. Create a condition table
     conditions = []
@@ -492,7 +508,7 @@ def convert_to_fuzzer_actions(rule: Rule):
             action_dict = BYTES_AS_FEATURE_LUT[c["field"]]
         else:
             raise RuntimeError("Field {} is not present in the Field-as-Feature's LUT"
-                               "nor the Bytes-as-Feature's LUT".format(c["field"]))
+                               " nor the Bytes-as-Feature's LUT".format(c["field"]))
 
         # 2 Find if there is already an action on the same field
         act_ind = next((i for i, item in enumerate(rule_cdts) if item["field"] == c["field"]), None)

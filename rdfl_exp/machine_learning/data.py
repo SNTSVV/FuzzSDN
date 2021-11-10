@@ -399,6 +399,8 @@ def _convert_data(pkt_struct, data):
     # Create a dictionary to store the data
     fields = list()
     for f in pkt_struct["fields"]:
+        if "oxm_" in f["name"] and "_has_mask" in f["name"]:  #TODO: Change implementation so skipping oxm_X_has_mask is not necessary
+            continue
         fields.append((f["name"], int(f["length"])))
 
     # Decode packet to a byte string
