@@ -1,5 +1,7 @@
 import json
 
+from rdfl_exp.machine_learning.rule import RuleSet
+
 
 class Stats:
 
@@ -8,19 +10,10 @@ class Stats:
     @classmethod
     def init(cls, context: dict):
         cls._stats = cls._create_stats_dict(context["target_class"], context["other_class"])
-        cls._stats["context"]["precision_threshold"]   = context["precision_th"]
-        cls._stats["context"]["recall_threshold"]      = context["recall_th"]
-        cls._stats["context"]["iteration_limit"]       = context["it_max"]
-        cls._stats["context"]["samples_per_iteration"] = context["nb_of_samples"]
-
-        if context["data_format_method"] == 'faf':
-            cls._stats["context"]["data_format_method"] = "field as feature"
-        elif context["data_format_method"] == 'faf+dk':
-            cls._stats["context"]["data_format_method"] = "field as feature and domain knowledge"
-        elif context["data_format_method"] == 'baf':
-            cls._stats["context"]["data_format_method"] = "bytes as feature"
-        else:
-            cls._stats["context"]["data_format_method"] = context["data_format_method"]
+        cls._stats["context"]["ml_algorithm"]           = context["ml_algorithm"].upper()
+        cls._stats["context"]["pp_strategy"]            = context["pp_strategy"].lower()
+        cls._stats["context"]["iteration_limit"]        = context["it_max"]
+        cls._stats["context"]["samples_per_iteration"]  = context["nb_of_samples"]
     # End def __init__
 
     @classmethod
@@ -34,7 +27,7 @@ class Stats:
     # End def save
 
     @classmethod
-    def add_iteration_statistics(cls, learning_time, iteration_time, clsf_res, rules):
+    def add_iteration_statistics(cls, learning_time, iteration_time, clsf_res, rule_set : RuleSet):
 
         # List the classes
         classes = (cls._stats["context"]["target_class"],
@@ -50,7 +43,8 @@ class Stats:
         # Update the classifier results
         cls._stats["classifier"]["instances"]  += [clsf_res['total_num_instances']]
         cls._stats["classifier"]["accuracy"]   += [clsf_res['correctly_classified'] / clsf_res['total_num_instances']]
-        cls._stats["classifier"]["rules"]      += [[str(r) for r in rules]]
+        cls._stats["classifier"]["confidence"] += [rule_set.confidence()]
+        cls._stats["classifier"]["rules"]      += [[str(r) for r in rule_set]]
 
         for class_ in classes:
             if class_ in clsf_res:
@@ -76,23 +70,24 @@ class Stats:
         """
         stats = dict()
 
-        stats["context"]                        = dict()
-        stats["context"]["pid"]                 = str()
-        stats["context"]["iteration_limit"]     = int()
-        stats["context"]["iterations"]          = int()
-        stats["context"]["precision_threshold"] = float()
-        stats["context"]["recall_threshold"]    = float()
-        stats["context"]["target_class"]        = target_class
-        stats["context"]["other_class"]         = other_class
+        stats["context"]                                = dict()
+        stats["context"]["pid"]                         = str()
+        stats["context"]["iteration_limit"]             = int()
+        stats["context"]["iterations"]                  = int()
+        stats["context"]["ml_algorithm"]                = str()
+        stats["context"]["pp_strategy"]                 = str()
+        stats["context"]["target_class"]                = target_class
+        stats["context"]["other_class"]                 = other_class
 
-        stats["timing"]                 = dict()
-        stats["timing"]["learning"]     = list()
-        stats["timing"]["iteration"]    = list()
+        stats["timing"]                                 = dict()
+        stats["timing"]["learning"]                     = list()
+        stats["timing"]["iteration"]                    = list()
 
-        stats["classifier"]                 = dict()
-        stats["classifier"]["instances"]    = list()
-        stats["classifier"]["accuracy"]     = list()
-        stats["classifier"]["rules"]        = list()
+        stats["classifier"]                             = dict()
+        stats["classifier"]["instances"]                = list()
+        stats["classifier"]["accuracy"]                 = list()
+        stats["classifier"]["confidence"]               = list()
+        stats["classifier"]["rules"]                    = list()
 
         for class_ in (target_class, other_class):
             stats["classifier"][class_]                 = dict()

@@ -20,12 +20,14 @@ port = 22
 username = "ubuntu"
 password = "ubuntu"
 
-exp_to_fetch = "20211006_150117"
+exp_to_fetch = "20211107_191358"
 
 report_dir      = os.path.join(config.RDFL_ROOT, "report")
 res_dir         = os.path.join(report_dir, "rdfl_exp_summary_{}".format(exp_to_fetch))
 datasets_dir   = join(res_dir, "datasets")
 remote_out_dir  = "/home/ubuntu/.rdfl_exp/out"
+
+plot_other_class = True
 
 
 # ===== ( Helper functions ) ===========================================================================================
@@ -106,11 +108,11 @@ def _generate_report(stats: dict):
     # Write about the context
     lines = [
         "======== Context ========\n\n",
-        "Precision Threshold: {:.2f}%\n".format(stats['context']['precision_threshold'] * 100.0),
-        "Recall Threshold: {:.2f}%\n".format(stats['context']['recall_threshold'] * 100.0),
+        # "Precision Threshold: {:.2f}%\n".format(stats['context']['precision_threshold'] * 100.0),
+        # "Recall Threshold: {:.2f}%\n".format(stats['context']['recall_threshold'] * 100.0),
         "target_class: {}\n".format(stats['context']['target_class']),
         "Samples generated per iterations: {}\n".format(stats['context']['samples_per_iteration']),
-        "Data formatting method used: {}\n\n".format(stats['context']['data_format_method']),
+        # "Data formatting method used: {}\n\n".format(stats['context']['data_format_method']),
         "======== Iteration Summary ========\n\n"
     ]
     for i in range(stats["context"]["iterations"]):
@@ -155,7 +157,6 @@ def _generate_graphics(stats: dict, show=False):
     """
 
     it_ax = list(range(stats["context"]["iterations"]))
-    print(stats)
     target_class = stats["context"]["target_class"]
     other_class  = stats["context"]["other_class"]
 
@@ -171,11 +172,12 @@ def _generate_graphics(stats: dict, show=False):
                 marker='x',
                 color='blue',
                 label="accuracy_score")
+    axs[0].set_ylim([0, 1])
     axs[0].locator_params(axis="x", integer=True, tight=True)
     axs[0].legend(loc="lower right")
     axs[0].set_title('Classifier Accuracy per iteration')
 
-    ### Draw the recall graph
+    ### Draw the TP/FP graph for the target class
     axs[1].plot(it_ax,
                 stats['classifier'][target_class]["tp_rate"],
                 ls='-',
@@ -192,7 +194,7 @@ def _generate_graphics(stats: dict, show=False):
     axs[1].legend(loc="lower right")
     axs[1].set_title('TP/FP Rate for {} per iteration'.format(target_class))
 
-    ### Draw the recall graph
+    ### Draw the TP/FP graph for the other class
     axs[2].plot(it_ax,
                 stats['classifier'][other_class]["tp_rate"],
                 ls='-',
@@ -218,19 +220,20 @@ def _generate_graphics(stats: dict, show=False):
     # 2nd Graph: precision, recall, PRC graph
     fig, axs = plt.subplots(1, 3, figsize=(32, 7), dpi=96)
     ### Draw the precision graph
-    axs[0].axhline(y=stats["context"]["precision_threshold"], color='r', linestyle='--')
+    # axs[0].axhline(y=stats["context"]["precision_threshold"], color='r', linestyle='--')
     axs[0].plot(it_ax,
                 stats['classifier'][target_class]["precision"],
                 ls='-',
                 marker='x',
                 color='blue',
                 label=target_class)
-    axs[0].plot(it_ax,
-                stats['classifier'][other_class]["precision"],
-                ls='-',
-                marker='^',
-                color='orange',
-                label=other_class)
+    if plot_other_class:
+        axs[0].plot(it_ax,
+                    stats['classifier'][other_class]["precision"],
+                    ls='-',
+                    marker='^',
+                    color='orange',
+                    label=other_class)
     axs[0].set_ylim([0, 1])
     axs[0].set_xlabel("iteration")
     axs[0].set_ylabel("precision")
@@ -238,22 +241,23 @@ def _generate_graphics(stats: dict, show=False):
     axs[0].yaxis.label.set_color('dimgrey')
     axs[0].locator_params(axis="x", integer=True, tight=True)
     axs[0].legend(loc="lower right")
-    # axs[0].set_title('Precision per iteration')
+    axs[0].set_title('Precision per iteration')
 
     ### Draw the recall graph
-    axs[1].axhline(y=stats["context"]["recall_threshold"], color='r', linestyle='--')
+    # axs[1].axhline(y=stats["context"]["recall_threshold"], color='r', linestyle='--')
     axs[1].plot(it_ax,
                 stats['classifier'][target_class]["recall"],
                 ls='-',
                 marker='x',
                 color='blue',
                 label=target_class)
-    axs[1].plot(it_ax,
-                stats['classifier'][other_class]["recall"],
-                ls='-',
-                marker='^',
-                color='orange',
-                label=other_class)
+    if plot_other_class:
+        axs[1].plot(it_ax,
+                    stats['classifier'][other_class]["recall"],
+                    ls='-',
+                    marker='^',
+                    color='orange',
+                    label=other_class)
     axs[1].set_ylim([0, 1])
     axs[1].set_xlabel("iteration")
     axs[1].set_ylabel("recall")
@@ -261,7 +265,7 @@ def _generate_graphics(stats: dict, show=False):
     axs[1].yaxis.label.set_color('dimgrey')
     axs[1].locator_params(axis="x", integer=True, tight=True)
     axs[1].legend(loc="lower right")
-    # axs[1].set_title('Recall per iteration')
+    axs[1].set_title('Recall per iteration')
 
     ### Draw the Area under PRC graph
     axs[2].plot(it_ax,
@@ -270,12 +274,18 @@ def _generate_graphics(stats: dict, show=False):
                 marker='x',
                 color='blue',
                 label=target_class)
-    axs[2].plot(it_ax,
-                stats['classifier'][other_class]["prc"],
-                ls='-',
-                marker='^',
-                color='orange',
-                label=other_class)
+    if plot_other_class:
+        axs[2].plot(it_ax,
+                    stats['classifier'][other_class]["prc"],
+                    ls='-',
+                    marker='^',
+                    color='orange',
+                    label=other_class)
+    axs[2].set_ylim([0, 1])
+    axs[2].set_xlabel("iteration")
+    axs[2].set_ylabel("prc in %")
+    axs[2].xaxis.label.set_color('dimgrey')
+    axs[2].yaxis.label.set_color('dimgrey')
     axs[2].locator_params(axis="x", integer=True, tight=True)
     axs[2].legend(loc="lower right")
     axs[2].set_title('Area under PRC per iteration')
@@ -295,28 +305,25 @@ def _generate_graphics(stats: dict, show=False):
                 marker='x',
                 color='blue',
                 label=target_class)
-    axs[0].plot(it_ax,
-                stats['classifier'][other_class]["f_measure"],
-                ls='-',
-                marker='^',
-                color='orange',
-                label=other_class)
+    if plot_other_class:
+        axs[0].plot(it_ax,
+                    stats['classifier'][other_class]["f_measure"],
+                    ls='-',
+                    marker='^',
+                    color='orange',
+                    label=other_class)
+    axs[0].set_ylim([0, 1])
     axs[0].locator_params(axis="x", integer=True, tight=True)
     axs[0].legend(loc="lower right")
     axs[0].set_title('F1-Score per iteration')
 
-    ### Draw the recall graph
+    ### Draw the ROC graph
     axs[1].plot(it_ax,
                 stats['classifier'][target_class]["roc"],
                 ls='-',
                 marker='x',
                 color='blue')
-    axs[1].plot(it_ax,
-                stats['classifier'][other_class]["roc"],
-                ls='-',
-                marker='^',
-                color='orange',
-                label=other_class)
+    axs[1].set_ylim([0, 1])
     axs[1].locator_params(axis="x", integer=True, tight=True)
     axs[1].legend(loc="lower right")
     axs[1].set_title('Area under ROC per iteration')
@@ -328,12 +335,7 @@ def _generate_graphics(stats: dict, show=False):
                 marker='x',
                 color='blue',
                 label=target_class)
-    axs[2].plot(it_ax,
-                stats['classifier'][other_class]["mcc"],
-                ls='-',
-                marker='^',
-                color='orange',
-                label=other_class)
+    axs[2].set_ylim([0, 1])
     axs[2].locator_params(axis="x", integer=True, tight=True)
     axs[2].legend(loc="lower right")
     axs[2].set_title('MCC score per iteration')

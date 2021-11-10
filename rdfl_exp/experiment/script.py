@@ -171,6 +171,7 @@ def run(count=1, instructions=None, clear_db: bool = False, quiet=False):
 
     # Get the initial count of the database to be sure we acquire enough datapoints
     initial_db_count = count_db_entries()
+    logger.debug("initial database count = {}".format(initial_db_count))
 
     # ===== ( Experiment Phase ) =======================================================================================
 
@@ -187,6 +188,7 @@ def run(count=1, instructions=None, clear_db: bool = False, quiet=False):
 
     # Verify the number of points acquired
     db_count = count_db_entries()
+    logger.debug("database count delta = {}".format(count - (db_count - initial_db_count)))
     while (delta := count - (db_count - initial_db_count)) > 0:
         print("Acquiring {} missing data points".format(delta))
         logger.warning("Acquiring {} missing data points".format(delta))
@@ -201,6 +203,7 @@ def run(count=1, instructions=None, clear_db: bool = False, quiet=False):
             if quiet is False:
                 progress_bar(it+1, delta, prefix='Progress:', suffix='Complete ({}/{})'.format(it + 1, delta), length=100)
         db_count = count_db_entries()
+        logger.debug("database count delta = {}".format(count - (db_count - initial_db_count)))
 # End def run
 
 
@@ -217,7 +220,7 @@ def execute_script():
     subprocess.call(["systemctl", "start", "onos"],
                     stderr=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL)
-    time.sleep(10)  # Wait 10 sec to be sure
+    time.sleep(5)  # Wait 5 sec to be sure
 
     logger.info("Closing all previous instances on control flow fuzzer")
     for pid in get_pid("PacketFuzzer.jar"):
@@ -230,7 +233,7 @@ def execute_script():
                                    stderr=exp_stderr_pipe,
                                    stdout=exp_stdout_pipe)
 
-    time.sleep(5)  # Wait 5 sec to be sure
+    time.sleep(2)  # Wait 2 sec to be sure
 
     logger.info("Starting Mininet network")
     topo = SingleTopo()

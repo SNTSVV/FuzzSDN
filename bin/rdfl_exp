@@ -12,6 +12,8 @@ import traceback
 from os.path import join
 
 import weka.core.jvm as jvm
+import weka.core.packages as packages
+from weka.core.classes import complete_classname
 
 # Local dependencies
 from rdfl_exp import config, core
@@ -36,17 +38,17 @@ def parse_arguments():
                         dest='in_file',
                         help="Path to an input file")
 
-    # Argument to choose the precision threshold
-    parser.add_argument('--precision-threshold',
-                        type=float,
-                        dest='precision_th',
-                        help="Override the precision threshold")
+    # Argument to choose the machine learning algorithm
+    parser.add_argument('-M, --ml-algorithm',
+                        type=str,
+                        dest='ml_algorithm',
+                        help="Select which machine algorithm to use")
 
-    # Argument to choose the recall threshold
-    parser.add_argument('--recall-threshold',
-                        type=float,
-                        dest='recall_th',
-                        help="Override the recall threshold")
+    # Argument to choose the preprocessing strategy
+    parser.add_argument('-P', '--preprocessing-strategy',
+                        type=str,
+                        dest='pp_strategy',
+                        help="Select which preprocessing strategy to use")
 
     # Argument to choose the number of sample to generate
     parser.add_argument('-s', '--samples',
@@ -55,19 +57,13 @@ def parse_arguments():
                         help="Override the number of samples")
 
     # Argument to choose the formatting method
-    parser.add_argument('--data_format',
+    parser.add_argument('--data-format',
                         dest='data_format',
                         default='faf',
                         const='faf',
                         nargs='?',
                         choices=['faf', 'faf+dk', 'baf'],
                         help='Choose a data formatting method: FaF, FaF+DK or BaF (default: %(default)s)')
-
-
-
-
-
-
     return parser.parse_args()
 # End def parse_arguments
 
@@ -139,7 +135,25 @@ if __name__ == '__main__':
 
     try:
         jvm.logger.setLevel(logging.WARNING)
-        jvm.start()  # Start the JVM
+        jvm.start(packages=True)  # Start the JVM
+
+        # Install the required packages if necessary
+        print("Checking WEKA packages...", end=' ')
+        new_pkg_installed = False
+        if not packages.is_installed("SMOTE"):
+            print("Installing weka package: \"SMOTE\" ...", end=' ')
+            packages.install_package("SMOTE")
+            new_pkg_installed = True
+            print("done")
+
+        if new_pkg_installed is True:
+            print("Please restart {} to complete installation.".format(__name__))
+            jvm.stop()
+            sys.exit(0)
+
+        print("done")
+
+        # Run the core
         core.init(args)
         core.run()
     except (Exception,):  # using '(Exception,)' instead of 'Exception' to trick PEP8
