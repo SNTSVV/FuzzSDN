@@ -7,6 +7,7 @@ import shutil
 from os import listdir
 from os.path import isfile, join
 
+import numpy as np
 import pandas as pd
 import paramiko
 from matplotlib import pyplot as plt
@@ -20,15 +21,16 @@ port = 22
 username = "ubuntu"
 password = "ubuntu"
 
-exp_to_fetch = "20211107_191358"
+exp_to_fetch = "20211126_032810"
+old_data = False
+print_evl_data = False
+plot_other_class = False
+
 
 report_dir      = os.path.join(config.RDFL_ROOT, "report")
 res_dir         = os.path.join(report_dir, "rdfl_exp_summary_{}".format(exp_to_fetch))
-datasets_dir   = join(res_dir, "datasets")
+datasets_dir    = join(res_dir, "datasets")
 remote_out_dir  = "/home/ubuntu/.rdfl_exp/out"
-
-plot_other_class = True
-
 
 # ===== ( Helper functions ) ===========================================================================================
 
@@ -127,8 +129,14 @@ def _generate_report(stats: dict):
         lines.append("=> iteration :{}\n\n".format(i))
 
         # Write the precision and recall stats achieved
-        lines.append("\tPrecision for target class: {}\n".format(stats["classifier"][target_class]["precision"][i]))
-        lines.append("\tRecall for target class: {}\n\n".format(stats["classifier"][target_class]["recall"][i]))
+        if 'ml_ctx' in stats.keys():
+            lines.append("\tBalancing: {}\n".format(stats["ml_ctx"][i]["pp_filter"]["strategy"]))
+            lines.append("\t\tStrategy: {}\n".format(stats["ml_ctx"][i]["pp_filter"]["strategy"]))
+            lines.append("\t\tNeighbors: {}\n".format(stats["ml_ctx"][i]["pp_filter"]["neighbors"]))
+            lines.append("\t\tFactor: {}\n".format(stats["ml_ctx"][i]["pp_filter"]["factor"]))
+        lines.append("\tcross-val metrics:\n")
+        lines.append("\t\tPrecision for target class: {}\n".format(stats["classifier"]['cross-validation'][target_class]["precision"][i]))
+        lines.append("\t\tRecall for target class: {}\n\n".format(stats["classifier"]['cross-validation'][target_class]["recall"][i]))
 
         # Write the time used per iteration:
         iteration_time = str(datetime.timedelta(seconds=float(stats["timing"]["iteration"][i])))
@@ -146,7 +154,6 @@ def _generate_report(stats: dict):
     # Write the lines to the report file
     with open(os.path.join(res_dir, "report.txt"), 'w') as f:
         f.writelines(lines)
-
 # End def generate_report
 
 
@@ -157,13 +164,373 @@ def _generate_graphics(stats: dict, show=False):
     """
 
     it_ax = list(range(stats["context"]["iterations"]))
+    rules = stats["classifier"]["rules"]
     target_class = stats["context"]["target_class"]
     other_class  = stats["context"]["other_class"]
 
     # update the font size
     plt.rcParams.update({'font.size': 22})
 
-    # 1st Graph: Accuracy, TP/FP rate for target_class, TP/FP rate for other class
+    # 1st Graph: Number of rules per iteration
+    nb_of_rules = [len(rules[i]) for i in range(stats["context"]["iterations"])]
+    fig, ax = plt.subplots(1, 1, figsize=(10, 7), dpi=96)
+    ### Draw the number of rules graph
+    ax.plot(it_ax,
+            nb_of_rules,
+            ls='-',
+            marker='x',
+            color='blue',
+            label=target_class)
+    ### Draw the regression line for the number of rules generated
+    x = np.array(range(stats["context"]["iterations"]))
+    y = np.array(nb_of_rules)
+    coef = np.polyfit(x, y, 1)
+    ax.plot(x,
+            coef[0] * x + coef[1],
+            ls='--',
+            color='orange')
+    ax.locator_params(axis="x", integer=True, tight=True)
+    ax.legend(loc="lower right")
+    ax.set_title("Number of rules per iteration")
+    plt.tight_layout()
+    plt.plot()
+    if show is True:
+        plt.show()
+    fig.savefig(os.path.join(res_dir, 'nb_rules_graph.png'))
+
+    # 2nd Graph: Accuracy, TP/FP rate for target_class, TP/FP rate for other class
+    fig, axs = plt.subplots(1, 3, figsize=(32, 7), dpi=96)
+    ### Draw the precision graph
+    axs[0].plot(it_ax,
+                stats['classifier']["accuracy"],
+                ls='-',
+                marker='x',
+                color='blue',
+                label="accuracy_score")
+    axs[0].set_ylim([0, 1])
+    axs[0].locator_params(axis="x", integer=True, tight=True)
+    axs[0].legend(loc="lower right")
+    axs[0].set_title('Classifier Accuracy per iteration')
+
+    ### Draw the TP/FP graph for the target class
+    axs[1].plot(it_ax,
+                stats['classifier']['cross-validation'][target_class]["tp_rate"],
+                ls='-',
+                marker='x',
+                color='blue',
+                label="TP Rate")
+    axs[1].plot(it_ax,
+                stats['classifier']['cross-validation'][target_class]["fp_rate"],
+                ls='-',
+                marker='x',
+                color='red',
+                label="FP Rate")
+    axs[1].locator_params(axis="x", integer=True, tight=True)
+    axs[1].legend(loc="lower right")
+    axs[1].set_title('TP/FP Rate for {} per iteration'.format(target_class))
+
+    ### Draw the TP/FP graph for the other class
+    axs[2].plot(it_ax,
+                stats['classifier']['cross-validation'][other_class]["tp_rate"],
+                ls='-',
+                marker='x',
+                color='blue',
+                label="TP Rate")
+    axs[2].plot(it_ax,
+                stats['classifier']['cross-validation'][other_class]["fp_rate"],
+                ls='-',
+                marker='x',
+                color='red',
+                label="FP Rate")
+    axs[2].locator_params(axis="x", integer=True, tight=True)
+    axs[2].legend(loc="lower right")
+    axs[2].set_title('TP/FP Rate for {} per iteration'.format(other_class))
+
+    plt.tight_layout()
+    plt.plot()
+    if show is True:
+        plt.show()
+    fig.savefig(os.path.join(res_dir, 'classifier_accuracy_graph.png'))
+
+    # 3rd Graph: precision, recall, PRC graph
+    fig, axs = plt.subplots(1, 3, figsize=(32, 7), dpi=96)
+    ### Draw the precision graph
+    # axs[0].axhline(y=stats["context"]["precision_threshold"], color='r', linestyle='--')
+    axs[0].plot(it_ax,
+                stats['classifier']['cross-validation'][target_class]["precision"],
+                ls='-',
+                marker='x',
+                color='blue',
+                label='{}-cv'.format(target_class) if print_evl_data else target_class)
+    if print_evl_data:
+        axs[0].plot(it_ax,
+                    stats['classifier']['evaluation'][target_class]["precision"],
+                    ls='--',
+                    marker='x',
+                    color='blue',
+                    label='{}-evl'.format(target_class))
+    if plot_other_class:
+        axs[0].plot(it_ax,
+                    stats['classifier']['cross-validation'][other_class]["precision"],
+                    ls='-',
+                    marker='^',
+                    color='orange',
+                    label=other_class)
+    axs[0].set_ylim([0, 1])
+    axs[0].set_xlabel("iteration")
+    axs[0].set_ylabel("precision")
+    axs[0].xaxis.label.set_color('dimgrey')
+    axs[0].yaxis.label.set_color('dimgrey')
+    axs[0].locator_params(axis="x", integer=True, tight=True)
+    axs[0].legend(loc="lower right")
+    axs[0].set_title('Precision per iteration')
+
+    ### Draw the recall graph
+    # axs[1].axhline(y=stats["context"]["recall_threshold"], color='r', linestyle='--')
+    axs[1].plot(it_ax,
+                stats['classifier']['cross-validation'][target_class]["recall"],
+                ls='-',
+                marker='x',
+                color='blue',
+                label='{}-cv'.format(target_class) if print_evl_data else target_class)
+    if print_evl_data:
+        axs[1].plot(it_ax,
+                    stats['classifier']['evaluation'][target_class]["recall"],
+                    ls='--',
+                    marker='x',
+                    color='blue',
+                    label='{}-evl'.format(target_class))
+    if plot_other_class:
+        axs[1].plot(it_ax,
+                    stats['classifier'][other_class]["recall"],
+                    ls='-',
+                    marker='^',
+                    color='orange',
+                    label=other_class)
+    axs[1].set_ylim([0, 1])
+    axs[1].set_xlabel("iteration")
+    axs[1].set_ylabel("recall")
+    axs[1].xaxis.label.set_color('dimgrey')
+    axs[1].yaxis.label.set_color('dimgrey')
+    axs[1].locator_params(axis="x", integer=True, tight=True)
+    axs[1].legend(loc="lower right")
+    axs[1].set_title('Recall per iteration')
+
+    ### Draw the Area under PRC graph
+    axs[2].plot(it_ax,
+                stats['classifier']['cross-validation'][target_class]["prc"],
+                ls='-',
+                marker='x',
+                color='blue',
+                label='{}-cv'.format(target_class) if print_evl_data else target_class)
+    if print_evl_data:
+        axs[2].plot(it_ax,
+                    stats['classifier']['evaluation'][target_class]["prc"],
+                    ls='--',
+                    marker='x',
+                    color='blue',
+                    label='{}-evl'.format(target_class))
+    if plot_other_class:
+        axs[2].plot(it_ax,
+                    stats['classifier']['cross-validation'][other_class]["prc"],
+                    ls='-',
+                    marker='^',
+                    color='orange',
+                    label=other_class)
+    axs[2].set_ylim([0, 1])
+    axs[2].set_xlabel("iteration")
+    axs[2].set_ylabel("prc in %")
+    axs[2].xaxis.label.set_color('dimgrey')
+    axs[2].yaxis.label.set_color('dimgrey')
+    axs[2].locator_params(axis="x", integer=True, tight=True)
+    axs[2].legend(loc="lower right")
+    axs[2].set_title('Area under PRC per iteration')
+
+    plt.tight_layout()
+    plt.plot()
+    if show is True:
+        plt.show()
+    fig.savefig(os.path.join(res_dir, 'precision_recall_graph.png'))
+
+    # 4th Graph: F1-Score, Area under ROC, and MCC score
+    fig, axs = plt.subplots(1, 3, figsize=(32, 7), dpi=96)
+    ### Draw the F1-Score graph
+    axs[0].plot(it_ax,
+                stats['classifier']['cross-validation'][target_class]["f_measure"],
+                ls='-',
+                marker='x',
+                color='blue',
+                label=target_class)
+    if plot_other_class:
+        axs[0].plot(it_ax,
+                    stats['classifier'][other_class]["f_measure"],
+                    ls='-',
+                    marker='^',
+                    color='orange',
+                    label=other_class)
+    axs[0].set_ylim([0, 1])
+    axs[0].locator_params(axis="x", integer=True, tight=True)
+    axs[0].legend(loc="lower right")
+    axs[0].set_title('F1-Score per iteration')
+
+    ### Draw the ROC graph
+    axs[1].plot(it_ax,
+                stats['classifier']['cross-validation'][target_class]["roc"],
+                ls='-',
+                marker='x',
+                color='blue')
+    axs[1].set_ylim([0, 1])
+    axs[1].locator_params(axis="x", integer=True, tight=True)
+    axs[1].legend(loc="lower right")
+    axs[1].set_title('Area under ROC per iteration')
+
+    ### Draw the MCC Score
+    axs[2].plot(it_ax,
+                stats['classifier']['cross-validation'][target_class]["mcc"],
+                ls='-',
+                marker='x',
+                color='blue',
+                label=target_class)
+    axs[2].set_ylim([-1, 1])
+    axs[2].locator_params(axis="x", integer=True, tight=True)
+    axs[2].legend(loc="lower right")
+    axs[2].set_title('MCC score per iteration')
+
+    plt.tight_layout()
+    plt.plot()
+    if show is True:
+        plt.show()
+    fig.savefig(os.path.join(res_dir, 'f1_roc_mcc_graph.png'))
+
+    # 5th graph: ratio of class and other class per iteration
+    fig, ax = plt.subplots(1, 1, figsize=(10, 7), dpi=96)
+    ### Draw the F1-Score graph
+    ax.set_ylim([0, 1])
+    ax.axhline(y=0.5, color='grey', linestyle='--')
+    ax.plot(it_ax,
+            stats['datasets']["target_class_ratio"],
+            ls='-',
+            marker='x',
+            color='blue',
+            label=target_class)
+    ax.plot(it_ax,
+            stats['datasets']["other_class_ratio"],
+            ls='-',
+            marker='^',
+            color='orange',
+            label=other_class)
+    ax.locator_params(axis="x", integer=True, tight=True)
+    ax.legend(loc="lower right")
+    ax.set_title("Ratio of classes per iteration")
+
+    plt.tight_layout()
+    plt.plot()
+    if show is True:
+        plt.show()
+    fig.savefig(os.path.join(res_dir, 'class_ratio_graph.png'))
+# End def generate_graphics
+
+
+# ===== ( Deprecated Helper functions ) ================================================================================
+
+def _generate_report_deprecated(stats: dict):
+
+    #
+    rules = stats["classifier"]["rules"]
+    target_class = stats['context']['target_class']
+
+    # Write about the context
+    lines = [
+        "======== Context ========\n\n",
+        # "Precision Threshold: {:.2f}%\n".format(stats['context']['precision_threshold'] * 100.0),
+        # "Recall Threshold: {:.2f}%\n".format(stats['context']['recall_threshold'] * 100.0),
+        "target_class: {}\n".format(stats['context']['target_class']),
+        "Samples generated per iterations: {}\n".format(stats['context']['samples_per_iteration']),
+        # "Data formatting method used: {}\n\n".format(stats['context']['data_format_method']),
+        "======== Iteration Summary ========\n\n"
+    ]
+    for i in range(stats["context"]["iterations"]):
+        # First compute the rule string
+        rule_str = ""
+        nb_of_rules = 0
+        for r in rules[i]:
+            nb_of_rules += 1
+            rule_str += "\t\t{}\n".format(r)
+
+        # Iteration header
+        lines.append("=> iteration :{}\n\n".format(i))
+
+        # Write the precision and recall stats achieved
+        if 'ml_ctx' in stats.keys():
+            lines.append("\tBalancing: {}\n".format(stats["ml_ctx"][i]["pp_filter"]["strategy"]))
+            lines.append("\t\tStrategy: {}\n".format(stats["ml_ctx"][i]["pp_filter"]["strategy"]))
+            lines.append("\t\tNeighbors: {}\n".format(stats["ml_ctx"][i]["pp_filter"]["neighbors"]))
+            lines.append("\t\tFactor: {}\n".format(stats["ml_ctx"][i]["pp_filter"]["factor"]))
+        lines.append("\tcross-val metrics:\n")
+        lines.append("\t\tPrecision for target class: {}\n".format(stats["classifier"][target_class]["precision"][i]))
+        lines.append("\t\tRecall for target class: {}\n\n".format(stats["classifier"][target_class]["recall"][i]))
+
+        # Write the time used per iteration:
+        iteration_time = str(datetime.timedelta(seconds=float(stats["timing"]["iteration"][i])))
+        learning_time = str(datetime.timedelta(seconds=float(stats["timing"]["learning"][i])))
+        lines.append("\tTime taken to finish the iteration: {}\n".format(iteration_time))
+        lines.append("\ttime taken to generate the classifier: {}\n\n".format(learning_time))
+
+        # Add the rules
+        lines.append("\tNumber of Rules generated: {}\n".format(nb_of_rules))
+        if nb_of_rules > 0:
+            lines.append("\tRules:\n")
+            lines.append(rule_str)
+        lines.append("\n")
+
+    # Write the lines to the report file
+    with open(os.path.join(res_dir, "report.txt"), 'w') as f:
+        f.writelines(lines)
+# End def generate_report_deprecated
+
+
+def _generate_graphics_deprecated(stats: dict, show=False):
+    """Generate the graphics for the report
+    :param stats: The statistics dictionnary
+    :param show: If set to True, the graphs are display using plt
+    """
+
+    it_ax = list(range(stats["context"]["iterations"]))
+    rules = stats["classifier"]["rules"]
+    target_class = stats["context"]["target_class"]
+    other_class  = stats["context"]["other_class"]
+
+    # update the font size
+    plt.rcParams.update({'font.size': 22})
+
+    # 1st Graph: Number of rules per iteration
+    nb_of_rules = [len(rules[i]) for i in range(stats["context"]["iterations"])]
+    fig, ax = plt.subplots(1, 1, figsize=(10, 7), dpi=96)
+    ### Draw the number of rules graph
+    ax.plot(it_ax,
+            nb_of_rules,
+            ls='-',
+            marker='x',
+            color='blue',
+            label=target_class)
+    ### Draw the regression line for the number of rules generated
+    x = np.array(range(stats["context"]["iterations"]))
+    y = np.array(nb_of_rules)
+    coef = np.polyfit(x, y, 1)
+    ax.plot(x,
+            coef[0]*x + coef[1],
+            ls='--',
+            color='orange')
+    ax.locator_params(axis="x", integer=True, tight=True)
+    ax.legend(loc="lower right")
+    ax.set_title("Number of rules per iteration")
+    plt.tight_layout()
+    plt.plot()
+    if show is True:
+        plt.show()
+    fig.savefig(os.path.join(res_dir, 'nb_rules_graph.png'))
+
+    # 2nd Graph: Accuracy, TP/FP rate for target_class, TP/FP rate for other class
     fig, axs = plt.subplots(1, 3, figsize=(32, 7), dpi=96)
     ### Draw the precision graph
     axs[0].plot(it_ax,
@@ -217,7 +584,7 @@ def _generate_graphics(stats: dict, show=False):
         plt.show()
     fig.savefig(os.path.join(res_dir, 'classifier_accuracy_graph.png'))
 
-    # 2nd Graph: precision, recall, PRC graph
+    # 3rd Graph: precision, recall, PRC graph
     fig, axs = plt.subplots(1, 3, figsize=(32, 7), dpi=96)
     ### Draw the precision graph
     # axs[0].axhline(y=stats["context"]["precision_threshold"], color='r', linestyle='--')
@@ -296,7 +663,7 @@ def _generate_graphics(stats: dict, show=False):
         plt.show()
     fig.savefig(os.path.join(res_dir, 'precision_recall_graph.png'))
 
-    # 3rd Graph: F1-Score, Area under ROC, and MCC score
+    # 4th Graph: F1-Score, Area under ROC, and MCC score
     fig, axs = plt.subplots(1, 3, figsize=(32, 7), dpi=96)
     ### Draw the F1-Score graph
     axs[0].plot(it_ax,
@@ -346,7 +713,7 @@ def _generate_graphics(stats: dict, show=False):
         plt.show()
     fig.savefig(os.path.join(res_dir, 'f1_roc_mcc_graph.png'))
 
-    # 4th graph: ratio of class and other class per iteration
+    # 5th graph: ratio of class and other class per iteration
     fig, ax = plt.subplots(1, 1, figsize=(10, 7), dpi=96)
     ### Draw the F1-Score graph
     ax.set_ylim([0, 1])
@@ -372,7 +739,7 @@ def _generate_graphics(stats: dict, show=False):
     if show is True:
         plt.show()
     fig.savefig(os.path.join(res_dir, 'class_ratio_graph.png'))
-# End def generate_graphics
+# End def generate_graphics_deprecated
 
 
 # ===== ( Main Loop ) ==================================================================================================
@@ -411,7 +778,7 @@ if __name__ == '__main__':
     stats["datasets"]["other_class_ratio"]      = list()
 
     # Extract the ratio of each class
-    for i in range(len([x for x in file_list if 'raw' not in x])):
+    for i in range(len([x for x in file_list if 'raw' not in x and 'arff' not in x])):
         # Read the csv file corresponding to the iteration
         df = pd.read_csv(join(datasets_dir, "it_{}.csv".format(i)), sep=";")
         # Get the class count
@@ -422,11 +789,11 @@ if __name__ == '__main__':
 
     # Create the report
     print("Generating the report")
-    _generate_report(stats)
+    _generate_report(stats) if old_data is False else _generate_report_deprecated(stats)
 
     # Create the graph
     print("Generating the graphs")
-    _generate_graphics(stats)
+    _generate_graphics(stats) if old_data is False else _generate_graphics_deprecated(stats)
 
     print("Done")
 

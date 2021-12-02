@@ -18,7 +18,8 @@ import rdfl_exp.experiment.script as exp_script
 import rdfl_exp.machine_learning.algorithms as ml_alg
 import rdfl_exp.machine_learning.data as ml_data
 from rdfl_exp import config
-from rdfl_exp.machine_learning.rule import Rule, RuleSet, convert_to_fuzzer_actions
+from rdfl_exp.machine_learning.rule import CTX_PKT_IN_tmp, Rule, RuleSet, convert_to_fuzzer_actions, \
+    convert_to_fuzzer_actions2
 from rdfl_exp.stats import Stats
 from rdfl_exp.utils import csv
 from rdfl_exp.utils.terminal import Style, progress_bar
@@ -196,8 +197,10 @@ def run() -> None:
             total = classes_count[_context['target_class']] + classes_count[_context['other_class']]
 
         # Save the dataset to the experience folder
-        shutil.copy(src=dataset_path,
-                    dst=join(config.EXP_PATH, "datasets", "it_{}.csv".format(it)))
+        shutil.copy(
+            src=dataset_path,
+            dst=join(config.EXP_PATH, "datasets", "it_{}.csv".format(it))
+        )
 
         # Convert the set to an arff file
         csv.to_arff(
@@ -207,21 +210,28 @@ def run() -> None:
             relation='dataset_iteration_{}'.format(it)
         )
 
+        # Save the arff dataset as well
+        shutil.copy(
+            src=join(config.tmp_dir(), "dataset.arff"),
+            dst=join(config.EXP_PATH, "datasets", "it_{}.arff".format(it))
+        )
+
         # 3. Perform machine learning algorithms
         start_of_ml = time.time()
 
-        out_rules, evl_result = ml_alg.learn(
-            join(config.tmp_dir(), "dataset.arff"),
+        ml_results = ml_alg.learn(
+            data_path=join(config.tmp_dir(), "dataset.arff"),
             algorithm=_context['ml_algorithm'],
             preprocess_strategy=_context['pp_strategy'],
             n_folds=_context['cv_folds'],
             seed=12345,
-            classes=(_context['target_class'], _context["other_class"]))
+            classes=(_context['target_class'], _context["other_class"])
+        )
         end_of_ml = time.time()
 
         # Get recall and precision from the evaluator results
-        recall    = evl_result[_context['target_class']]['recall']
-        precision = evl_result[_context['target_class']]['precision']
+        recall    = ml_results['cross-validation'][_context['target_class']]['recall']
+        precision = ml_results['cross-validation'][_context['target_class']]['precision']
 
         # Avoid cases where precision or recall are NaN values
         if math.isnan(recall):
@@ -233,7 +243,7 @@ def run() -> None:
 
         # Add the rule to the rule set
         rule_set.clear()
-        for r in out_rules:
+        for r in ml_results['rules']:
             rule_set.add_rule(r)
 
         # End of iteration total time
@@ -243,7 +253,7 @@ def run() -> None:
         Stats.add_iteration_statistics(
             learning_time=end_of_ml - start_of_ml,
             iteration_time=end_of_it - start_of_it,
-            clsf_res=evl_result,
+            ml_results=ml_results,
             rule_set=rule_set
         )
         Stats.save(join(config.EXP_PATH, 'stats.json'))
@@ -295,11 +305,11 @@ def generate_data_from_ruleset(rule_set : RuleSet, sample_size : int):
         for i in range(len(rule_set)):
 
             # 1. Get the budget for the rule
-            budget = math.floor(rule_set.budget(i) * sample_size)
+            budget = math.floor(rule_set.budget(i, method=0) * sample_size)
 
             # 2. Print information
             if budget <= 0:
-                print(Style.BOLD, "Budget for Rule {}: ({}) is equal to 0".format(budget, i + 1, rule_set[i]),
+                print(Style.BOLD, "Budget for Rule {}: ({}) is equal to 0".format(i + 1, rule_set[i]),
                       Style.RESET)
                 print("skipping the rule...")
                 continue
@@ -310,24 +320,24 @@ def generate_data_from_ruleset(rule_set : RuleSet, sample_size : int):
                          suffix='Complete ({}/{})'.format(0, budget),
                          length=100)
 
-            # 3. Build the fuzzer instruction
-            for it_ind in range(budget):
+            # 3. Get all the actions to apply
+            # Build a new instruction at each generation
+            try:
+                action_list = convert_to_fuzzer_actions2(rule_set[i], n=budget, ctx=CTX_PKT_IN_tmp)
+            except ValueError as e:
+                # Happens if the rule is invalid or impossible to satisfy
+                _log.warning("Generation of actions failed with error: {}".format(str(e)))
+                _log.warning("Skipping the rule. Less data will be generated.")
+                continue
 
-                # Build a new instruction at each generation
-                try:
-                    action = convert_to_fuzzer_actions(rule_set[i])
-                except ValueError as e:
-                    # Happens if the rule is invalid or impossible to satisfy
-                    _log.warning("str(e)")
-                    _log.warning("Skipping the rule. Less data will be generated.")
-                    break
-
+            # 4. Build the fuzzer instruction
+            for it_ind in range(len(action_list)):
                 fuzz_instr = {
                     "instructions": [
                         {
                             "criteria": _context['criteria'],
                             "matchLimit": _context['match_limit'],
-                            "actions": [action]
+                            "actions": [action_list[it_ind]]
                         }
                     ]
                 }

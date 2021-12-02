@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 # coding: utf-8
 import math
+import operator
 import random
 from copy import deepcopy
 import re as RegEx
+from typing import List
 
+import sympy
 from sympy import *
 from sympy.logic.boolalg import Boolean, BooleanTrue
+from z3 import z3
 
+from rdfl_exp.utils import smt
 from rdfl_exp.utils.interval import IntervalSet
 
 # ==== ( Lookup tables ) ==============================================================================================
@@ -88,6 +93,42 @@ DOMAIN_KNOWLEDGE_CDT_LUT = {
 }
 
 
+# TODO: Calculate ctx when parsing a packet from the input data
+CTX_PKT_IN_tmp = {
+    # Fields for Fields as feature
+    "of_version"    : {"min": 0, "max": int(pow(2, 8*2) - 1)},
+    "of_type"       : {"min": 0, "max": int(pow(2, 8*1) - 1)},
+    "length"        : {"min": 0, "max": int(pow(2, 8*2) - 1)},
+    "xid"           : {"min": 0, "max": int(pow(2, 8*4) - 1)},
+    "buffer_id"     : {"min": 0, "max": int(pow(2, 8*4) - 1)},
+    "total_len"     : {"min": 0, "max": int(pow(2, 8*2) - 1)},
+    "reason"        : {"min": 0, "max": int(pow(2, 8*1) - 1)},
+    "table_id"      : {"min": 0, "max": int(pow(2, 8*1) - 1)},
+    "cookie"        : {"min": 0, "max": int(pow(2, 8*8) - 1)},
+    "match_type"    : {"min": 0, "max": int(pow(2, 8*2) - 1)},
+    "match_length"  : {"min": 0, "max": int(pow(2, 8*2) - 1)},
+    "match_pad"     : {"min": 0, "max": int(pow(2, 8*4) - 1)},
+    "oxm_0_class"   : {"min": 0, "max": int(pow(2, 8*2) - 1)},
+    "oxm_0_field"   : {"min": 0, "max": int(pow(2, 7)   - 1)},
+    "oxm_0_has_mask": {"min": 0, "max": 1},
+    "oxm_0_length"  : {"min": 0, "max": int(pow(2, 8*1) - 1)},
+    "oxm_0_value"   : {"min": 0, "max": int(pow(2, 8*4) - 1)},
+    "pad"           : {"min": 0, "max": int(pow(2, 8*2) - 1)},
+    "eth_dst"       : {"min": 0, "max": int(pow(2, 8*6) - 1)},
+    "eth_src"       : {"min": 0, "max": int(pow(2, 8*6) - 1)},
+    "ethertype"     : {"min": 0, "max": int(pow(2, 8*2) - 1)},
+    "arp_htype"     : {"min": 0, "max": int(pow(2, 8*2) - 1)},
+    "arp_ptype"     : {"min": 0, "max": int(pow(2, 8*2) - 1)},
+    "arp_hlen"      : {"min": 0, "max": int(pow(2, 8*1) - 1)},
+    "arp_plen"      : {"min": 0, "max": int(pow(2, 8*1) - 1)},
+    "arp_oper"      : {"min": 0, "max": int(pow(2, 8*2) - 1)},
+    "arp_sha"       : {"min": 0, "max": int(pow(2, 8*6) - 1)},
+    "arp_spa"       : {"min": 0, "max": int(pow(2, 8*4) - 1)},
+    "arp_tha"       : {"min": 0, "max": int(pow(2, 8*6) - 1)},
+    "arp_tpa"       : {"min": 0, "max": int(pow(2, 8*4) - 1)},
+}
+
+
 def generate_bytes_as_feature_lut():
     """Generate the BYTES_AS_FEATURE_LUT automatically."""
     global BYTES_AS_FEATURE_LUT
@@ -105,8 +146,6 @@ class RuleSet(object):
     # ===== ( Constructor ) ============================================================================================
 
     def __init__(self, rules=None):
-        self.target_class = 'unknown_reason'
-        self.other_class  = 'known_reason'
         self.rules = list() if rules is None else list(rules)
     # End def __init__
 
@@ -190,10 +229,19 @@ class RuleSet(object):
             return self.confidence(idx, False) / sum(self.confidence(i) for i in range(len(self)))
     # End def confidence
 
-    def budget(self, idx):
-        absolute_budget = self.support(idx) * (1 - self.confidence(idx, True))
-        budget_sum = sum(self.support(j) * (1 - self.confidence(j, True)) for j in range(len(self)))
-        return absolute_budget / budget_sum
+    def budget(self, idx, method: int = 0):
+        to_return = None
+        if method == 0:
+            absolute_budget = self.support(idx) * (1 - self.confidence(idx, True))
+            budget_sum = sum(self.support(j) * (1 - self.confidence(j, True)) for j in range(len(self)))
+            to_return = absolute_budget / budget_sum
+
+        elif method == 1:
+            absolute_budget = self.support(idx) * (self.confidence(idx, True))
+            budget_sum = sum(self.support(j) * (self.confidence(j, True)) for j in range(len(self)))
+            to_return = absolute_budget / budget_sum
+
+        return to_return
     # End def budget
 
     # ===== ( Private methods ) ========================================================================================
@@ -295,7 +343,7 @@ class Rule(object):
             rule_cdt = rule_cdt.replace("and", "&")
             rule_cdt = rule_cdt.replace("or", "|")
 
-            match = RegEx.findall(r'(\w+[><=!].{1,2}\d+)', rule_cdt)
+            match = RegEx.findall(r'(\w+[><=!]{1,2}\d+)', rule_cdt)
             processed_match = list()
             for m in match:
                 if m not in processed_match:
@@ -389,162 +437,116 @@ class Rule(object):
             it_count += 1
 
         return model
-    # End def apply
+    # End def __apply_v1
 
+    def get_models(self, n, ctx=None) -> List[dict]:
+
+        z3.set_option('smt.arith.random_initial_value', True)
+
+        # Convert rule to cnf form
+        cnf_expr = to_cnf(self.expr)
+
+        # Compile the regex use for finding symble
+        rgx_sym         = RegEx.compile(r'(?P<symbol>\w+) *(?P<operator>[><=!]{1,2}) *(?P<value>\d+)')
+        rgx_sym_and_not = RegEx.compile(r'(?P<symbol>~*\w+) *(?P<operator>[><=!]{1,2}) *(?P<value>\d+)')
+        # match = RegEx.findall(rgx_sym, cnf_expr)
+
+        # Create a list of symbols present in the equation
+        matches = [m.groupdict() for m in rgx_sym.finditer(str(cnf_expr))]
+        symbols = {}
+        for m in matches:
+            symbols[m['symbol']] = z3.Int(m['symbol'])
+
+        def cnf_clauses(expr) -> tuple:
+            if not isinstance(expr, sympy.And):
+                return expr,
+            return expr.args
+
+        # List the operator
+        ops = {
+            '>'  : operator.gt,
+            '>=' : operator.ge,
+            '<'  : operator.lt,
+            '<=' : operator.le,
+            '!=' : operator.ne,
+            '='  : operator.eq,
+            '==' : operator.eq,
+        }
+
+        # Build the z3 formula
+        z3_formula = []
+        ands = []
+        for cl in cnf_clauses(cnf_expr):
+            matches = [m.groupdict() for m in rgx_sym_and_not.finditer(str(cl))]
+            ors = []
+            for m in matches:
+                if m['symbol'].startswith('~'):  # Not symbol
+                    symbol = m['symbol'].replace('~', '')
+                    ors += [z3.Not(ops[m['operator']](symbols[symbol], int(m['value'])))]
+                else:
+                    ors += [ops[m['operator']](symbols[m['symbol']], int(m['value']))]
+            ands += [z3.Or(*ors)]
+
+        z3_formula += [z3.And(*ands)]
+
+        # Add the context to the formula
+        if ctx is not None:
+            for field in ctx.keys():
+                if field in symbols.keys():
+                    # TODO: Figure out a way to add all the constraints
+                    # z3_formula += [symbols[field] >= ctx[field]['min']]
+                    z3_formula += [symbols[field] <= ctx[field]['max']]
+
+        models = []
+        for _ in range(n):
+
+            # use a random seed so the same model is not generated twice
+            z3.set_option('smt.random_seed', random.randint(0, 2 ** 16))
+            model = dict()
+            z3_model = smt.get_z3_model(z3_formula, 1)[0]  # Get a z3 model
+            # Build the dictionary
+            for k in symbols.keys():
+                model[k] = z3_model[symbols[k]].as_long()
+            models.append(model)
+
+        return models
+    # End def get models
 # End class Rule
 
 
 # ===== ( Methods ) =================================================================================================
 
 # TODO: handle poorly defined conditions, like "(field > value) and (field < value - 1)" (which is impossible)
-def convert_to_fuzzer_actions(rule: Rule):
+def convert_to_fuzzer_actions(rule: Rule, n: int = 1, ctx: dict = None):
     """ Transform the rules into a set of fuzzer interpretable actions """
 
+    # Verify arguments
+    if n <= 1:
+        raise ValueError("\"n\" must be >= 1 (got: {})".format(n))
+
+    # Prepare actions
+    fuzzer_actions = list()
     # The fuzzer action to be generated
-    fuzzer_action = {
+    single_action = {
         "intent" : "MUTATE_PACKET_RULE",
         "target" : "OF_PACKET",
         "includeHeader": False,
         "rule": list()
     }
 
-    # First, generate the Bytes-as-Feature LUT if it wasn't done before
-    if len(BYTES_AS_FEATURE_LUT) == 0:
-        generate_bytes_as_feature_lut()
+    # get the Models
+    models = rule.get_models(n, ctx)
 
-    # sub functions
-    def get_range_from_op_and_val(op, value):
-        """ Define a range from the operator and the value"""
-        _range = None
+    for model in models:
+        action = deepcopy(single_action)
+        for field in model.keys():
+            action['rule'].append(
+                {
+                    'field': field,
+                    'value': model[field]
+                }
+            )
+        fuzzer_actions.append(action)
 
-        if op == '!=':
-            _range = IntervalSet((-math.inf, value - 1), (value + 1, math.inf))
-        elif op == ">=":
-            _range = IntervalSet((value, math.inf))
-        elif op == ">":
-            _range = IntervalSet((value + 1, math.inf))
-        elif op == "<=":
-            _range = IntervalSet((-math.inf, value))
-        elif op == "<":
-            _range = IntervalSet((-math.inf, value - 1))
-        else:
-            raise ValueError("Unsupported operator '{}'".format(op))
-
-        return _range
-    # End def get_range_cdt
-
-    def get_new_condition(field, size, op, value):
-        new_cdt = {
-            "field": field,
-        }
-
-        # 2.3.1 determine the type of operation:
-        if op == '=':
-            new_cdt["range"] = IntervalSet(value, value)
-
-        else:  # Operator is ">", ">=", "<" or "<="
-            new_cdt["range"] = None
-            # Create the range depending on the size of the field
-            bounds = IntervalSet((0, int(math.pow(2, 8 * size))))
-            # Get the absolute range from the operator and the value
-            _range = get_range_from_op_and_val(op, value)
-            # Intersect the action's range with the range of the new condition
-            new_cdt["range"] = bounds & _range
-
-        return new_cdt
-        # End def get_new_action
-
-        # 1. Get an application of the rule
-
-    app_dict = rule.apply()
-    if app_dict is None:
-        raise ValueError("The rule \"{}\"cannot be translated to fuzzer action".format(r))
-
-    # 2. Create a condition table
-    conditions = []
-    for key in app_dict:
-        negate = False if app_dict[key] is True else True
-        cdt_str = str(key)
-        cdt = dict()
-
-        if '>' in cdt_str and ">=" not in cdt_str:
-            cdt["field"], cdt["value"] = cdt_str.split('>')
-            cdt["value"] = int(cdt["value"])
-            cdt["op"] = '>' if not negate else '<='
-
-        elif '>=' in cdt_str:
-            cdt["field"], cdt["value"] = cdt_str.split('>=')
-            cdt["value"] = int(cdt["value"])
-            cdt["op"] = '>=' if not negate else '<'
-
-        elif '<' in cdt_str and "<=" not in cdt_str:
-            cdt["field"], cdt["value"] = cdt_str.split('<')
-            cdt["value"] = int(cdt["value"])
-            cdt["op"] = '<' if not negate else '>='
-
-        elif '<=' in cdt_str:
-            cdt["field"], cdt["value"] = cdt_str.split('<=')
-            cdt["value"] = int(cdt["value"])
-            cdt["op"] = '<=' if not negate else '>'
-
-        elif '=' in cdt_str and '!=' not in cdt_str:
-            cdt["field"], cdt["value"] = cdt_str.split('=')
-            cdt["value"] = int(cdt["value"])
-            cdt["op"] = '=' if not negate else '!='
-
-        elif '!=' in cdt_str:
-            cdt["field"], cdt["value"] = cdt_str.split('!=')
-            cdt["value"] = int(cdt["value"])
-            cdt["op"] = '!=' if not negate else '='
-
-        conditions.append(cdt)
-
-    rule_cdts = []
-    for c in conditions:
-        # 1. get the dict for the action
-        if c["field"] in FIELD_AS_FEATURE_LUT:
-            action_dict = FIELD_AS_FEATURE_LUT[c["field"]]
-        elif c["field"] in BYTES_AS_FEATURE_LUT:
-            action_dict = BYTES_AS_FEATURE_LUT[c["field"]]
-        else:
-            raise RuntimeError("Field {} is not present in the Field-as-Feature's LUT"
-                               " nor the Bytes-as-Feature's LUT".format(c["field"]))
-
-        # 2 Find if there is already an action on the same field
-        act_ind = next((i for i, item in enumerate(rule_cdts) if item["field"] == c["field"]), None)
-        # 3.1 If we already found an action we merge them if possible
-        if act_ind is not None:
-            # 3.1.1 If the new operator is "=", we remove the range and set
-            # the new type as "set"
-            if c["op"] == '=':  # Operator is "="
-                rule_cdts[act_ind]["range"] = IntervalSet(int(c["value"]), int(c["value"]))
-
-            # 3.1.2 Otherwise, we update the range
-            else:
-                # Get the absolute range from the operator and the value
-                op_range = get_range_from_op_and_val(c["op"], int(c["value"]))
-                # Intersect the action's range with the range of the
-                # condition
-                rule_cdts[act_ind]["range"] &= op_range
-
-        # 3.2 Otherwise we create a new action
-        else:
-            # 3.2.1 Get the new action
-            action = get_new_condition(field=c['field'], size=action_dict["size"], op=c["op"], value=int(c["value"]))
-            # 3.2.2 Append it to the action list
-            rule_cdts.append(action)
-
-    # Finally convert all the IntervalSets to a list of ranges
-    for act in rule_cdts:
-        if "range" in act:
-            if isinstance(act['range'], IntervalSet):
-                if act['range'].is_empty() is True:
-                    act.pop('range', None)  # then the range is no longer needed
-                else:
-                    act['range'] = [[x.inf, x.sup] for x in list(act['range'])]
-
-    # Finally add the conditions to the rule
-    fuzzer_action["rule"] = rule_cdts
-
-    return fuzzer_action
+    return fuzzer_actions
 # End def convert_to_fuzzer_actions
