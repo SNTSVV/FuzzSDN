@@ -18,8 +18,7 @@ import rdfl_exp.experiment.script as exp_script
 import rdfl_exp.machine_learning.algorithms as ml_alg
 import rdfl_exp.machine_learning.data as ml_data
 from rdfl_exp import config
-from rdfl_exp.machine_learning.rule import CTX_PKT_IN_tmp, Rule, RuleSet, convert_to_fuzzer_actions, \
-    convert_to_fuzzer_actions2
+from rdfl_exp.machine_learning.rule import CTX_PKT_IN_tmp, Rule, RuleSet, convert_to_fuzzer_actions
 from rdfl_exp.stats import Stats
 from rdfl_exp.utils import csv
 from rdfl_exp.utils.terminal import Style, progress_bar
@@ -30,11 +29,6 @@ _log = logging.getLogger(__name__)
 _is_init = False
 
 _context = {
-    # Machine Learning
-    "pp_strategy"           : str(),
-    "ml_algorithm"          : str(),
-    "cv_folds"              : int(),
-
     # Classifying
     "target_class"          : str(),
     "other_class"           : str(),
@@ -42,6 +36,15 @@ _context = {
     # Iterations
     "nb_of_samples"         : int(),
     "it_max"                : int(),
+
+    # Machine Learning
+    "pp_strategy"           : str(),
+    "ml_algorithm"          : str(),
+    "cv_folds"              : int(),
+
+    # Rule Application
+    "enable_mutation"       : bool(),
+    "mutation_rate"         : float(),
 
     # Default fuzzer instructions
     'criteria'              : list(),
@@ -51,11 +54,6 @@ _context = {
 
 _default_input = {
 
-    # Machine Learning
-    "pp_strategy"           : None,
-    "ml_algorithm"          : 'RIPPER',
-    "cv_folds"              : 10,
-
     # Classifying
     "target_class"          : "unknown_reason",
     "other_class"           : "known_reason",
@@ -63,6 +61,15 @@ _default_input = {
     # Iterations
     "n_samples"             : 500,
     "max_iterations"        : 50,
+
+    # Machine Learning
+    "pp_strategy"           : None,
+    "ml_algorithm"          : 'RIPPER',
+    "cv_folds"              : 10,
+
+    # Rule Application
+    "enable_mutation"       : True,
+    "mutation_rate"         : 1.0,
 
     # Default fuzzer instructions
     "criteria" : [
@@ -99,11 +106,6 @@ def init(args) -> None:
     # Fill the context dictionary
     _context = {
 
-        # Machine Learning
-        'ml_algorithm'      : args.ml_algorithm if args.ml_algorithm else input_data['ml_algorithm'],
-        'pp_strategy'       : args.pp_strategy if args.pp_strategy else input_data['pp_strategy'],
-        'cv_folds'          : input_data['cv_folds'],
-
         # Classifying
         'target_class'      : input_data['target_class'],  # Class to predict
         'other_class'       : input_data['other_class'],  # Class to predict
@@ -111,6 +113,15 @@ def init(args) -> None:
         # Iterations
         'it_max'            : input_data['max_iterations'],
         'nb_of_samples'     : args.samples if args.samples else input_data['n_samples'],
+
+        # Machine Learning
+        'ml_algorithm'      : args.ml_algorithm if args.ml_algorithm else input_data['ml_algorithm'],
+        'pp_strategy'       : args.pp_strategy if args.pp_strategy else input_data['pp_strategy'],
+        'cv_folds'          : input_data['cv_folds'],
+
+        # Rule Application
+        "enable_mutation"   : args.enable_mutation if args.enable_mutation else input_data['enable_mutation'],
+        "mutation_rate"     : args.mutation_rate if args.mutation_rate else input_data['mutation_rate'],
 
         # Fuzzer Actions
         'criteria'          : input_data['criteria'],
@@ -323,7 +334,12 @@ def generate_data_from_ruleset(rule_set : RuleSet, sample_size : int):
             # 3. Get all the actions to apply
             # Build a new instruction at each generation
             try:
-                action_list = convert_to_fuzzer_actions2(rule_set[i], n=budget, ctx=CTX_PKT_IN_tmp)
+                action_list = convert_to_fuzzer_actions(rule_set[i],
+                                                        include_header=False,
+                                                        enable_mutation=_context['enable_mutation'],
+                                                        mutation_rate=_context['mutation_rate'],
+                                                        n=budget,
+                                                        ctx=CTX_PKT_IN_tmp)
             except ValueError as e:
                 # Happens if the rule is invalid or impossible to satisfy
                 _log.warning("Generation of actions failed with error: {}".format(str(e)))

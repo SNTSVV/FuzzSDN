@@ -8,7 +8,7 @@ except ImportError:
 setup(
     # Metadata
     name='rdfl_exp',
-    version='0.0.1',
+    version='0.0.2',
     description='Rule Detection with Feedback Loop Experiment',
     url='',
     author='raphael.ollando',

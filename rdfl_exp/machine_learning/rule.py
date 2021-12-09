@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
 # coding: utf-8
-import math
 import operator
 import random
 from copy import deepcopy
 import re as RegEx
+from datetime import datetime
 from typing import List
 
 import sympy
 from sympy import *
-from sympy.logic.boolalg import Boolean, BooleanTrue
 from z3 import z3
 
 from rdfl_exp.utils import smt
-from rdfl_exp.utils.interval import IntervalSet
 
 # ==== ( Lookup tables ) ==============================================================================================
 
@@ -494,17 +492,18 @@ class Rule(object):
             for field in ctx.keys():
                 if field in symbols.keys():
                     # TODO: Figure out a way to add all the constraints
-                    # z3_formula += [symbols[field] >= ctx[field]['min']]
+                    z3_formula += [symbols[field] >= ctx[field]['min']]
                     z3_formula += [symbols[field] <= ctx[field]['max']]
 
         models = []
-        for _ in range(n):
-
-            # use a random seed so the same model is not generated twice
-            z3.set_option('smt.random_seed', random.randint(0, 2 ** 16))
+        # use a random seed so the same model is not generated twice
+        z3.set_option('smt.arith.random_initial_value', True)
+        # z3.set_option('sat.random_seed', datetime.now().microsecond)
+        z3.set_option('smt.random_seed', datetime.now().microsecond)
+        z3_models = smt.get_model(z3_formula, n)  # Get z3 models
+        # Build the dictionary
+        for z3_model in z3_models:
             model = dict()
-            z3_model = smt.get_z3_model(z3_formula, 1)[0]  # Get a z3 model
-            # Build the dictionary
             for k in symbols.keys():
                 model[k] = z3_model[symbols[k]].as_long()
             models.append(model)
@@ -517,7 +516,12 @@ class Rule(object):
 # ===== ( Methods ) =================================================================================================
 
 # TODO: handle poorly defined conditions, like "(field > value) and (field < value - 1)" (which is impossible)
-def convert_to_fuzzer_actions(rule: Rule, n: int = 1, ctx: dict = None):
+def convert_to_fuzzer_actions(rule: Rule,
+                              n: int = 1,
+                              include_header: bool = False,
+                              enable_mutation: bool = True,
+                              mutation_rate: float = 1.0,
+                              ctx: dict = None):
     """ Transform the rules into a set of fuzzer interpretable actions """
 
     # Verify arguments
@@ -530,7 +534,9 @@ def convert_to_fuzzer_actions(rule: Rule, n: int = 1, ctx: dict = None):
     single_action = {
         "intent" : "MUTATE_PACKET_RULE",
         "target" : "OF_PACKET",
-        "includeHeader": False,
+        "includeHeader": include_header,
+        "enableMutation": enable_mutation,
+        "mutationRateMultiplier": mutation_rate,
         "rule": list()
     }
 

@@ -1,7 +1,6 @@
 from z3 import Z3Exception, Z3_UNINTERPRETED_SORT, is_array, z3
 
-
-def get_z3_model(formula, n):
+def get_model(formula, n):
     result = []
     s = z3.Solver()
     s.add(formula)
@@ -21,8 +20,9 @@ def get_z3_model(formula, n):
             block.append(c != m[d])
         s.add(z3.Or(block))
     return result
-
+# End def get_z3_model
 
 # Return True if a z3 formula has exactly one model.
-def has_exactly_z3_one_model(formula):
-    return len(get_z3_model(formula, 2)) == 1
+def has_exactly_one_model(formula):
+    return len(get_model(formula, 2)) == 1
+# End def has_exactly_one_model

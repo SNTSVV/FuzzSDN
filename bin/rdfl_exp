@@ -13,7 +13,6 @@ from os.path import join
 
 import weka.core.jvm as jvm
 import weka.core.packages as packages
-from weka.core.classes import complete_classname
 
 # Local dependencies
 from rdfl_exp import config, core
@@ -49,6 +48,19 @@ def parse_arguments():
                         type=str,
                         dest='pp_strategy',
                         help="Select which preprocessing strategy to use")
+
+    # Argument to choose disable the mutation of additional fields
+    parser.add_argument('--disable_mutation',
+                        action='store_false',
+                        dest='enable_mutation',
+                        help="Disable the mutation of additional fields upon rule application")
+
+    # Argument to choose the mutation rate of additional fields
+    parser.add_argument('--mutation_rate',
+                        type=float,
+                        default=1.0,
+                        dest='mutation_rate',
+                        help="Sets the mutation rate of additional fields upon rule application")
 
     # Argument to choose the number of sample to generate
     parser.add_argument('-s', '--samples',
