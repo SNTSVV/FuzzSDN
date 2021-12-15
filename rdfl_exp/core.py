@@ -12,6 +12,7 @@ from os.path import join
 from typing import List
 
 import pandas as pd
+from iteround import saferound
 
 import rdfl_exp.experiment.data as exp_data
 import rdfl_exp.experiment.script as exp_script
@@ -91,7 +92,7 @@ _default_input = {
 # ===== ( init function ) ==============================================================================================
 
 def init(args) -> None:
-    
+
     global _context
 
     # Parse the input file
@@ -245,11 +246,8 @@ def run() -> None:
         precision = ml_results['cross-validation'][_context['target_class']]['precision']
 
         # Avoid cases where precision or recall are NaN values
-        if math.isnan(recall):
-            recall = 0.0
-        if math.isnan(precision):
-            precision = 0.0
-
+        recall = 0.0 if math.isnan(recall) else recall
+        precision = 0.0 if math.isnan(precision) else precision
         print("Recall: {:.2f}%, Precision: {:.2f}%".format(recall*100, precision*100))
 
         # Add the rule to the rule set
@@ -313,11 +311,12 @@ def generate_data_from_ruleset(rule_set : RuleSet, sample_size : int):
 
         # Otherwise, we parse the rules and generate data accordingly
         clear_db = True
+        # calculate the budgets
+        budget_list = [int(x) for x in saferound([rule_set.budget(i, method=0) * sample_size for i in range(len(rule_set))], places=0)]
+
         for i in range(len(rule_set)):
-
             # 1. Get the budget for the rule
-            budget = math.floor(rule_set.budget(i, method=0) * sample_size)
-
+            budget = budget_list[i]
             # 2. Print information
             if budget <= 0:
                 print(Style.BOLD, "Budget for Rule {}: ({}) is equal to 0".format(i + 1, rule_set[i]),
