@@ -536,9 +536,14 @@ def convert_to_fuzzer_actions(rule: Rule,
         "target" : "OF_PACKET",
         "includeHeader": include_header,
         "enableMutation": enable_mutation,
-        "mutationRateMultiplier": mutation_rate,
-        "rule": list()
+        "rule": {
+            "id": rule.id,
+            "clauses": list()
+        }
     }
+
+    if enable_mutation:
+        single_action['mutationRateMultiplier'] = mutation_rate
 
     # get the Models
     models = rule.get_models(n, ctx)
@@ -546,7 +551,7 @@ def convert_to_fuzzer_actions(rule: Rule,
     for model in models:
         action = deepcopy(single_action)
         for field in model.keys():
-            action['rule'].append(
+            action['rule']["clauses"].append(
                 {
                     'field': field,
                     'value': model[field]
