@@ -121,7 +121,7 @@ def init(args) -> None:
         'cv_folds'          : input_data['cv_folds'],
 
         # Rule Application
-        "enable_mutation"   : args.enable_mutation if args.enable_mutation else input_data['enable_mutation'],
+        "enable_mutation"   : args.enable_mutation if args.enable_mutation is not None else input_data['enable_mutation'],
         "mutation_rate"     : args.mutation_rate if args.mutation_rate else input_data['mutation_rate'],
 
         # Fuzzer Actions
