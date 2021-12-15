@@ -157,6 +157,9 @@ def run() -> None:
     print(Style.BOLD, "*** Target class: {}".format(_context['target_class']), Style.RESET)
     print(Style.BOLD, "*** Machine learning algorithm: {}".format(_context['ml_algorithm']), Style.RESET)
     print(Style.BOLD, "*** Preprocessing strategy: {}".format(_context['pp_strategy']), Style.RESET)
+    print(Style.BOLD, "*** Mutation: {}".format(_context['enable_mutation']), Style.RESET)
+    if _context['enable_mutation'] is True:
+        print(Style.BOLD, "*** Mutation Rate: {}".format(_context['mutation_rate']), Style.RESET)
 
     while True:  # Infinite loop
 

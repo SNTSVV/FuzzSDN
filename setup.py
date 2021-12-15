@@ -21,6 +21,7 @@ setup(
     # Requirements
     install_requires=[
         # 'javabrigde>=1.0.16',
+        'iteround~=1.0.3',
         'liac-arff>=2.5.0',
         'matplotlib~=3.4.2',
         'mininet~=2.3.0.dev6',

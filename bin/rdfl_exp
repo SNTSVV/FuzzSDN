@@ -50,13 +50,13 @@ def parse_arguments():
                         help="Select which preprocessing strategy to use")
 
     # Argument to choose disable the mutation of additional fields
-    parser.add_argument('--disable_mutation',
+    parser.add_argument('--disable-mutation',
                         action='store_false',
                         dest='enable_mutation',
                         help="Disable the mutation of additional fields upon rule application")
 
     # Argument to choose the mutation rate of additional fields
-    parser.add_argument('--mutation_rate',
+    parser.add_argument('--mutation-rate',
                         type=float,
                         default=1.0,
                         dest='mutation_rate',
