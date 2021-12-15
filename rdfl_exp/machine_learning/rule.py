@@ -363,7 +363,7 @@ class Rule(object):
         if self.expr is None and other.expr is None:
             return self
         elif self.expr is None:
-            return Rule(other.expr)
+            return other
         elif other.expr is None:
             return Rule(self.expr)
         else:
@@ -373,7 +373,7 @@ class Rule(object):
         if self.expr is None and other.expr is None:
             return self
         elif self.expr is None:
-            return Rule(other.expr)
+            return other
         elif other.expr is None:
             return Rule(self.expr)
         else:
@@ -384,6 +384,7 @@ class Rule(object):
             return self
         else:
             return Rule(~self.expr)
+    # End def __invert__
 
     # ====== ( Overloading ) ===========================================================================================
 
@@ -491,15 +492,15 @@ class Rule(object):
         if ctx is not None:
             for field in ctx.keys():
                 if field in symbols.keys():
-                    # TODO: Figure out a way to add all the constraints
                     z3_formula += [symbols[field] >= ctx[field]['min']]
                     z3_formula += [symbols[field] <= ctx[field]['max']]
 
         models = []
         # use a random seed so the same model is not generated twice
+        z3.set_option('auto_config', False)
         z3.set_option('smt.arith.random_initial_value', True)
-        # z3.set_option('sat.random_seed', datetime.now().microsecond)
         z3.set_option('smt.random_seed', datetime.now().microsecond)
+        z3.set_option('smt.phase_selection', 5)
         z3_models = smt.get_model(z3_formula, n)  # Get z3 models
         # Build the dictionary
         for z3_model in z3_models:
