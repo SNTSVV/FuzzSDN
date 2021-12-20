@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # coding: utf-8
+import itertools
 import operator
 import random
 from copy import deepcopy
@@ -254,10 +255,12 @@ class RuleSet(object):
 
         std_rules = list()
         bold_rule = None
+        bold_rule_id = None
 
         for rule in self:
             if rule.expr is None:
                 bold_rule = rule
+                bold_rule_id = rule.id
             else:
                 std_rules.append(rule)
 
@@ -279,6 +282,8 @@ class RuleSet(object):
             bold_rule.false_positives = bold_rule_fp
             bold_rule.class_ = bold_rule_cls
 
+            bold_rule.id = bold_rule_id
+
             self.rules.clear()
             for r in std_rules:
                 self.rules.append(r)
@@ -291,13 +296,20 @@ class RuleSet(object):
 
 class Rule(object):
 
+    new_id = itertools.count()
+
     # ===== ( Constructor ) ====================================================
 
-    def __init__(self, expr, class_=None, cvg: float = 0.0, fp: float = 0.0):
+    def __init__(self, expr, class_=None, cvg: float = 0.0, fp: float = 0.0, _id=None):
         self.expr = expr
         self.class_ = class_
         self.coverage = cvg
         self.false_positives = fp
+
+        if _id is None:
+            self.id = next(Rule.new_id)
+        else:
+            self.id = _id
     # End def __init__
 
     @classmethod
@@ -389,10 +401,8 @@ class Rule(object):
     # ====== ( Overloading ) ===========================================================================================
 
     def __repr__(self):
-        r_str = str(self.expr)
-        if self.class_ is not None:
-            r_str += " => class={} ({}/{})".format(self.class_, self.coverage, self.false_positives)
-        return r_str
+        return "Rule@{:05d}: {} => class={} ({}/{})".format(self.id, str(self.expr), self.class_, self.coverage, self.false_positives)
+    # End def __repr__
 
     # ====== ( Getters ) ===============================================================================================
 

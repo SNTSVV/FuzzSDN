@@ -222,7 +222,8 @@ def run() -> None:
             csv_path=dataset_path,
             arff_path=join(config.tmp_dir(), "dataset.arff"),
             csv_sep=';',
-            relation='dataset_iteration_{}'.format(it)
+            relation='dataset_iteration_{}'.format(it),
+            exclude=['pkt_struct', 'fuzz_info', 'action']
         )
 
         # Save the arff dataset as well

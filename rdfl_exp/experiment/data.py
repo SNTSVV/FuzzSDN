@@ -21,11 +21,13 @@ SQL_DB_PASSWORD         = "b14724x"
 
 BYTES_CSV_COLUMNS = {
     "pkt_struct"    : 0,
-    "data"          : 1,
-    "error_type"    : 2,
-    "error_reason"  : 3,
-    "error_effect"  : 4,
-    "error_trace"   : 5
+    "action"        : 1,
+    "fuzz_info"     : 2,
+    "data"          : 3,
+    "error_type"    : 4,
+    "error_reason"  : 5,
+    "error_effect"  : 6,
+    "error_trace"   : 7
 }
 
 # Dictionary used to produce statistics about the quantity of errors
@@ -174,7 +176,6 @@ def fetch(csv_path: str):
             progress_bar(0, STATS["total"], prefix='Progress:', suffix='Complete', length=100)
             while next_message is not None:
                 # Get the date of the message, and the one of the next message
-
                 current_date = current_message[1]
                 next_date = next_message[1]
                 log_match = []
@@ -199,6 +200,8 @@ def fetch(csv_path: str):
                 byte_csv_row = [None] * len(BYTES_CSV_COLUMNS) if KEEP_TRACE_ON_UNKNOWN else [None] * (len(BYTES_CSV_COLUMNS) - 1)
                 # Add the packet structure
                 byte_csv_row[BYTES_CSV_COLUMNS["pkt_struct"]] = current_message[2].replace("\\\"", "\"")
+                byte_csv_row[BYTES_CSV_COLUMNS["action"]]     = current_message[4].replace("\\\"", "\"")
+                byte_csv_row[BYTES_CSV_COLUMNS["fuzz_info"]]  = current_message[5].replace("\\\"", "\"") if current_message[5] is not None else None
                 # Add the data
                 byte_csv_row[BYTES_CSV_COLUMNS["data"]] = binascii.b2a_base64(current_message[3], newline=False).decode()  # Store the data
 
@@ -237,8 +240,12 @@ def fetch(csv_path: str):
                         log_match += [(log_entry[j][2], log_entry[j][3])]
                     # Delete errors handled as we proceed
                     del log_entry[j]
+
             byte_csv_row = [None] * len(BYTES_CSV_COLUMNS) if KEEP_TRACE_ON_UNKNOWN else [None] * (len(BYTES_CSV_COLUMNS) - 1)
-            byte_csv_row[BYTES_CSV_COLUMNS["pkt_struct"]] = current_message[2].replace("\\\"", "\"") # Add the packet structure
+            byte_csv_row[BYTES_CSV_COLUMNS["pkt_struct"]]   = current_message[2].replace("\\\"", "\"")  # Add the packet structure
+            byte_csv_row[BYTES_CSV_COLUMNS["action"]]       = current_message[4].replace("\\\"", "\"")  # Add the packet structure
+            if current_message[5] is not None:
+                byte_csv_row[BYTES_CSV_COLUMNS["fuzz_info"]]    = current_message[5].replace("\\\"", "\"")  # Add the packet structure
             byte_csv_row[BYTES_CSV_COLUMNS["data"]] = binascii.b2a_base64(current_message[3], newline=False).decode()  # Store the data
             parse_errors(log_match, byte_csv_row,
                          error_index=BYTES_CSV_COLUMNS["error_type"],

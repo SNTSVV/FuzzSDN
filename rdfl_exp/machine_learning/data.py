@@ -12,6 +12,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+__DEBUG = True
 
 # ==== ( Filters ) =====================================================================================================
 
@@ -156,7 +157,13 @@ def format_field_as_feature(dataframe: pandas.DataFrame):
     df = pd.concat([df.iloc[:, :df.columns.get_loc("data")],  # Insert reasons before total_len
                     field_features,
                     df.iloc[:, df.columns.get_loc("data"):]], axis="columns")
-    df.drop(['pkt_struct'], axis='columns', inplace=True)
+
+    if __DEBUG is False:
+        df.drop(['pkt_struct']  , axis='columns', inplace=True)
+        df.drop(['fuzz_info']   , axis='columns', inplace=True)
+        df.drop(['action']      , axis='columns', inplace=True)
+    else:
+        df['fuzz_info'] = df['fuzz_info'].apply(lambda value: json.dumps(value, indent=4))
     df.drop(['data'], axis='columns', inplace=True)
 
     # Format some columns
@@ -393,13 +400,12 @@ def _bytes_to_byte_field(data):
 
 
 def _convert_data(pkt_struct, data):
-
     pkt_struct = json.loads(pkt_struct)
 
     # Create a dictionary to store the data
     fields = list()
     for f in pkt_struct["fields"]:
-        if "oxm_" in f["name"] and "_has_mask" in f["name"]:  #TODO: Change implementation so skipping oxm_X_has_mask is not necessary
+        if "oxm_" in f["name"] and "_has_mask" in f["name"]:  # TODO: Change implementation so skipping oxm_X_has_mask is not necessary
             continue
         fields.append((f["name"], int(f["length"])))
 
@@ -415,7 +421,18 @@ def _convert_data(pkt_struct, data):
         unpack_string = "!"  # Network byte order
         for f in fields:
             unpack_string += "{}s".format(f[1])
-        ofp_packet = struct.unpack(unpack_string, packet[:struct.calcsize(unpack_string)])
+
+        try:
+            ofp_packet = struct.unpack(unpack_string, packet[:struct.calcsize(unpack_string)])
+        except Exception as e:
+            print("unpack_string:", unpack_string)
+            print("struct_size:", struct.calcsize(unpack_string))
+            print("packet size:", len(packet[:struct.calcsize(unpack_string)]))
+            print("partial packet:")
+            print(packet[:struct.calcsize(unpack_string)])
+            print("full packet:")
+            print(packet)
+            raise e
 
         # Fill up the dict
         packet_dict = dict()
