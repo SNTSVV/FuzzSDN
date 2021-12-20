@@ -22,7 +22,7 @@ port                = 22
 username            = "ubuntu"
 password            = "ubuntu"
 
-exp_to_fetch        = "20211207_181723"
+exp_to_fetch        = "20211215_104315"
 old_data            = False
 print_evl_data      = False
 plot_other_class    = False
@@ -110,7 +110,6 @@ def _generate_report(stats: dict):
     #
     rules = stats["classifier"]["rules"]
     target_class = stats['context']['target_class']
-
     # Write about the context
     lines = [
         "======== Context ========\n\n",
@@ -118,8 +117,8 @@ def _generate_report(stats: dict):
         # "Recall Threshold: {:.2f}%\n".format(stats['context']['recall_threshold'] * 100.0),
         "target_class: {}\n".format(stats['context']['target_class']),
         "Samples generated per iterations: {}\n".format(stats['context']['samples_per_iteration']),
-        "mutation of additional fields: {}\n".format(stats['context']['enable_mutation']),
-        "mutation rate: {}\n".format(stats['context']['mutation_rate']) if stats['context']['enable_mutation'] is True else "",
+        "mutation of additional fields: {}\n".format(stats['context']['enable_mutation']) if 'enable_mutation' in stats['context']else "",
+        "mutation rate: {}\n".format(stats['context']['mutation_rate']) if 'enable_mutation' in stats['context'] is True else "",
         # "Data formatting method used: {}\n\n".format(stats['context']['data_format_method']),
         "======== Iteration Summary ========\n\n"
     ]
@@ -445,13 +444,13 @@ def _generate_graphics(stats: dict, show: bool = False):
     ### Draw the F1-Score graph
     ax.set_ylim([0, 1])
     ax.axhline(y=0.5, color='grey', linestyle='--')
-    ax.plot(it_ax,
+    ax.plot(it_ax[:len(stats['datasets']["target_class_ratio"])-1],
             stats['datasets']["target_class_ratio"],
             ls='-',
             marker='x',
             color='blue',
             label=target_class)
-    ax.plot(it_ax,
+    ax.plot(it_ax[:len(stats['datasets']["other_class_ratio"])-1],
             stats['datasets']["other_class_ratio"],
             ls='-',
             marker='^',
@@ -857,6 +856,8 @@ if __name__ == '__main__':
         # Get the class count
         classes_count = df['class'].value_counts()
         total = classes_count[target_class] + classes_count[other_class]
+        print(classes_count[target_class] / total)
+        print(classes_count[other_class] / total)
         stats["datasets"]["target_class_ratio"] += [classes_count[target_class] / total]
         stats["datasets"]["other_class_ratio"] += [classes_count[other_class] / total]
 
