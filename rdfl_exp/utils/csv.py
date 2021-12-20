@@ -34,7 +34,7 @@ def merge(csv_in: list, csv_out, in_sep : list = None, out_sep=','):
 # End def csv
 
 
-def to_arff(csv_path, arff_path, relation, description='', csv_sep=','):
+def to_arff(csv_path, arff_path, relation, description='', csv_sep=',', exclude=None):
     """
     Convert a csv file to an arff file
     :param csv_path: The path to the csv file
@@ -42,9 +42,14 @@ def to_arff(csv_path, arff_path, relation, description='', csv_sep=','):
     :param relation:
     :param description:
     :param csv_sep: The separator used in the csv file
+    :param exclude: the list of columns to be excluded
     """
 
     df = pd.read_csv(csv_path, sep=csv_sep)
+
+    if exclude is not None:
+        for field in exclude:
+            df.drop([field], axis='columns', inplace=True)
 
     # Add the columns attributes to the data
     attributes = []

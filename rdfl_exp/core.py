@@ -12,13 +12,14 @@ from os.path import join
 from typing import List
 
 import pandas as pd
+from iteround import saferound
 
 import rdfl_exp.experiment.data as exp_data
 import rdfl_exp.experiment.script as exp_script
 import rdfl_exp.machine_learning.algorithms as ml_alg
 import rdfl_exp.machine_learning.data as ml_data
 from rdfl_exp import config
-from rdfl_exp.machine_learning.rule import Rule, RuleSet, convert_to_fuzzer_actions
+from rdfl_exp.machine_learning.rule import CTX_PKT_IN_tmp, Rule, RuleSet, convert_to_fuzzer_actions
 from rdfl_exp.stats import Stats
 from rdfl_exp.utils import csv
 from rdfl_exp.utils.terminal import Style, progress_bar
@@ -29,11 +30,6 @@ _log = logging.getLogger(__name__)
 _is_init = False
 
 _context = {
-    # Machine Learning
-    "pp_strategy"           : str(),
-    "ml_algorithm"          : str(),
-    "cv_folds"              : int(),
-
     # Classifying
     "target_class"          : str(),
     "other_class"           : str(),
@@ -41,6 +37,15 @@ _context = {
     # Iterations
     "nb_of_samples"         : int(),
     "it_max"                : int(),
+
+    # Machine Learning
+    "pp_strategy"           : str(),
+    "ml_algorithm"          : str(),
+    "cv_folds"              : int(),
+
+    # Rule Application
+    "enable_mutation"       : bool(),
+    "mutation_rate"         : float(),
 
     # Default fuzzer instructions
     'criteria'              : list(),
@@ -50,11 +55,6 @@ _context = {
 
 _default_input = {
 
-    # Machine Learning
-    "pp_strategy"           : None,
-    "ml_algorithm"          : 'RIPPER',
-    "cv_folds"              : 10,
-
     # Classifying
     "target_class"          : "unknown_reason",
     "other_class"           : "known_reason",
@@ -62,6 +62,15 @@ _default_input = {
     # Iterations
     "n_samples"             : 500,
     "max_iterations"        : 50,
+
+    # Machine Learning
+    "pp_strategy"           : None,
+    "ml_algorithm"          : 'RIPPER',
+    "cv_folds"              : 10,
+
+    # Rule Application
+    "enable_mutation"       : True,
+    "mutation_rate"         : 1.0,
 
     # Default fuzzer instructions
     "criteria" : [
@@ -83,7 +92,7 @@ _default_input = {
 # ===== ( init function ) ==============================================================================================
 
 def init(args) -> None:
-    
+
     global _context
 
     # Parse the input file
@@ -98,11 +107,6 @@ def init(args) -> None:
     # Fill the context dictionary
     _context = {
 
-        # Machine Learning
-        'ml_algorithm'      : args.ml_algorithm if args.ml_algorithm else input_data['ml_algorithm'],
-        'pp_strategy'       : args.pp_strategy if args.pp_strategy else input_data['pp_strategy'],
-        'cv_folds'          : input_data['cv_folds'],
-
         # Classifying
         'target_class'      : input_data['target_class'],  # Class to predict
         'other_class'       : input_data['other_class'],  # Class to predict
@@ -110,6 +114,15 @@ def init(args) -> None:
         # Iterations
         'it_max'            : input_data['max_iterations'],
         'nb_of_samples'     : args.samples if args.samples else input_data['n_samples'],
+
+        # Machine Learning
+        'ml_algorithm'      : args.ml_algorithm if args.ml_algorithm else input_data['ml_algorithm'],
+        'pp_strategy'       : args.pp_strategy if args.pp_strategy else input_data['pp_strategy'],
+        'cv_folds'          : input_data['cv_folds'],
+
+        # Rule Application
+        "enable_mutation"   : args.enable_mutation if args.enable_mutation is not None else input_data['enable_mutation'],
+        "mutation_rate"     : args.mutation_rate if args.mutation_rate else input_data['mutation_rate'],
 
         # Fuzzer Actions
         'criteria'          : input_data['criteria'],
@@ -144,6 +157,9 @@ def run() -> None:
     print(Style.BOLD, "*** Target class: {}".format(_context['target_class']), Style.RESET)
     print(Style.BOLD, "*** Machine learning algorithm: {}".format(_context['ml_algorithm']), Style.RESET)
     print(Style.BOLD, "*** Preprocessing strategy: {}".format(_context['pp_strategy']), Style.RESET)
+    print(Style.BOLD, "*** Mutation: {}".format(_context['enable_mutation']), Style.RESET)
+    if _context['enable_mutation'] is True:
+        print(Style.BOLD, "*** Mutation Rate: {}".format(_context['mutation_rate']), Style.RESET)
 
     while True:  # Infinite loop
 
@@ -196,44 +212,51 @@ def run() -> None:
             total = classes_count[_context['target_class']] + classes_count[_context['other_class']]
 
         # Save the dataset to the experience folder
-        shutil.copy(src=dataset_path,
-                    dst=join(config.EXP_PATH, "datasets", "it_{}.csv".format(it)))
+        shutil.copy(
+            src=dataset_path,
+            dst=join(config.EXP_PATH, "datasets", "it_{}.csv".format(it))
+        )
 
         # Convert the set to an arff file
         csv.to_arff(
             csv_path=dataset_path,
             arff_path=join(config.tmp_dir(), "dataset.arff"),
             csv_sep=';',
-            relation='dataset_iteration_{}'.format(it)
+            relation='dataset_iteration_{}'.format(it),
+            exclude=['pkt_struct', 'fuzz_info', 'action']
+        )
+
+        # Save the arff dataset as well
+        shutil.copy(
+            src=join(config.tmp_dir(), "dataset.arff"),
+            dst=join(config.EXP_PATH, "datasets", "it_{}.arff".format(it))
         )
 
         # 3. Perform machine learning algorithms
         start_of_ml = time.time()
 
-        out_rules, evl_result = ml_alg.learn(
-            join(config.tmp_dir(), "dataset.arff"),
+        ml_results = ml_alg.learn(
+            data_path=join(config.tmp_dir(), "dataset.arff"),
             algorithm=_context['ml_algorithm'],
             preprocess_strategy=_context['pp_strategy'],
             n_folds=_context['cv_folds'],
             seed=12345,
-            classes=(_context['target_class'], _context["other_class"]))
+            classes=(_context['target_class'], _context["other_class"])
+        )
         end_of_ml = time.time()
 
         # Get recall and precision from the evaluator results
-        recall    = evl_result[_context['target_class']]['recall']
-        precision = evl_result[_context['target_class']]['precision']
+        recall    = ml_results['cross-validation'][_context['target_class']]['recall']
+        precision = ml_results['cross-validation'][_context['target_class']]['precision']
 
         # Avoid cases where precision or recall are NaN values
-        if math.isnan(recall):
-            recall = 0.0
-        if math.isnan(precision):
-            precision = 0.0
-
+        recall = 0.0 if math.isnan(recall) else recall
+        precision = 0.0 if math.isnan(precision) else precision
         print("Recall: {:.2f}%, Precision: {:.2f}%".format(recall*100, precision*100))
 
         # Add the rule to the rule set
         rule_set.clear()
-        for r in out_rules:
+        for r in ml_results['rules']:
             rule_set.add_rule(r)
 
         # End of iteration total time
@@ -243,7 +266,7 @@ def run() -> None:
         Stats.add_iteration_statistics(
             learning_time=end_of_ml - start_of_ml,
             iteration_time=end_of_it - start_of_it,
-            clsf_res=evl_result,
+            ml_results=ml_results,
             rule_set=rule_set
         )
         Stats.save(join(config.EXP_PATH, 'stats.json'))
@@ -292,14 +315,15 @@ def generate_data_from_ruleset(rule_set : RuleSet, sample_size : int):
 
         # Otherwise, we parse the rules and generate data accordingly
         clear_db = True
+        # calculate the budgets
+        budget_list = [int(x) for x in saferound([rule_set.budget(i, method=0) * sample_size for i in range(len(rule_set))], places=0)]
+
         for i in range(len(rule_set)):
-
             # 1. Get the budget for the rule
-            budget = math.floor(rule_set.budget(i) * sample_size)
-
+            budget = budget_list[i]
             # 2. Print information
             if budget <= 0:
-                print(Style.BOLD, "Budget for Rule {}: ({}) is equal to 0".format(budget, i + 1, rule_set[i]),
+                print(Style.BOLD, "Budget for Rule {}: ({}) is equal to 0".format(i + 1, rule_set[i]),
                       Style.RESET)
                 print("skipping the rule...")
                 continue
@@ -310,24 +334,29 @@ def generate_data_from_ruleset(rule_set : RuleSet, sample_size : int):
                          suffix='Complete ({}/{})'.format(0, budget),
                          length=100)
 
-            # 3. Build the fuzzer instruction
-            for it_ind in range(budget):
+            # 3. Get all the actions to apply
+            # Build a new instruction at each generation
+            try:
+                action_list = convert_to_fuzzer_actions(rule_set[i],
+                                                        include_header=False,
+                                                        enable_mutation=_context['enable_mutation'],
+                                                        mutation_rate=_context['mutation_rate'],
+                                                        n=budget,
+                                                        ctx=CTX_PKT_IN_tmp)
+            except ValueError as e:
+                # Happens if the rule is invalid or impossible to satisfy
+                _log.warning("Generation of actions failed with error: {}".format(str(e)))
+                _log.warning("Skipping the rule. Less data will be generated.")
+                continue
 
-                # Build a new instruction at each generation
-                try:
-                    action = convert_to_fuzzer_actions(rule_set[i])
-                except ValueError as e:
-                    # Happens if the rule is invalid or impossible to satisfy
-                    _log.warning("str(e)")
-                    _log.warning("Skipping the rule. Less data will be generated.")
-                    break
-
+            # 4. Build the fuzzer instruction
+            for it_ind in range(len(action_list)):
                 fuzz_instr = {
                     "instructions": [
                         {
                             "criteria": _context['criteria'],
                             "matchLimit": _context['match_limit'],
-                            "actions": [action]
+                            "actions": [action_list[it_ind]]
                         }
                     ]
                 }

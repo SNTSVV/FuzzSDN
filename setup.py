@@ -8,7 +8,7 @@ except ImportError:
 setup(
     # Metadata
     name='rdfl_exp',
-    version='0.0.1',
+    version='0.0.2',
     description='Rule Detection with Feedback Loop Experiment',
     url='',
     author='raphael.ollando',
@@ -20,16 +20,17 @@ setup(
 
     # Requirements
     install_requires=[
-        'pandas~=1.2.4',
-        'numpy>=1.20.3',
-        'matplotlib~=3.4.2',
-        'sympy~=1.8',
-        # 'scikit-learn~=0.24.2',
         # 'javabrigde>=1.0.16',
-        # 'python-weka-wrapper3>=0.2.3',
-        'mysqlclient~=2.0.3',
-        'mininet~=2.3.0.dev6',
+        'iteround~=1.0.3',
         'liac-arff>=2.5.0',
+        'matplotlib~=3.4.2',
+        'mininet~=2.3.0.dev6',
+        'mysqlclient~=2.0.3',
+        'numpy>=1.20.3',
+        'pandas~=1.2.4',
+        # 'python-weka-wrapper3>=0.2.3',
+        'sympy~=1.8',
+        'z3-solver>=4.8.12.0',
     ],
 
     # Packages and Scripts

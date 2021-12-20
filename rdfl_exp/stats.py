@@ -27,7 +27,7 @@ class Stats:
     # End def save
 
     @classmethod
-    def add_iteration_statistics(cls, learning_time, iteration_time, clsf_res, rule_set : RuleSet):
+    def add_iteration_statistics(cls, learning_time, iteration_time, ml_results: dict, rule_set: RuleSet):
 
         # List the classes
         classes = (cls._stats["context"]["target_class"],
@@ -40,22 +40,28 @@ class Stats:
         cls._stats["timing"]["learning"]    += [str(learning_time)]
         cls._stats["timing"]["iteration"]   += [str(iteration_time)]
 
-        # Update the classifier results
-        cls._stats["classifier"]["instances"]  += [clsf_res['total_num_instances']]
-        cls._stats["classifier"]["accuracy"]   += [clsf_res['correctly_classified'] / clsf_res['total_num_instances']]
+        # Update the machine learning results
+        cls._stats["classifier"]["instances"]  += [ml_results['evaluation']['total_num_instances']]
+        cls._stats["classifier"]["accuracy"]   += [ml_results['evaluation']['correctly_classified'] / ml_results['evaluation']['total_num_instances']]
         cls._stats["classifier"]["confidence"] += [rule_set.confidence()]
         cls._stats["classifier"]["rules"]      += [[str(r) for r in rule_set]]
 
-        for class_ in classes:
-            if class_ in clsf_res:
-                cls._stats["classifier"][class_]["tp_rate"]            += [clsf_res[class_]['tp_rate']]
-                cls._stats["classifier"][class_]["fp_rate"]            += [clsf_res[class_]['fp_rate']]
-                cls._stats["classifier"][class_]["precision"]          += [clsf_res[class_]['precision']]
-                cls._stats["classifier"][class_]["recall"]             += [clsf_res[class_]['recall']]
-                cls._stats["classifier"][class_]["f_measure"]          += [clsf_res[class_]['f_measure']]
-                cls._stats["classifier"][class_]["mcc"]                += [clsf_res[class_]['mcc']]
-                cls._stats["classifier"][class_]["roc"]                += [clsf_res[class_]['roc']]
-                cls._stats["classifier"][class_]["prc"]                += [clsf_res[class_]['prc']]
+        for evl_method in ('cross-validation', 'evaluation'):
+            for class_ in classes:
+                if class_ in ml_results[evl_method]:
+                    cls._stats["classifier"][evl_method][class_]["tp_rate"]     += [ml_results[evl_method][class_]['tp_rate']]
+                    cls._stats["classifier"][evl_method][class_]["fp_rate"]     += [ml_results[evl_method][class_]['fp_rate']]
+                    cls._stats["classifier"][evl_method][class_]["precision"]   += [ml_results[evl_method][class_]['precision']]
+                    cls._stats["classifier"][evl_method][class_]["recall"]      += [ml_results[evl_method][class_]['recall']]
+                    cls._stats["classifier"][evl_method][class_]["f_measure"]   += [ml_results[evl_method][class_]['f_measure']]
+                    cls._stats["classifier"][evl_method][class_]["mcc"]         += [ml_results[evl_method][class_]['mcc']]
+                    cls._stats["classifier"][evl_method][class_]["roc"]         += [ml_results[evl_method][class_]['roc']]
+                    cls._stats["classifier"][evl_method][class_]["prc"]         += [ml_results[evl_method][class_]['prc']]
+
+        # Add the ml_context if there is one:
+        if ml_results['context'] is not None:
+            cls._stats['ml_ctx'] += [ml_results['context']]
+
     # End def add_iteration_statistics
 
     # ====== ( create the dict ) ===========================================================================================
@@ -66,7 +72,7 @@ class Stats:
         Create the dictionary used by the stats class to generate
         :param target_class: The class that is the target of the prediction
         :param other_class:  The other class of the classifier
-        :return: An empty statistics dictionnary
+        :return: An empty statistics dictionary
         """
         stats = dict()
 
@@ -89,17 +95,20 @@ class Stats:
         stats["classifier"]["confidence"]               = list()
         stats["classifier"]["rules"]                    = list()
 
-        for class_ in (target_class, other_class):
-            stats["classifier"][class_]                 = dict()
-            stats["classifier"][class_]["tp_rate"]      = list()
-            stats["classifier"][class_]["fp_rate"]      = list()
-            stats["classifier"][class_]["precision"]    = list()
-            stats["classifier"][class_]["recall"]       = list()
-            stats["classifier"][class_]["f_measure"]    = list()
-            stats["classifier"][class_]["mcc"]          = list()
-            stats["classifier"][class_]["roc"]          = list()
-            stats["classifier"][class_]["prc"]          = list()
+        stats["classifier"].update({'cross-validation': dict(), 'evaluation': dict()})
+        for evl_method in ('cross-validation', 'evaluation'):
+            stats["classifier"][evl_method].update({target_class: dict(), other_class: dict()})
+            for class_ in (target_class, other_class):
+                stats["classifier"][evl_method][class_]["tp_rate"]      = list()
+                stats["classifier"][evl_method][class_]["fp_rate"]      = list()
+                stats["classifier"][evl_method][class_]["precision"]    = list()
+                stats["classifier"][evl_method][class_]["recall"]       = list()
+                stats["classifier"][evl_method][class_]["f_measure"]    = list()
+                stats["classifier"][evl_method][class_]["mcc"]          = list()
+                stats["classifier"][evl_method][class_]["roc"]          = list()
+                stats["classifier"][evl_method][class_]["prc"]          = list()
 
+        stats["ml_ctx"] = list()
         return stats
     # End def _create_stats_dict
 # End class Stats
