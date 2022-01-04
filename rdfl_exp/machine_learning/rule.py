@@ -536,7 +536,7 @@ def convert_to_fuzzer_actions(rule: Rule,
     """ Transform the rules into a set of fuzzer interpretable actions """
 
     # Verify arguments
-    if n <= 1:
+    if n < 1:
         raise ValueError("\"n\" must be >= 1 (got: {})".format(n))
 
     # Prepare actions

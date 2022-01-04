@@ -8,18 +8,16 @@ import os
 import shutil
 import time
 from os.path import join
-# Local dependencies
-from typing import List
 
 import pandas as pd
 from iteround import saferound
 
 import rdfl_exp.experiment.data as exp_data
-import rdfl_exp.experiment.script as exp_script
 import rdfl_exp.machine_learning.algorithms as ml_alg
 import rdfl_exp.machine_learning.data as ml_data
 from rdfl_exp import config
-from rdfl_exp.machine_learning.rule import CTX_PKT_IN_tmp, Rule, RuleSet, convert_to_fuzzer_actions
+from rdfl_exp.experiment.experimenter import Experimenter, FuzzMode
+from rdfl_exp.machine_learning.rule import CTX_PKT_IN_tmp, RuleSet, convert_to_fuzzer_actions
 from rdfl_exp.stats import Stats
 from rdfl_exp.utils import csv
 from rdfl_exp.utils.terminal import Style, progress_bar
@@ -71,21 +69,6 @@ _default_input = {
     # Rule Application
     "enable_mutation"       : True,
     "mutation_rate"         : 1.0,
-
-    # Default fuzzer instructions
-    "criteria" : [
-                {
-                    "packetType": "packet_in",
-                    "ethType": "arp"
-                }
-            ],
-    "match_limit": 1,
-    "default_actions": [
-        {
-            "intent": "mutate_packet",
-            "includeHeader": False
-        }
-    ]
 }
 
 
@@ -94,6 +77,8 @@ _default_input = {
 def init(args) -> None:
 
     global _context
+
+    #
 
     # Parse the input file
     if args.in_file:
@@ -123,12 +108,6 @@ def init(args) -> None:
         # Rule Application
         "enable_mutation"   : args.enable_mutation if args.enable_mutation is not None else input_data['enable_mutation'],
         "mutation_rate"     : args.mutation_rate if args.mutation_rate else input_data['mutation_rate'],
-
-        # Fuzzer Actions
-        'criteria'          : input_data['criteria'],
-        'match_limit'       : input_data['match_limit'],
-        'default_actions'   : input_data['default_actions'],
-
     }
 
     ## Initialize the statistics
@@ -161,6 +140,12 @@ def run() -> None:
     if _context['enable_mutation'] is True:
         print(Style.BOLD, "*** Mutation Rate: {}".format(_context['mutation_rate']), Style.RESET)
 
+    # Set up the experimenter
+    experimenter = Experimenter()
+    experimenter.mutation_rate = _context['mutation_rate']
+    experimenter.set_scenario("onos_2node_1ping")
+    experimenter.set_criterion("first_arp_message")
+
     while True:  # Infinite loop
 
         # Register timestamp at the beginning of the iteration
@@ -172,7 +157,17 @@ def run() -> None:
         print(Style.BOLD, "*** precision: {:.2f}".format(precision), Style.RESET)
 
         # 1. Generate mew data from the rule set
-        generate_data_from_ruleset(rule_set, _context['nb_of_samples'])
+
+        if not rule_set.has_rules():
+            print("No rules in set of rule. Generating random samples")
+            _log.info("No rules in set of rule. Generating random samples")
+            experimenter.set_fuzzing_mode(FuzzMode.RANDOM)
+            experimenter.set_rule_set(None)
+            experimenter.run(_context['nb_of_samples'])
+        else:
+            experimenter.set_fuzzing_mode(FuzzMode.RULE)
+            experimenter.set_rule_set(rule_set)
+            experimenter.run(_context['nb_of_samples'])
 
         # 2. Fetch the dataset
         if not os.path.exists(dataset_path):
@@ -280,102 +275,3 @@ def run() -> None:
         it += 1
     # End of main loop
 # End def run
-
-
-def generate_data_from_ruleset(rule_set : RuleSet, sample_size : int):
-    """
-    Instructs the fuzzer to generate given amount of data depending on the composition of a ruleset.
-
-    If the rule_set is empty, then the data will be generated randomly.
-
-    :param rule_set: The RuleSet to be used
-    :param sample_size: the number of samples to be generated
-    """
-
-    # If no rules where generated, we use the default fuzzer action and
-    # generate the required amount of data
-    if not rule_set.has_rules():
-        print("No rules in set of rule. Generating random samples")
-        _log.info("No rules in set of rule. Generating random samples")
-
-        fuzz_instr = {
-            "criteria"  : _context['criteria'],
-            "matchLimit": _context['match_limit'],
-            "actions"   : _context['default_actions']
-        }
-
-        # Build the fuzzer instruction and collect 'nb_of_samples' data
-        exp_script.run(
-            count=sample_size,
-            instructions=json.dumps({"instructions": [fuzz_instr]}),
-            clear_db=True  # Clear the database before the experiment on the first iteration
-        )
-
-    else:
-
-        # Otherwise, we parse the rules and generate data accordingly
-        clear_db = True
-        # calculate the budgets
-        budget_list = [int(x) for x in saferound([rule_set.budget(i, method=0) * sample_size for i in range(len(rule_set))], places=0)]
-
-        for i in range(len(rule_set)):
-            # 1. Get the budget for the rule
-            budget = budget_list[i]
-            # 2. Print information
-            if budget <= 0:
-                print(Style.BOLD, "Budget for Rule {}: ({}) is equal to 0".format(i + 1, rule_set[i]),
-                      Style.RESET)
-                print("skipping the rule...")
-                continue
-
-            print(Style.BOLD, "Generating {} samples for Rule {}: ({})".format(budget, i+1, rule_set[i]), Style.RESET)
-            progress_bar(0, budget,
-                         prefix='Progress:',
-                         suffix='Complete ({}/{})'.format(0, budget),
-                         length=100)
-
-            # 3. Get all the actions to apply
-            # Build a new instruction at each generation
-            try:
-                action_list = convert_to_fuzzer_actions(rule_set[i],
-                                                        include_header=False,
-                                                        enable_mutation=_context['enable_mutation'],
-                                                        mutation_rate=_context['mutation_rate'],
-                                                        n=budget,
-                                                        ctx=CTX_PKT_IN_tmp)
-            except ValueError as e:
-                # Happens if the rule is invalid or impossible to satisfy
-                _log.warning("Generation of actions failed with error: {}".format(str(e)))
-                _log.warning("Skipping the rule. Less data will be generated.")
-                continue
-
-            # 4. Build the fuzzer instruction
-            for it_ind in range(len(action_list)):
-                fuzz_instr = {
-                    "instructions": [
-                        {
-                            "criteria": _context['criteria'],
-                            "matchLimit": _context['match_limit'],
-                            "actions": [action_list[it_ind]]
-                        }
-                    ]
-                }
-
-                # 4. generate the data for the calculated rule
-                _log.debug("Fuzzer instructions {}".format(json.dumps(fuzz_instr)))
-
-                # Run the script
-                exp_script.run(
-                    count=1,
-                    instructions=json.dumps(fuzz_instr),
-                    clear_db=clear_db,
-                    quiet=True
-                    # Clear the database before the experiment if it is the first rule
-                )
-                clear_db = False  # disable the clearing of the database
-                # Update the progress bar
-                progress_bar(it_ind + 1, budget,
-                             prefix='Progress:',
-                             suffix='Complete ({}/{})'.format(it_ind + 1, budget),
-                             length=100)
-# End def generate_data_from_ruleset

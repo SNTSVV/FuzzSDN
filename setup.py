@@ -8,7 +8,7 @@ except ImportError:
 setup(
     # Metadata
     name='rdfl_exp',
-    version='0.0.2',
+    version='0.1.0',
     description='Rule Detection with Feedback Loop Experiment',
     url='',
     author='raphael.ollando',
@@ -28,6 +28,7 @@ setup(
         'mysqlclient~=2.0.3',
         'numpy>=1.20.3',
         'pandas~=1.2.4',
+        'pexpect~=4.8.0',
         # 'python-weka-wrapper3>=0.2.3',
         'sympy~=1.8',
         'z3-solver>=4.8.12.0',

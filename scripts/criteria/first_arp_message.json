@@ -1,0 +1,9 @@
+{
+    "criteria": [
+        {
+            "packetType": "packet_in",
+            "ethType": "arp"
+        }
+    ],
+    "matchLimit": 1
+}

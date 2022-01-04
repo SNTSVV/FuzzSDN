@@ -18,12 +18,13 @@ import logging
 # ===== ( Globals ) ============================================================
 
 # Directories
-USR_HOME    = os.path.expanduser('~')               # Path to user home directory
-RDFL_ROOT   = os.path.join(USR_HOME, ".rdfl_exp")   # Root path of the application
-LOG_PATH    = os.path.join(RDFL_ROOT, "log")        # Path to the log directory
-OUT_PATH    = os.path.join(RDFL_ROOT, "out")        # Path to the output directory
-RUN_PATH    = "/var/run/rdfl_exp"                   # Path to the run directory
-EXP_PATH    = str()                                 # Path to the experiment folder. Defined when running config.init
+USR_HOME    = os.path.expanduser('~')                   # Path to user home directory
+RDFL_ROOT   = os.path.join(USR_HOME, ".rdfl_exp")       # Root path of the application
+LOG_PATH    = RDFL_ROOT                                 # Path to the log directory
+LOG_NAME    = "rdfl_exp.log"
+OUT_PATH    = os.path.join(RDFL_ROOT, "out")            # Path to the output directory
+RUN_PATH    = "/var/run/rdfl_exp"                       # Path to the run directory
+EXP_PATH    = str()                                     # Path to the experiment folder. Defined when running config.init
 
 # Variables
 CLEANUP     = True  # Whether or not a cleanup should be performed
@@ -211,11 +212,6 @@ def _setup_pid():
 def _setup_logger():
 
     # TODO: add a header
-
-    # determine the log path
-    log_file = "{}.log".format(datetime.now().strftime("%Y%m%d_%H%M%S"))
-    path_to_logfile = join(LOG_PATH, log_file)
-
     # Remove all handlers associated with the root logger object.
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
@@ -237,8 +233,8 @@ def _setup_logger():
 
     # Add the basic configuration
     logging.basicConfig(
-        filename=path_to_logfile,
-        filemode='a',
+        filename=os.path.join(LOG_PATH, LOG_NAME),
+        filemode='w',
         format='%(asctime)s,%(msecs)d | %(name)s | %(levelname)s | %(message)s',
         datefmt='%H:%M:%S',
         level=logging.DEBUG,
