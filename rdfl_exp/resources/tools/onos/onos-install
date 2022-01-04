@@ -143,17 +143,19 @@ fi
 if [ $_arg_service == "on" ]; then sysd=true; fi
 if [ $_arg_start == "on" ]; then start=true; fi
 
-export RDFL_ROOT=~/cff/RDFL_EXP
-. $RDFL_ROOT/tools/onos/onos-env
+# move to script directory
+cd "$(dirname "$0")" || exit
+# Load onos-env script
+source ./onos-env
 
 # If the -f was given, attempt uninstall first.
 if [ -d "$ONOS_INSTALL_DIR" ]; then
   if [ -n "$uninstall" ]; then
 #    echo -n "Uninstalling ONOS... "
-    (source $RDFL_ROOT/tools/onos/onos-uninstall "${1:-$OCI}")
+    (source ./onos-uninstall "${1:-$OCI}")
 #    echo "done"
   else
-    installed_version="$(cat ${ONOS_INSTALL_DIR}/VERSION)"
+    installed_version="$(cat "${ONOS_INSTALL_DIR}/VERSION")"
     echo "ONOS is already installed (version=${installed_version})"
     exit 0
   fi
@@ -162,8 +164,8 @@ fi
 
 if ! id -u "$ONOS_USER" &>/dev/null; then
 #  echo "Creating ${ONOS_USER}"
-  sudo sudo adduser $ONOS_USER --system --group --shell /bin/bash
-  sudo usermod -aG sudo $ONOS_USER
+  sudo sudo adduser "$ONOS_USER" --system --group --shell /bin/bash
+  sudo usermod -aG sudo "$ONOS_USER"
 fi
 
 # Download the tar directory
@@ -203,10 +205,9 @@ if [ ! -z $mvn_settings ]; then
 fi
 
 # Drop log level for the console
-echo 'log4j.logger.org.apache.sshd = WARN' >>$ONOS_INSTALL_DIR/$KARAF_DIST/etc/org.ops4j.pax.logging.cfg
+echo 'log4j.logger.org.apache.sshd = WARN' >> "$ONOS_INSTALL_DIR/$KARAF_DIST/etc/org.ops4j.pax.logging.cfg"
 # remove verbose bundle detail from log layout
-echo 'log4j.appender.out.layout.ConversionPattern=%d{ISO8601} | %-5.5p | %-16.16t | %-32.32c{1} | %X{bundle.id} | %m%n' \
-  >>"${ONOS_INSTALL_DIR}/${KARAF_DIST}/etc/org.ops4j.pax.logging.cfg"
+echo 'log4j.appender.out.layout.ConversionPattern=%d{ISO8601} | %-5.5p | %-16.16t | %-32.32c{1} | %X{bundle.id} | %m%n' >> "${ONOS_INSTALL_DIR}/${KARAF_DIST}/etc/org.ops4j.pax.logging.cfg"
 
 #echo "done"
 # Set up and enable the ONOS service on systemd-based systems
@@ -217,7 +218,7 @@ if [ -n "$sysd" ]; then
 fi
 
 # Configure the ONOS installation
-$RDFL_ROOT/tools/onos/onos-config localhost
+./onos-config localhost
 
 # Upload the shared cluster key if present
 #[ -f "$ONOS_CLUSTER_KEY_FILE" ] && onos-push-cluster-key $1
@@ -226,7 +227,7 @@ echo "ONOS is installed"
 
 # Unless -n option was given, attempt to ignite the ONOS service.
 if [ -n "$start" ]; then
-  $ONOS_INSTALL_DIR/bin/onos-service localhost start || true
+ "$ONOS_INSTALL_DIR"/bin/onos-service localhost start || true
 fi
 
 

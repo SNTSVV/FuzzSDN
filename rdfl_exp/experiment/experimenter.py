@@ -4,19 +4,16 @@
 import importlib.util
 import json
 import logging
-import os
 import re
-import time
-from timeit import default_timer as timer
 from enum import Enum
+from importlib import resources
+from timeit import default_timer as timer
 
 from iteround import saferound
 
-from rdfl_exp.machine_learning.rule import CTX_PKT_IN_tmp, Rule, RuleSet, convert_to_fuzzer_actions
+import rdfl_exp.resources.criteria
+from rdfl_exp.machine_learning.rule import CTX_PKT_IN_tmp, convert_to_fuzzer_actions
 from rdfl_exp.utils.terminal import progress_bar
-
-workdir = re.sub(r"(?<={})[\w\W]*".format("RDFL_EXP"), "", os.getcwd())
-os.chdir(workdir)
 
 
 class FuzzMode(Enum):
@@ -36,12 +33,12 @@ class Experimenter:
         self.log = logging.getLogger(__name__)
         self.safe_mode = safe_mode if isinstance(safe_mode, bool) else True
 
-        self.scenario  = None
+        self.scenario = None
         self.criterion = dict()
 
         # Fuzzing parameters
         self.fuzz_mode = FuzzMode.UNDEFINED
-        self.rule_set  = None
+        self.rule_set = None
         self.enable_mutation = True
         self.mutation_rate = 1.0
     # End def __init__
@@ -52,25 +49,14 @@ class Experimenter:
         :param name: name of the scenario
         :return:
         """
-
         # Check if the scenario exists
-        scenario_filename = "{}.py".format(name)
-        scenario_path = None
-        for dir_path, _, filenames in os.walk(os.path.join(os.getcwd(), "scripts/scenarios/")):
-            for filename in filenames:
-                if filename == scenario_filename:
-                    scenario_path = os.path.join(dir_path, filename)
-                    break
-            if scenario_path is not None:
-                break
-
-        if scenario_path is None or not os.path.isfile(scenario_path):
-            raise FileNotFoundError("Couldn't find scenario \"{}\".".format(name))
-
+        scenario_pkg = "rdfl_exp.resources.scenarios.{0}.{0}".format(name)
         try:
-            spec = importlib.util.spec_from_file_location(name , scenario_path)
-            self.scenario = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(self.scenario)
+            self.scenario = importlib.import_module(scenario_pkg)
+        except ModuleNotFoundError as e:
+            self.log.error("Couldn't find scenario \"{}\".".format(name))
+            if self.safe_mode is True:
+                raise e
         except Exception as e:
             self.log.exception("Uncaught exception while importing scenario \"{}\"".format(name))
             raise e
@@ -78,7 +64,7 @@ class Experimenter:
             self.log.info("Loaded scenario {}".format(name))
     # End def set_experiment
 
-    def set_fuzzing_mode(self, mode : FuzzMode):
+    def set_fuzzing_mode(self, mode: FuzzMode):
         self.fuzz_mode = mode
         self.log.debug("Current fuzzing mode: {}".format(mode))
     # End def set_fuzzer_mode
@@ -94,38 +80,29 @@ class Experimenter:
         :return:
         """
         criterion_file_name = "{}.json".format(name)
-        criterion_path = None
 
-        for dir_path, _, filenames in os.walk(os.path.join(os.getcwd(), "scripts/criteria/")):
-            for filename in filenames:
-                if filename == criterion_file_name:
-                    criterion_path = os.path.join(dir_path, filename)
-                    break
-            if criterion_path is not None:
-                break
+        try:
+            # Load the criteria
+            criterion = resources.read_text(rdfl_exp.resources.criteria, criterion_file_name)
 
-        # check if the criteria has been set
-        if criterion_path is None or not os.path.isfile(criterion_path):
-            raise FileNotFoundError("Couldn't find criterion \"{}\")".format(criterion_path))
+            # Replace the variables by arguments
+            pattern = re.compile(r'(?<=\")(\$\w+)(?=\")')
+            for _var in re.findall(pattern, criterion):
+                _var_arg = _var.replace('$', '')
+                if _var_arg in kwargs:
+                    criterion = criterion.replace(_var, kwargs.get(_var_arg))
+                else:
+                    # TODO: Mayber raise and error instead ?
+                    self.log.warning("No value defined to replace \"{}\" in criterion \"{}\"".format(_var, name))
 
-        # Load the file
-        with open(criterion_path, 'r') as file:
-            criterion = file.read()
+            # Finally store the current criterion
+            self.log.info("Loaded criterion \"{}\"".format(name))
+            self.criterion = json.loads(criterion)
 
-        # Replace the variables by arguments
-        pattern = re.compile(r'(?<=\")(\$\w+)(?=\")')
-        for _var in re.findall(pattern, criterion):
-            _var_arg = _var.replace('$', '')
-            if _var_arg in kwargs:
-                criterion = criterion.replace(_var, kwargs.get(_var_arg))
-            else:
-                # TODO: replace by warning log and raise error if safe_mode is false
-                self.log.warning("No value define to replace \"{}\" in criterion \"{}\"".format(_var, name))
-                print("No value define to replace \"{}\" in criterion \"{}\"".format(_var, name))
-
-        # Finally store the current criterion
-        self.log.info("Loaded criterion \"{}\"".format(name))
-        self.criterion = json.loads(criterion)
+        except FileNotFoundError as e:
+            self.log.error("Couldn't find criterion \"{}\".".format(name))
+            if self.safe_mode is True:
+                raise e
     # End def set_rule
 
     def run(self, count=1):
@@ -143,16 +120,20 @@ class Experimenter:
                 self.scenario.initialize()
             except Exception as e:
                 if self.safe_mode is True:
-                    self.log.exception("An exception occurred while running \"{}#initialize\"".format(self.scenario.__name__))
+                    self.log.exception(
+                        "An exception occurred while running \"{}#initialize\"".format(self.scenario.__name__))
                     raise e
                 else:
                     # TODO: issue a warning message to the log
                     pass
         elif self.safe_mode is True:
-            self.log.error("Function \"{}#initialize\" is not defined, or it is not a function".format(self.scenario.__name__))
-            raise AttributeError("Function \"{}#initialize\" is not defined, or it is not a function".format(self.scenario.__name__))
+            self.log.error(
+                "Function \"{}#initialize\" is not defined, or it is not a function".format(self.scenario.__name__))
+            raise AttributeError(
+                "Function \"{}#initialize\" is not defined, or it is not a function".format(self.scenario.__name__))
         else:
-            self.log.warning("Function \"{}#initialize\" is not defined, or it is not a function".format(self.scenario.__name__))
+            self.log.warning(
+                "Function \"{}#initialize\" is not defined, or it is not a function".format(self.scenario.__name__))
 
         # ===== MAIN TEST ==============================================================================================
 
@@ -173,7 +154,8 @@ class Experimenter:
                     self.scenario.before_each()
                 except Exception as e:
                     if self.safe_mode is True:
-                        self.log.exception("An exception occurred while running \"{}#before_each\"".format(self.scenario.__name__))
+                        self.log.exception(
+                            "An exception occurred while running \"{}#before_each\"".format(self.scenario.__name__))
                         raise e
                     else:
                         # TODO: issue a warning message to the log
@@ -186,7 +168,8 @@ class Experimenter:
                     self.scenario.test(instruction=fuzz_instr[i], retries=5)
                 except Exception as e:
                     if self.safe_mode is True:
-                        self.log.exception("An exception occurred while running \"{}#test\"".format(self.scenario.__name__))
+                        self.log.exception(
+                            "An exception occurred while running \"{}#test\"".format(self.scenario.__name__))
                         raise e
                     else:
                         # TODO: issue a warning message to the log
@@ -201,17 +184,18 @@ class Experimenter:
                     self.scenario.after_each()
                 except Exception as e:
                     if self.safe_mode is True:
-                        self.log.exception("An exception occurred while running \"{}#after_each\"".format(self.scenario.__name__))
+                        self.log.exception(
+                            "An exception occurred while running \"{}#after_each\"".format(self.scenario.__name__))
                         raise e
                     else:
                         # TODO: issue a warning message to the log
                         pass
             stop_time = timer()
-            self.log.info("Test {} out of {} of scenario \"{}\" has been completed in {}s.".format(i+1,
+            self.log.info("Test {} out of {} of scenario \"{}\" has been completed in {}s.".format(i + 1,
                                                                                                    count,
                                                                                                    self.scenario.__name__,
                                                                                                    stop_time - start_time))
-            progress_bar(i+1, count, prefix='Progress:', suffix='Complete ({}/{})'.format(i+1, count), length=100)
+            progress_bar(i + 1, count, prefix='Progress:', suffix='Complete ({}/{})'.format(i + 1, count), length=100)
 
         # If it's the last experiment, run the function on_last_instance
         if hasattr(self.scenario, "terminate") and hasattr(self.scenario.terminate, '__call__'):
@@ -220,7 +204,8 @@ class Experimenter:
                 self.scenario.terminate()
             except Exception as e:
                 if self.safe_mode is True:
-                    self.log.exception("An exception occurred while running \"{}#terminate\"".format(self.scenario.__name__))
+                    self.log.exception(
+                        "An exception occurred while running \"{}#terminate\"".format(self.scenario.__name__))
                     raise e
                 else:
                     # TODO: issue a warning message to the log
@@ -260,16 +245,16 @@ class Experimenter:
                 # Create the action for the rule i
                 if budget_list[i] > 0:
                     actions = convert_to_fuzzer_actions(
-                            rule=self.rule_set[i],
-                            n=budget_list[i],
-                            include_header=False,
-                            enable_mutation=True,
-                            mutation_rate=self.mutation_rate,
-                            ctx=CTX_PKT_IN_tmp
-                        )
+                        rule=self.rule_set[i],
+                        n=budget_list[i],
+                        include_header=False,
+                        enable_mutation=True,
+                        mutation_rate=self.mutation_rate,
+                        ctx=CTX_PKT_IN_tmp
+                    )
                     for action in actions:
                         json_dict = dict()
-                        json_dict.update(self.criterion)   # add the criterion
+                        json_dict.update(self.criterion)  # add the criterion
                         json_dict['actions'] = [action]
                         instructions.append(json.dumps({"instructions": [json_dict]}))  # add it to the instruction
 

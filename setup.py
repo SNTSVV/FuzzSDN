@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 
+# Import setuptools
 try:
     from setuptools import setup
 except ImportError:
     from distutils.core import setup
+
+# Load requirements.txt file
+with open('requirements.txt', 'r') as f:
+    install_requires = f.read().splitlines()
 
 setup(
     # Metadata
@@ -16,23 +21,11 @@ setup(
 
     # Install Instructions
     python_requires='>=3.8',
+    include_package_data=True,
     zip_safe=False,
 
     # Requirements
-    install_requires=[
-        # 'javabrigde>=1.0.16',
-        'iteround~=1.0.3',
-        'liac-arff>=2.5.0',
-        'matplotlib~=3.4.2',
-        'mininet~=2.3.0.dev6',
-        'mysqlclient~=2.0.3',
-        'numpy>=1.20.3',
-        'pandas~=1.2.4',
-        'pexpect~=4.8.0',
-        # 'python-weka-wrapper3>=0.2.3',
-        'sympy~=1.8',
-        'z3-solver>=4.8.12.0',
-    ],
+    install_requires=install_requires,
 
     # Packages and Scripts
     packages=[
@@ -41,8 +34,10 @@ setup(
         'rdfl_exp/machine_learning',
         'rdfl_exp/utils'
     ],
+
     scripts=[
-        'bin/rdfl_exp'
+        'bin/rdfl_exp',
+        'bin/rdfl_exp-install'
     ],
 )
 

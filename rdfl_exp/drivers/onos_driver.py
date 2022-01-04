@@ -5,12 +5,13 @@ import subprocess
 from time import sleep
 
 import pexpect
+from importlib import resources
+import rdfl_exp.resources.tools.onos as onos_tools
 
 ONOS_ROOT   = '/opt/onos/'
 ONOS_BIN    = os.path.join(ONOS_ROOT, 'bin')
 ONOS_KARAF  = os.path.join(ONOS_ROOT, 'karaf')
 ONOS_LOG    = os.path.join(ONOS_KARAF, 'data', 'log')
-TOOLS_PATH  = "/home/ubuntu/cff/RDFL_EXP/tools/onos"
 KARAF_PWD   = 'karaf'
 TIMEOUT     = 5
 
@@ -25,18 +26,21 @@ class OnosDriver:
     def install(cls, force=True):
         """
         """
+        with resources.path(onos_tools, "onos-install") as path:
+            install_exe = path
+
         cls.__log.info("Installing ONOS...")
         try:
             if force is True:
-                child = pexpect.spawn("{}/onos-install --no-start --force --initd".format(TOOLS_PATH))
+                child = pexpect.spawn("{} --no-start --force --initd".format(install_exe))
             else:
-                child = pexpect.spawn("{}/onos-install --no-start --initd".format(TOOLS_PATH))
+                child = pexpect.spawn("{} --no-start --initd".format(install_exe))
 
             # NOTE: this timeout may need to change depending on the network
             # and size of ONOS
-            index = child.expect(["ONOS\sis\salready\sinstalled",
-                                  "Failed\sto\sstart",
-                                  "ONOS\sis\sinstalled",
+            index = child.expect([r"ONOS\sis\salready\sinstalled",
+                                  r"Failed\sto\sstart",
+                                  r"ONOS\sis\sinstalled",
                                   pexpect.TIMEOUT],
                                  timeout=180)
             if index == 0:
@@ -69,16 +73,17 @@ class OnosDriver:
     def uninstall(cls):
         """
         """
+        with resources.path(onos_tools, "onos-uninstall") as path:
+            uninstall_exe = path
         try:
             # uninstall script does not return any output
-            child = pexpect.run("/home/ubuntu/cff/RDFL_EXP/tools/controller/onos/onos-uninstall")
+            pexpect.run(uninstall_exe)
         except pexpect.TIMEOUT:
             return False
         except pexpect.EOF:
             return False
         except Exception:
             return False
-
         return True
     # End def uninstall
 
@@ -102,9 +107,6 @@ class OnosDriver:
             session = pexpect.spawn("ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "
                                     + "-p 8101 "
                                     + "karaf@localhost ")
-
-            log_file = open("/home/ubuntu/karaf_log", "wb")
-            session.logfile_read = log_file
 
             resp = session.expect(['Password:', pexpect.EOF, pexpect.TIMEOUT], timeout=TIMEOUT)
             if resp == 0:
@@ -157,7 +159,7 @@ class OnosDriver:
         it = 0
         stopped = False
         while stopped is False and it < 15:
-            cmd = "ps -ef | egrep \'java .*/onos/.* org\.apache\.karaf\.main\.Main\'"
+            cmd = r"ps -ef | egrep \'java .*/onos/.* org\.apache\.karaf\.main\.Main\'"
             session = pexpect.spawn(cmd)
 
             resp = session.expect(['Started', pexpect.EOF, pexpect.TIMEOUT], timeout=TIMEOUT)

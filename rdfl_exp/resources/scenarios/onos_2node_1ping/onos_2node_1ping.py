@@ -14,7 +14,7 @@ from mininet.net import Mininet
 from mininet.node import Host, OVSKernelSwitch, RemoteController
 from mininet.topo import Topo
 
-from drivers.onos_driver import OnosDriver
+from rdfl_exp.drivers.onos_driver import OnosDriver
 from rdfl_exp.utils.database import Database as SqlDb
 from rdfl_exp.utils.log import LogPipe
 
