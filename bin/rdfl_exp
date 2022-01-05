@@ -15,7 +15,8 @@ import weka.core.jvm as jvm
 import weka.core.packages as packages
 
 # Local dependencies
-from rdfl_exp import config, core
+from rdfl_exp import setup, core
+from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
 from rdfl_exp.utils import file
 from rdfl_exp.utils.terminal import Fore, Style
 
@@ -82,23 +83,23 @@ def parse_arguments():
 # =====( Signals and cleanup functions )========================================
 
 
-def cleanup(*args):
+def cleanup_app(*args):
     """
     Clean up all file inside /var/run.
     """
-    if config.CLEANUP is True:
-        # Ensure the APP_DIR as the user's permissions
-        uid = pwd.getpwnam(config.get_user()).pw_uid
-        gid = grp.getgrnam(config.get_user()).gr_gid
-        file.recursive_chown(config.RDFL_ROOT, uid, gid)
+    if CONFIG.app.cleanup is True:
+        # Ensure the cache, and data directories have the user's permissions
+        uid = pwd.getpwnam(setup.get_user()).pw_uid
+        gid = grp.getgrnam(setup.get_user()).gr_gid
+        file.recursive_chown(setup.APP_DIRS.user_cache_dir, uid, gid)
+        file.recursive_chown(setup.APP_DIRS.user_log_dir, uid, gid)
+        file.recursive_chown(setup.APP_DIRS.user_data_dir, uid, gid)
 
         # Clean the temporary directory
-        config.tmp_dir(get_obj=True).cleanup()
+        setup.tmp_dir(get_obj=True).cleanup()
 
-        # Clean the run directory
-        for filename in os.listdir(config.RUN_PATH):
-            os.remove(join(config.RUN_PATH, filename))
-        os.rmdir(config.RUN_PATH)
+        # Clean the pid file
+        os.remove(join(setup.APP_DIRS.user_cache_dir, "rdfl_exp.pid"))
 
         # Check if the JVM is started and stop it otherwise
         if jvm.started:
@@ -111,7 +112,7 @@ def cleanup(*args):
 
 # ====== (Setup Function) =======================================================
 
-def setup(args):
+def setup_app(args):
     """
     Setup the program
     """
@@ -123,10 +124,10 @@ def setup(args):
                          + " Try again using \"sudo\".")
 
     # Init the configuration
-    config.init()
+    setup.init()
 
     # Assign the arguments
-    config.CLEANUP = args.no_clean
+    setup.CLEANUP = args.no_clean
 # End def setup
 
 
@@ -136,14 +137,14 @@ if __name__ == '__main__':
 
     # Create cleanup signal
     for sig in (signal.SIGABRT, signal.SIGILL, signal.SIGINT, signal.SIGSEGV, signal.SIGTERM):
-        signal.signal(sig, cleanup)
+        signal.signal(sig, cleanup_app)
 
     # Create configuration reload signal
     # signal.signal(signal.SIGHUP, None)
 
     # parse arguments and run the setup
     args = parse_arguments()
-    setup(args)
+    setup_app(args)
 
     try:
         jvm.logger.setLevel(logging.WARNING)
@@ -172,4 +173,4 @@ if __name__ == '__main__':
         print(traceback.format_exc())
     finally:
         jvm.stop()  # Close the JVM
-        cleanup()   # Clean up the program
+        cleanup_app()  # Clean up the program

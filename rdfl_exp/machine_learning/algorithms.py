@@ -3,7 +3,6 @@ import re
 import traceback
 
 from weka.classifiers import Classifier, Evaluation, FilteredClassifier
-from weka.core import jvm
 from weka.core.classes import Random, deepcopy
 from weka.core.converters import Loader
 from weka.filters import Filter, MultiFilter

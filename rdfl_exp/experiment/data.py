@@ -2,18 +2,14 @@
 # coding: utf-8
 import binascii
 import csv
-import math
-from copy import deepcopy
 
 from rdfl_exp.utils.database import Database as SqlDb
 from rdfl_exp.utils.terminal import progress_bar
+from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
 
 ## Settings
 PRINT_STATISTICS        = False  # default=True
 KEEP_TRACE_ON_UNKNOWN   = True  # default=True
-SQL_DB_ADDRESS          = "10.240.5.104"
-SQL_DB_USER             = "dev"
-SQL_DB_PASSWORD         = "b14724x"
 
 # ---------
 # Main code
@@ -141,7 +137,7 @@ def fetch(csv_path: str):
     """
     # Initialize database
     if not SqlDb.is_init:
-        SqlDb.init(SQL_DB_ADDRESS, SQL_DB_USER, SQL_DB_PASSWORD)
+        SqlDb.init(CONFIG.mysql.host, CONFIG.mysql.user, CONFIG.mysql.password)
 
     with open(csv_path, "w") as csv_file:
 

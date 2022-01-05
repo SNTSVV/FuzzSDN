@@ -10,17 +10,16 @@ import time
 from os.path import join
 
 import pandas as pd
-from iteround import saferound
 
 import rdfl_exp.experiment.data as exp_data
 import rdfl_exp.machine_learning.algorithms as ml_alg
 import rdfl_exp.machine_learning.data as ml_data
-from rdfl_exp import config
+from rdfl_exp import setup
 from rdfl_exp.experiment.experimenter import Experimenter, FuzzMode
-from rdfl_exp.machine_learning.rule import CTX_PKT_IN_tmp, RuleSet, convert_to_fuzzer_actions
+from rdfl_exp.machine_learning.rule import RuleSet
 from rdfl_exp.stats import Stats
 from rdfl_exp.utils import csv
-from rdfl_exp.utils.terminal import Style, progress_bar
+from rdfl_exp.utils.terminal import Style
 
 # ===== ( Globals ) ============================================================
 
@@ -122,7 +121,7 @@ def run() -> None:
     # Create variables used by the algorithm
     precision = 0   # Algorithm precision
     recall = 0      # Algorithm recall
-    dataset_path = join(config.tmp_dir(), "dataset.csv")  # Create a file where the dataset will be stored
+    dataset_path = join(setup.tmp_dir(), "dataset.csv")  # Create a file where the dataset will be stored
     it = 0  # iteration index
 
     # Initialize the rule set
@@ -175,7 +174,7 @@ def run() -> None:
             exp_data.fetch(dataset_path)
             # Copy the raw version of the dataset to the exp folder
             shutil.copy(src=dataset_path,
-                        dst=join(config.EXP_PATH, "datasets",
+                        dst=join(setup.EXP_PATH, "datasets",
                                  "it_{}_raw.csv".format(it)))
             # Format the dataset
             ml_data.format_dataset(dataset_path,
@@ -184,11 +183,11 @@ def run() -> None:
                                    csv_sep=';')
         else:
             # Fetch the data into a temporary dictionary
-            tmp_dataset_path = join(config.tmp_dir(), "temp_data.csv")
+            tmp_dataset_path = join(setup.tmp_dir(), "temp_data.csv")
             exp_data.fetch(tmp_dataset_path)
             # Copy the raw version of the dataset to the exp folder
             shutil.copy(src=tmp_dataset_path,
-                        dst=join(config.EXP_PATH, "datasets",
+                        dst=join(setup.EXP_PATH, "datasets",
                                  "it_{}_raw.csv".format(it)))
             # Format the dataset
             ml_data.format_dataset(tmp_dataset_path,
@@ -209,13 +208,13 @@ def run() -> None:
         # Save the dataset to the experience folder
         shutil.copy(
             src=dataset_path,
-            dst=join(config.EXP_PATH, "datasets", "it_{}.csv".format(it))
+            dst=join(setup.EXP_PATH, "datasets", "it_{}.csv".format(it))
         )
 
         # Convert the set to an arff file
         csv.to_arff(
             csv_path=dataset_path,
-            arff_path=join(config.tmp_dir(), "dataset.arff"),
+            arff_path=join(setup.tmp_dir(), "dataset.arff"),
             csv_sep=';',
             relation='dataset_iteration_{}'.format(it),
             exclude=['pkt_struct', 'fuzz_info', 'action']
@@ -223,15 +222,15 @@ def run() -> None:
 
         # Save the arff dataset as well
         shutil.copy(
-            src=join(config.tmp_dir(), "dataset.arff"),
-            dst=join(config.EXP_PATH, "datasets", "it_{}.arff".format(it))
+            src=join(setup.tmp_dir(), "dataset.arff"),
+            dst=join(setup.EXP_PATH, "datasets", "it_{}.arff".format(it))
         )
 
         # 3. Perform machine learning algorithms
         start_of_ml = time.time()
 
         ml_results = ml_alg.learn(
-            data_path=join(config.tmp_dir(), "dataset.arff"),
+            data_path=join(setup.tmp_dir(), "dataset.arff"),
             algorithm=_context['ml_algorithm'],
             preprocess_strategy=_context['pp_strategy'],
             n_folds=_context['cv_folds'],
@@ -264,7 +263,7 @@ def run() -> None:
             ml_results=ml_results,
             rule_set=rule_set
         )
-        Stats.save(join(config.EXP_PATH, 'stats.json'))
+        Stats.save(join(setup.EXP_PATH, 'stats.json'))
 
         # Canonicalize the rule set before the next iteration
         if rule_set.has_rules():

@@ -6,13 +6,10 @@ from time import sleep
 
 import pexpect
 from importlib import resources
+from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
 import rdfl_exp.resources.tools.onos as onos_tools
 
-ONOS_ROOT   = '/opt/onos/'
-ONOS_BIN    = os.path.join(ONOS_ROOT, 'bin')
-ONOS_KARAF  = os.path.join(ONOS_ROOT, 'karaf')
-ONOS_LOG    = os.path.join(ONOS_KARAF, 'data', 'log')
-KARAF_PWD   = 'karaf'
+
 TIMEOUT     = 5
 
 
@@ -110,7 +107,7 @@ class OnosDriver:
 
             resp = session.expect(['Password:', pexpect.EOF, pexpect.TIMEOUT], timeout=TIMEOUT)
             if resp == 0:
-                session.sendline(KARAF_PWD)
+                session.sendline(CONFIG.onos.karaf_password)
                 session.expect('.*>.*', timeout=TIMEOUT)
                 session.sendline("bundle:list | grep 'START LEVEL 100'")
                 resp = session.expect(['START LEVEL 100', pexpect.EOF, pexpect.TIMEOUT], timeout=TIMEOUT)
@@ -127,11 +124,8 @@ class OnosDriver:
             it = 0
             while app_manager is False and it < 30 :
 
-                cmd = "grep -E \"ApplicationManager .* Started\" {}/karaf.log".format(ONOS_LOG)
+                cmd = "grep -E \"ApplicationManager .* Started\" {}".format(os.path.join(CONFIG.onos.log_dir, "karaf.log"))
                 session = pexpect.spawn(cmd)
-                log_file = open("/home/ubuntu/karaf_log", "wb")
-                session.logfile_read = log_file
-
                 resp = session.expect(['Started', pexpect.EOF, pexpect.TIMEOUT], timeout=TIMEOUT)
                 if resp == 0:
                     app_manager = True
@@ -190,7 +184,7 @@ class OnosDriver:
         while activated is False and attempt < max_try:
             cls.__log.info("Activating ONOS app \"{}\"... Attempt {}/{}".format(app_name, attempt + 1, max_try))
             try:
-                cmd = " ".join((os.path.join(ONOS_BIN, 'onos-app'), "localhost", "activate", app_name))
+                cmd = " ".join((os.path.join(CONFIG.onos.bin_dir, 'onos-app'), "localhost", "activate", app_name))
                 child = pexpect.spawn(cmd)
             except Exception as e:
                 return False, str(e)
@@ -240,18 +234,18 @@ class OnosDriver:
         cls.__log.info("Flushing ONOS logs...")
 
         try:
-            dir_list = os.listdir(ONOS_LOG)
+            dir_list = os.listdir(CONFIG.onos.log_dir)
 
         except FileNotFoundError:
             # If there is no log directory, it may be because onos hasn't been started yet...
             # check if there is a root directory for onos
-            if not os.path.isdir(ONOS_ROOT) and not os.path.isdir(ONOS_KARAF):
+            if not os.path.isdir(CONFIG.onos.root_dir) and not os.path.isdir(CONFIG.onos.karaf_dir):
                 cls.__log.error("Couldn't flush ONOS' logs: ONOS or Karaf may not be installed.")
                 return False
         else:
             for item in dir_list:
                 if item.startswith("karaf") and item.endswith(".log"):
-                    path = os.path.join(ONOS_LOG, item)
+                    path = os.path.join(CONFIG.onos.log_dir, item)
                     cls.__log.debug("Flushing ONOS log at \"{}\"".format(path))
                     os.remove(path)
 

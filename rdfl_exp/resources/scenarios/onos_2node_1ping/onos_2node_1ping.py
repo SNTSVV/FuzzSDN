@@ -17,22 +17,9 @@ from mininet.topo import Topo
 from rdfl_exp.drivers.onos_driver import OnosDriver
 from rdfl_exp.utils.database import Database as SqlDb
 from rdfl_exp.utils.log import LogPipe
+from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
 
 # ===== ( Parameters ) =================================================================================================
-
-REMOTE_CONTROLLER_IP        = "10.240.5.110"
-
-SQL_DB_ADDRESS              = "10.240.5.110"
-SQL_DB_USER                 = "dev"
-SQL_DB_PASSWORD             = "b14724x"
-
-CFF_CFG_FOLDER              = "/etc/packetfuzzer/"
-CFF_USR_RULES_FILE          = "fuzzer_instr.json"
-CFF_PATH                    = "/home/ubuntu/cff/out/artifacts/PacketFuzzer_jar/PacketFuzzer.jar"
-ONOS_ROOT                   = "/opt/onos/"
-ONOS_KARAF_ROOT             = os.path.join(ONOS_ROOT, 'karaf')
-ONOS_LOG_DIR_PATH           = os.path.join(ONOS_KARAF_ROOT, 'log')
-CONTROL_FLOW_FUZZER_PORT    = 52525
 
 logger                      = logging.getLogger(__name__)
 exp_logger                  = logging.getLogger("PacketFuzzer.jar")
@@ -81,8 +68,8 @@ def initialize():
     database_is_init = False
     if not SqlDb.is_init():
         logger.info("Initializing the SQL database...")
-        SqlDb.init(SQL_DB_ADDRESS, SQL_DB_USER, SQL_DB_PASSWORD)
-        logger.debug("The SQL database has been intialized successfully")
+        SqlDb.init(CONFIG.mysql.host, CONFIG.mysql.user, CONFIG.mysql.password)
+        logger.debug("The SQL database has been initialized successfully")
 
     try:
         if not SqlDb.is_connected():
@@ -97,12 +84,11 @@ def initialize():
         database_is_init = True
     finally:
         SqlDb.disconnect()
-
-    if database_is_init is False:
-        logger.error("An issue happened while initializing the database.")
-        return False
-    else:
-        return True
+        if database_is_init is False:
+            logger.error("An issue happened while initializing the database.")
+            return False
+        else:
+            return True
 # End def initialize
 
 
@@ -158,11 +144,10 @@ def test(instruction=None, retries=1):
     """
 
     # Write the instruction to the fuzzer
-    fuzz_instr_path = os.path.join(CFF_CFG_FOLDER, CFF_USR_RULES_FILE)
-    logger.info("Writing instructions to {}".format(fuzz_instr_path))
+    logger.info("Writing instructions to {}".format(CONFIG.fuzzer.instr_path))
     logger.debug("Instruction to write:\n{}".format(json.dumps(instruction, sort_keys=False, indent=4)))
 
-    with open(fuzz_instr_path, 'w') as rf:
+    with open(CONFIG.fuzzer.instr_path, 'w') as rf:
         rf.write(instruction)
 
     # Get the initial count of the database to be sure that a new data point is generated
@@ -208,7 +193,7 @@ def run_fuzz_test():
     logger.info("Starting Control Flow Fuzzer")
     exp_stderr_pipe = LogPipe(logging.ERROR, "PacketFuzzer.jar")
     exp_stdout_pipe = LogPipe(logging.DEBUG, "PacketFuzzer.jar")
-    cff_process = subprocess.Popen(["java", "-jar", CFF_PATH],
+    cff_process = subprocess.Popen(["java", "-jar", CONFIG.fuzzer.jar_path],
                                    stderr=exp_stderr_pipe,
                                    stdout=exp_stdout_pipe)
 
@@ -221,8 +206,8 @@ def run_fuzz_test():
 
     net.addController("c0",
                       controller=RemoteController,
-                      ip=REMOTE_CONTROLLER_IP,
-                      port=CONTROL_FLOW_FUZZER_PORT)
+                      ip=CONFIG.onos.host,
+                      port=CONFIG.fuzzer.port)
 
     net.start()
     time.sleep(5)  # Wait 5 secs
@@ -334,13 +319,9 @@ def get_pid(name: str):
 
 def write_usr_instr(instructions: str):
     """Write the usr rules for the fuzzer."""
-    fuzz_instr_path = os.path.join(CFF_CFG_FOLDER, CFF_USR_RULES_FILE)
-    logger.info("Writing instructions to {}".format(fuzz_instr_path))
+    logger.info("Writing instructions to {}".format(CONFIG.fuzzer.instr_path))
     logger.debug("Instruction to write:\n{}".format(json.dumps(instructions, sort_keys=False, indent=4)))
 
-    with open(fuzz_instr_path, 'w') as rf:
+    with open(CONFIG.fuzzer.instr_path, 'w') as rf:
         rf.write(instructions)
 # End def write_usr_rules
-
-
-
