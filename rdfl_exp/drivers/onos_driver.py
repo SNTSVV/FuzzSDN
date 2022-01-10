@@ -108,14 +108,20 @@ class OnosDriver:
             resp = session.expect(['Password:', pexpect.EOF, pexpect.TIMEOUT], timeout=TIMEOUT)
             if resp == 0:
                 session.sendline(CONFIG.onos.karaf_password)
-                session.expect('.*>.*', timeout=TIMEOUT)
-                session.sendline("bundle:list | grep 'START LEVEL 100'")
-                resp = session.expect(['START LEVEL 100', pexpect.EOF, pexpect.TIMEOUT], timeout=TIMEOUT)
+                resp = session.expect([r'.*>.*',
+                                       r'Connection\sclosed\sby',
+                                       pexpect.EOF,
+                                       pexpect.TIMEOUT]
+                                      , timeout=TIMEOUT)
                 if resp == 0:
-                    start_level = True
-            else:
-                session.close()
+                    session.sendline("bundle:list | grep 'START LEVEL 100'")
+                    resp = session.expect(['START LEVEL 100', pexpect.EOF, pexpect.TIMEOUT], timeout=TIMEOUT)
+                    if resp == 0:
+                        start_level = True
+                elif resp == 1:
+                    cls.__log.warning("Couldn't establish ssh session with karaf")
 
+            session.close()
             it += 1
 
         cls.__log.debug("ONOS Start up: start level 100 reached?: {}".format(start_level))
@@ -181,13 +187,14 @@ class OnosDriver:
 
         activated = False
         attempt = 0
+        cmd = " ".join((os.path.join(CONFIG.onos.root_dir, 'bin', 'onos-app'), "localhost", "activate", app_name))
         while activated is False and attempt < max_try:
             cls.__log.info("Activating ONOS app \"{}\"... Attempt {}/{}".format(app_name, attempt + 1, max_try))
             try:
-                cmd = " ".join((os.path.join(CONFIG.onos.bin_dir, 'onos-app'), "localhost", "activate", app_name))
                 child = pexpect.spawn(cmd)
-            except Exception as e:
-                return False, str(e)
+            except Exception:
+                cls.__log.exception("An exception happened while activating application {} (cmd: {})".format(app_name, cmd))
+                return False
 
             i = child.expect(['ACTIVE',
                               '404 Not Found',
@@ -221,7 +228,7 @@ class OnosDriver:
         :return: True (Always)
         """
         cls.__log.info("Deactivating ONOS app \"{}\"...".format(app_name))
-        subprocess.call(["/opt/onos/bin/onos-app", "localhost", "deactivate", app_name],
+        subprocess.call([os.path.join(CONFIG.onos.root_dir, 'bin', 'onos-app'), "localhost", "deactivate", app_name],
                         stderr=subprocess.DEVNULL,
                         stdout=subprocess.DEVNULL)
         cls.__log.info("ONOS app \"{}\" is deactivated.".format(app_name))

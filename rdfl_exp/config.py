@@ -3,7 +3,6 @@
 import os
 from configparser import ConfigParser
 
-import appdirs
 from appdirs import AppDirs
 
 # ===== ( Config Section ) =============================================================================================

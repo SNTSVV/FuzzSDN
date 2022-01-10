@@ -214,7 +214,6 @@ def _setup_pid():
 
 def _setup_logger():
 
-    # TODO: add a header
     # Remove all handlers associated with the root logger object.
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
@@ -234,11 +233,22 @@ def _setup_logger():
     setattr(logging.getLoggerClass(), 'trace', log_to_trace)
     setattr(logging, 'trace', log_to_root)
 
-    # TODO: Output a standard log and a debug and trace log if asked by the config file
+    # Write the header into the new log file
+    log_file = os.path.join(APP_DIRS.user_log_dir, CONFIG.logging.filename)
+    with open(log_file, 'w') as f:
+        header = "\n".join([
+            "############################################################################################################",
+            "App Name   : {}".format("RDFL_EXP v0.2.0"),
+            "PID        : {}".format(os.getpid()),
+            "Start Date : {}".format(datetime.now()),
+            "============================================================================================================\n"
+        ])
+        f.writelines(header)
+
     # Add the configuration
     logging.basicConfig(
-        filename=os.path.join(APP_DIRS.user_log_dir, CONFIG.logging.filename),
-        filemode='w',
+        filename=log_file,
+        filemode='a',  # Use append affix to not overwrite the header
         format='%(asctime)s,%(msecs)d | %(name)s | %(levelname)s | %(message)s',
         datefmt='%H:%M:%S',
         level=logging.DEBUG,

@@ -23,10 +23,12 @@ class FuzzMode(Enum):
 # End class FuzzMode
 
 
-# TODO: set all the path from the main directory path automatically
-
-
 class Experimenter:
+    """
+    The experimenter class is responsible for running any experience defined in a script under "scenarios"
+    """
+
+    # ===== ( Constructor ) ============================================================================================
 
     def __init__(self, safe_mode=True):
 
@@ -42,6 +44,8 @@ class Experimenter:
         self.enable_mutation = True
         self.mutation_rate = 1.0
     # End def __init__
+
+    # ===== ( Setters ) ================================================================================================
 
     def set_scenario(self, name):
         """
@@ -92,7 +96,7 @@ class Experimenter:
                 if _var_arg in kwargs:
                     criterion = criterion.replace(_var, kwargs.get(_var_arg))
                 else:
-                    # TODO: Mayber raise and error instead ?
+                    # TODO: Maybe raise and error instead ?
                     self.log.warning("No value defined to replace \"{}\" in criterion \"{}\"".format(_var, name))
 
             # Finally store the current criterion
@@ -104,6 +108,8 @@ class Experimenter:
             if self.safe_mode is True:
                 raise e
     # End def set_rule
+
+    # ===== ( Run ) ====================================================================================================
 
     def run(self, count=1):
         """
@@ -243,6 +249,7 @@ class Experimenter:
 
             for i in range(len(budget_list)):
                 # Create the action for the rule i
+                self.log.trace("Budget for rule {}: {}".format(i, budget_list[i]))
                 if budget_list[i] > 0:
                     actions = convert_to_fuzzer_actions(
                         rule=self.rule_set[i],
@@ -252,21 +259,23 @@ class Experimenter:
                         mutation_rate=self.mutation_rate,
                         ctx=CTX_PKT_IN_tmp
                     )
+                    self.log.trace("Number of actions generated for rule {}: {}".format(i, len(actions)))
                     for action in actions:
                         json_dict = dict()
                         json_dict.update(self.criterion)  # add the criterion
                         json_dict['actions'] = [action]
                         instructions.append(json.dumps({"instructions": [json_dict]}))  # add it to the instruction
-
         else:
             raise RuntimeError("Cannot build instructions for {}".format(self.fuzz_mode))
+
+        self.log.trace("Number of instructions generated : {}".format(len(instructions)))
         return instructions
     # End def __build_fuzzer_action
 
     def __get_budget_for_rules(self, sample_size):
-        rounded_budget = saferound(
-            [self.rule_set.budget(i, method=0) * sample_size for i in range(len(self.rule_set))],
-            places=0
-        )
-        return [int(x) for x in rounded_budget]
+
+        budget_list = [self.rule_set.budget(i, method=0) * sample_size for i in range(len(self.rule_set))]
+        rounded_budget = [int(x) for x in saferound(budget_list, places=0)]
+        self.log.trace("Calculated budget for {} rules: {}".format(len(self.rule_set), rounded_budget))
+        return rounded_budget
 # End class Experimenter

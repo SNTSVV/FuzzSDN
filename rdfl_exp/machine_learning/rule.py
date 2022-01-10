@@ -511,7 +511,7 @@ class Rule(object):
         z3.set_option('smt.arith.random_initial_value', True)
         z3.set_option('smt.random_seed', datetime.now().microsecond)
         z3.set_option('smt.phase_selection', 5)
-        z3_models = smt.get_model(z3_formula, n)  # Get z3 models
+        z3_models = smt.get_model(z3_formula, n, exact=True)  # Get z3 models
         # Build the dictionary
         for z3_model in z3_models:
             model = dict()
