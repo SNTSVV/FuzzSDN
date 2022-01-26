@@ -217,15 +217,19 @@ class RuleSet(object):
             return self.rules[idx].coverage / self.support()
     # End def support
 
-    def confidence(self, idx=None, relative=False):
+    def confidence(self, idx=None, relative=False, relative_to_class=False):
         if idx is None:
             return sum(self.confidence(i) * self.support(i) for i in range(len(self)))
         # Else we calculate the confidence of the rule at idx
-        elif relative is False:
-            rule = self.rules[idx]
-            return (rule.coverage - rule.false_positives)/rule.coverage
+        elif relative is True:
+            if relative_to_class is True:
+                rules_with_same_class = ()
+                return self.confidence(idx, False) / sum(self.confidence(i) for i in range(len(self)) if self.rules[i].get_class() == self.rules[idx].get_class())
+            else:
+                return self.confidence(idx, False) / sum(self.confidence(i) for i in range(len(self)))
         else:
-            return self.confidence(idx, False) / sum(self.confidence(i) for i in range(len(self)))
+            rule = self.rules[idx]
+            return (rule.coverage - rule.false_positives) / rule.coverage
     # End def confidence
 
     def budget(self, idx, method: int = 0):
@@ -301,15 +305,12 @@ class Rule(object):
     # ===== ( Constructor ) ====================================================
 
     def __init__(self, expr, class_=None, cvg: float = 0.0, fp: float = 0.0, _id=None):
-        self.expr = expr
-        self.class_ = class_
-        self.coverage = cvg
-        self.false_positives = fp
-
-        if _id is None:
-            self.id = next(Rule.new_id)
-        else:
-            self.id = _id
+        self.expr               = expr
+        self.class_             = class_
+        self.coverage           = cvg
+        self.false_positives    = fp
+        self.budget             = 0.0
+        self.id                 = next(Rule.new_id) if _id is None else _id
     # End def __init__
 
     @classmethod
@@ -406,13 +407,31 @@ class Rule(object):
 
     # ====== ( Getters ) ===============================================================================================
 
+    def get_id(self) -> int:
+        return self.id
+    # End def get_id
+
     def get_class(self):
         return self.class_
+    # End def get_class
+
+    def get_budget(self):
+        return self.budget
+    # End def get_budget
+
+    def get_confidence(self) -> float:
+        return (self.coverage - self.false_positives) / self.coverage
+    # End def get_confidence
 
     # ====== ( Setters ) ===============================================================================================
 
     def set_class(self, class_: str):
         self.class_ = class_
+    # End def set_class
+
+    def set_budget(self, budget : float):
+        self.budget = budget
+    # End def set_budget
 
     # ====== ( Methods ) ===============================================================================================
 
@@ -455,7 +474,7 @@ class Rule(object):
         # Convert rule to cnf form
         cnf_expr = to_cnf(self.expr)
 
-        # Compile the regex use for finding symble
+        # Compile the regex use for finding symbols
         rgx_sym         = RegEx.compile(r'(?P<symbol>\w+) *(?P<operator>[><=!]{1,2}) *(?P<value>\d+)')
         rgx_sym_and_not = RegEx.compile(r'(?P<symbol>~*\w+) *(?P<operator>[><=!]{1,2}) *(?P<value>\d+)')
         # match = RegEx.findall(rgx_sym, cnf_expr)

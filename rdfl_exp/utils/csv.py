@@ -68,7 +68,9 @@ def to_arff(csv_path, arff_path, relation, description='', csv_sep=',', exclude=
         attributes += [att]
 
     t = df.columns[-1]
-    attributes += [('error_type', df[t].unique().astype(str).tolist())]
+    # TODO: Either generalize that part, or change this whole module so it is valid only for the dataset used in this
+    #       program.
+    attributes += [('error_type', sorted(df[t].unique().astype(str).tolist()))]
     data = [df.loc[i].values[:-1].tolist() + [df[t].loc[i]] for i in
             range(df.shape[0])]
 

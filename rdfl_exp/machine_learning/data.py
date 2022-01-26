@@ -297,7 +297,7 @@ def create_class(dataframe: pandas.DataFrame, target_error: str):
     # Format error type
     if target_error in ('non_parsing_error', 'parsing_error'):
         df['class'] = df['error_type'].apply(lambda x: x if x == "parsing_error" else "non_parsing_error")
-    elif target_error == 'unknown_reason':
+    elif target_error in ('unknown_reason', 'known_reason'):
         df['class'] = df['error_reason'].apply(lambda x: 'unknown_reason' if x == 'Unknown' else 'known_reason')
     else:
         raise ValueError("Unknown target error '{}'".format(target_error))

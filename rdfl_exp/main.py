@@ -7,12 +7,11 @@ import logging
 import math
 import os
 import pwd
-import re
 import shutil
 import signal
 import sys
 import time
-import traceback
+from importlib import resources
 from os.path import join
 
 import pandas as pd
@@ -22,9 +21,10 @@ from rdfl_exp import setup
 from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
 from rdfl_exp.experiment import data as exp_data
 from rdfl_exp.experiment.experimenter import Experimenter, FuzzMode
-from rdfl_exp.machine_learning import algorithms as ml_alg
+from rdfl_exp.experiment.learner import Learner
 from rdfl_exp.machine_learning import data as ml_data
 from rdfl_exp.machine_learning.rule import RuleSet
+from rdfl_exp.resources import scenarios
 from rdfl_exp.stats import Stats
 from rdfl_exp.utils import csv, file
 from rdfl_exp.utils.terminal import Style
@@ -85,14 +85,18 @@ def parse_arguments():
     error_types = ('unknown_reason', 'known_reason', 'parsing_error', 'non_parsing_error')
     parser.add_argument('target_class',
                         metavar='ERROR_TYPE',
+                        type=str,
                         choices=error_types,
-                        help="Choose the error type to detect. Allowed values are: " + ', '.join(["\'{}\'".format(e) for e in error_types]))
+                        help="Choose the error type to detect. Allowed values are: {}".format(', '.join("\'{}\'".format(e) for e in error_types)))
 
     # Positional argument to choose the machine learning algorithm
+    with resources.path(scenarios, '') as p:
+        available_scenarios = list(sorted(f for f in os.listdir(p) if f not in ['__pycache__', '__init__.py']))
     parser.add_argument('scenario',
                         metavar='SCENARIO',
                         type=str,
-                        help="Name of the scenario to be run")
+                        choices=available_scenarios,
+                        help="Name of the scenario to be run. Allowed scenarios are: {}".format(', '.join("\'{}\'".format(scn) for scn in available_scenarios)))
 
     # Positional argument to choose the criterion
     # Break criterion positional argument in two names to circumvent the bug where a positional argument can't have several
@@ -116,6 +120,7 @@ def parse_arguments():
                         help="Override the number of samples. (default: %(default)s)")
 
     # ===== ( Machine Learning args ) ==================================================================================
+
     # Argument to choose the machine learning algorithm
     parser.add_argument('-M, --ml-algorithm',
                         type=str,
@@ -252,9 +257,16 @@ def run() -> None:
 
     # Set up the experimenter
     experimenter = Experimenter()
-    experimenter.mutation_rate = _context['mutation_rate']
-    experimenter.set_scenario(_context["scenario"])
+    experimenter.set_mutation(_context['enable_mutation'], _context['mutation_rate'])
+    experimenter.set_scenario(_context['scenario'])
     experimenter.set_criterion(_context['criterion']['name'], **_context['criterion']['kwargs'])
+
+    # Setup the Learner
+    learner = Learner()
+    learner.set_classes(target_class=_context['target_class'], other_class=_context['other_class'])
+    learner.set_learning_algorithm(_context['ml_algorithm'])
+    learner.set_preprocessing_strategy(_context['pp_strategy'])
+    learner.set_cross_validation_folds(_context['cv_folds'])
 
     while True:  # Infinite loop
 
@@ -263,20 +275,20 @@ def run() -> None:
 
         # Write headers
         print(Style.BOLD, "*** Iteration {}".format(it + 1), Style.RESET)
-        print(Style.BOLD, "*** recall: {:.2f}".format(recall), Style.RESET)
-        print(Style.BOLD, "*** precision: {:.2f}".format(precision), Style.RESET)
+        print(Style.BOLD, "*** Recall: {:.2f}".format(recall), Style.RESET)
+        print(Style.BOLD, "*** Precision: {:.2f}".format(precision), Style.RESET)
 
-        # 1. Generate mew data from the rule set
+        # 1. Generate new data from the rule set
 
-        if not rule_set.has_rules():
+        if not learner.has_rules():
             _log.info("No rules in set of rule. Generating random samples")
             experimenter.set_fuzzing_mode(FuzzMode.RANDOM)
             experimenter.set_rule_set(None)
-            experimenter.run(_context['nb_of_samples'])
         else:
             experimenter.set_fuzzing_mode(FuzzMode.RULE)
-            experimenter.set_rule_set(rule_set)
-            experimenter.run(_context['nb_of_samples'])
+            experimenter.set_rule_set(learner.get_rules())
+
+        experimenter.run(_context['nb_of_samples'])
 
         # 2. Fetch the dataset
         if not os.path.exists(dataset_path):
@@ -338,31 +350,32 @@ def run() -> None:
 
         # 3. Perform machine learning algorithms
         start_of_ml = time.time()
-
-        ml_results = ml_alg.learn(
-            data_path=join(setup.tmp_dir(), "dataset.arff"),
-            algorithm=_context['ml_algorithm'],
-            preprocess_strategy=_context['pp_strategy'],
-            n_folds=_context['cv_folds'],
-            seed=12345,
-            classes=(_context['target_class'], _context["other_class"])
-        )
+        learner.load_data(join(setup.tmp_dir(), "dataset.arff"))
+        learner.learn()
         end_of_ml = time.time()
 
         # Get recall and precision from the evaluator results
+        ml_results = learner.get_results()
         recall    = ml_results['cross-validation'][_context['target_class']]['recall']
         precision = ml_results['cross-validation'][_context['target_class']]['precision']
 
         # Avoid cases where precision or recall are NaN values
         recall = 0.0 if math.isnan(recall) else recall
         precision = 0.0 if math.isnan(precision) else precision
-        print("Recall: {:.2f}%, Precision: {:.2f}%".format(recall*100, precision*100))
+        # print("Recall: {:.2f}%, Precision: {:.2f}%".format(recall*100, precision*100))
 
-        # Add the rule to the rule set
-        rule_set.clear()
-        for r in ml_results['rules']:
-            rule_set.add_rule(r)
+        # Budget calculation
+        target_cnt, other_cnt = learner.get_size_of_classes()
+        class_ratio = target_cnt / (target_cnt + other_cnt)
+        s_target = min(0.5 * (learner.get_dataset_size() + _context['nb_of_samples']) - class_ratio * learner.get_dataset_size(),
+                       _context['nb_of_samples'])
+        s_other = max(_context['nb_of_samples'] - s_target, 0)
 
+        for i in range(len(learner.ruleset)):
+            if learner.ruleset[i].get_class() == _context['target_class']:
+                learner.ruleset[i].set_budget(learner.ruleset.confidence(i, relative=True, relative_to_class=True) * s_target / _context['nb_of_samples'])
+            else:  # other_class
+                learner.ruleset[i].set_budget(learner.ruleset.confidence(i, relative=True, relative_to_class=True) * s_other / _context['nb_of_samples'])
         # End of iteration total time
         end_of_it = time.time()
 
@@ -370,15 +383,10 @@ def run() -> None:
         Stats.add_iteration_statistics(
             learning_time=end_of_ml - start_of_ml,
             iteration_time=end_of_it - start_of_it,
-            ml_results=ml_results,
-            rule_set=rule_set
+            experimenter=experimenter,
+            learner=learner
         )
         Stats.save(join(setup.EXP_PATH, 'stats.json'))
-
-        # Canonicalize the rule set before the next iteration
-        if rule_set.has_rules():
-            rule_set.canonicalize()
-        print(rule_set)
 
         # Increment the number of iterations
         it += 1
@@ -447,11 +455,15 @@ def main() -> None:
     # Create configuration reload signal
     # signal.signal(signal.SIGHUP, None)
 
-    # Run the setup configuration
-    setup.init()
-
     try:
-        # Configure java bridge logger
+
+        # Run the setup configuration
+        setup.init()
+
+        # Launch init function
+        init()
+
+        # Configure java-bridge logger
         jvm.logger.setLevel(logging.INFO)
         jvm.start(packages=True)  # Start the JVM
 
@@ -459,20 +471,17 @@ def main() -> None:
         _log.info("Checking WEKA packages...")
         new_pkg_installed = False
         if not packages.is_installed("SMOTE"):
-            _log.info("Installing weka package: \"SMOTE\" ...", end=' ')
+            _log.info("Installing weka package: \"SMOTE\" ...")
             packages.install_package("SMOTE")
             new_pkg_installed = True
             _log.info("done")
 
         if new_pkg_installed is True:
-            print("New WEKA packages have beend installed. Please restart rdfl_exp to complete installation.")
+            print("New WEKA packages have been installed. Please restart rdfl_exp to complete installation.")
             jvm.stop()
             sys.exit(0)
 
         _log.debug("WEKA packages check has been done.")
-
-        # Launch init function
-        init()
 
         # Launch run function
         run()
@@ -482,9 +491,9 @@ def main() -> None:
 
     except Exception as e:
         _log.exception("An uncaught exception happened while running rdfl_exp")
-        print("An uncaught exception happened while running rdfl_exp")
-        print(e)
-
+        print("An uncaught exception happened while running rdfl_exp: {}".format(e))
+        print("Check the logs at \"{}\" for more information.".format(os.path.join(setup.APP_DIRS.user_log_dir,
+                                                                                   CONFIG.logging.filename)))
         _crashed = True
 
     finally:

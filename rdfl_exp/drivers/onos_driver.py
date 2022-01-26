@@ -130,7 +130,7 @@ class OnosDriver:
             it = 0
             while app_manager is False and it < 30 :
 
-                cmd = "grep -E \"ApplicationManager .* Started\" {}".format(os.path.join(CONFIG.onos.log_dir, "karaf.log"))
+                cmd = "grep -E \"ApplicationManager .* Started\" {}".format(os.path.join(CONFIG.onos.root_dir, 'karaf', 'data', 'log', "karaf.log"))
                 session = pexpect.spawn(cmd)
                 resp = session.expect(['Started', pexpect.EOF, pexpect.TIMEOUT], timeout=TIMEOUT)
                 if resp == 0:
@@ -241,18 +241,18 @@ class OnosDriver:
         cls.__log.info("Flushing ONOS logs...")
 
         try:
-            dir_list = os.listdir(CONFIG.onos.log_dir)
+            dir_list = os.listdir(os.path.join(CONFIG.onos.root_dir, 'karaf', 'data', 'log'))
 
         except FileNotFoundError:
             # If there is no log directory, it may be because onos hasn't been started yet...
             # check if there is a root directory for onos
-            if not os.path.isdir(CONFIG.onos.root_dir) and not os.path.isdir(CONFIG.onos.karaf_dir):
+            if not os.path.isdir(CONFIG.onos.root_dir) and not os.path.isdir(os.path.join(CONFIG.onos.root_dir, 'karaf')):
                 cls.__log.error("Couldn't flush ONOS' logs: ONOS or Karaf may not be installed.")
                 return False
         else:
             for item in dir_list:
                 if item.startswith("karaf") and item.endswith(".log"):
-                    path = os.path.join(CONFIG.onos.log_dir, item)
+                    path = os.path.join(CONFIG.onos.root_dir, 'karaf', 'data', 'log', item)
                     cls.__log.debug("Flushing ONOS log at \"{}\"".format(path))
                     os.remove(path)
 

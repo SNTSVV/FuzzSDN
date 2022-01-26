@@ -10,6 +10,7 @@ except ImportError:
 with open('requirements.txt', 'r') as f:
     install_requires = f.read().splitlines()
 
+# TODO: add non-python dependencies python-dev, libjpeg-dev, etc.
 setup(
     # Metadata
     name='rdfl_exp',
