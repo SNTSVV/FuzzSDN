@@ -249,7 +249,7 @@ class RuleSet(object):
 
     # ===== ( Private methods ) ========================================================================================
 
-    # TODO: Privatize method
+    # QUESTION: Should the method be privatized ?
     def canonicalize(self):
         """
         Canonicalize the ruleset.

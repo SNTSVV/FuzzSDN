@@ -53,7 +53,7 @@ class Stats:
         cls._stats['learning']['context'] += [learner.get_context()]
 
         # Add the learning data
-        cls._stats['learning']['data']['total_count']   += [learner.get_size_of_classes()]
+        cls._stats['learning']['data']['total_count']   += [learner.get_dataset_size()]
         target_count, other_count = learner.get_size_of_classes()
         cls._stats['learning']['data']['target_count']  += [target_count]
         cls._stats['learning']['data']['other_count']   += [other_count]
@@ -123,7 +123,7 @@ class Stats:
         stats['timing']['iteration']                    = list()
 
         stats['learning']                               = dict()
-        stats['learning']['context']                    = dict()
+        stats['learning']['context']                    = list()
         stats['learning']['data']                       = dict()
         stats['learning']['data']['total_count']        = list()
         stats['learning']['data']['target_count']       = list()

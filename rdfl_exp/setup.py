@@ -213,25 +213,9 @@ def _setup_pid():
 
 
 def _setup_logger():
-
     # Remove all handlers associated with the root logger object.
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
-
-    # Add a trace level to logging
-    trace_level = logging.DEBUG - 5
-
-    def log_to_trace(self, msg, *args, **kwargs):
-        if self.isEnabledFor(trace_level):
-            self._log(trace_level, msg, args, **kwargs)
-
-    def log_to_root(msg, *args, **kwargs):
-        logging.log(trace_level, msg, *args, **kwargs)
-
-    logging.addLevelName(trace_level, 'TRACE')
-    setattr(logging, 'TRACE', trace_level)
-    setattr(logging.getLoggerClass(), 'trace', log_to_trace)
-    setattr(logging, 'trace', log_to_root)
 
     # Write the header into the new log file
     log_file = os.path.join(APP_DIRS.user_log_dir, CONFIG.logging.filename)
@@ -246,11 +230,19 @@ def _setup_logger():
         f.writelines(header)
 
     # Add the configuration
+    level_d = {
+        'TRACE' : logging.TRACE if logging.TRACE is not None else logging.DEBUG,
+        'DEBUG' : logging.DEBUG,
+        'INFO'  : logging.INFO,
+        'WARN'  : logging.WARNING,
+        'ERROR' : logging.ERROR
+    }
+    level = level_d.get(CONFIG.logging.level, logging.INFO)
     logging.basicConfig(
         filename=log_file,
         filemode='a',  # Use append affix to not overwrite the header
         format='%(asctime)s,%(msecs)d | %(name)s | %(levelname)s | %(message)s',
         datefmt='%H:%M:%S',
-        level=logging.DEBUG,
+        level=level
     )
 # End def _setup_logger

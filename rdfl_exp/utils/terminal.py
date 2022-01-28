@@ -42,3 +42,5 @@ def progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=100,
     # Print New Line on Complete
     if iteration == total:
         print()
+# End def progress_bar
+

@@ -11,11 +11,13 @@ from datetime import datetime
 
 from mininet.log import setLogLevel
 from mininet.net import Mininet
-from mininet.node import Host, OVSKernelSwitch, RemoteController
+from mininet.node import Host, OVSKernelSwitch
 from mininet.topo import Topo
 
+from rdfl_exp.drivers.mininet_driver import MininetDriver
 from rdfl_exp.drivers.onos_driver import OnosDriver
 from rdfl_exp.utils.database import Database as SqlDb
+from rdfl_exp.utils.exit_codes import ExitCode
 from rdfl_exp.utils.log import LogPipe
 from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
 
@@ -23,31 +25,6 @@ from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
 
 logger                      = logging.getLogger(__name__)
 exp_logger                  = logging.getLogger("PacketFuzzer.jar")
-
-
-# ===== ( Mininet Topology ) ===========================================================================================
-
-class SingleTopo(Topo):
-    # Single switch connected to n hosts
-    def __init__(self, **opts):
-        # Initialize topology and default option
-        Topo.__init__(self, **opts)
-        switches = []
-        hosts = []
-
-        # create switches
-        switches.append(
-            self.addSwitch('s1', cls=OVSKernelSwitch, protocols='OpenFlow14'))
-
-        # create hosts
-        hosts.append(
-            self.addHost('h1', cls=Host, ip='10.0.0.1', defaultRoute=None))
-        hosts.append(
-            self.addHost('h2', cls=Host, ip='10.0.0.2', defaultRoute=None))
-
-        self.addLink(hosts[0], switches[0])
-        self.addLink(hosts[1], switches[0])
-# End class SingleTopo
 
 # ===== (Before, after functions) ======================================================================================
 
@@ -200,30 +177,19 @@ def run_fuzz_test():
     time.sleep(2)  # Wait 2 sec to be sure
 
     logger.info("Starting Mininet network")
-    topo = SingleTopo()
-    net = Mininet(topo=topo,
-                  controller=None)
 
-    net.addController("c0",
-                      controller=RemoteController,
-                      ip=CONFIG.onos.host,
-                      port=CONFIG.fuzzer.port)
-
-    net.start()
-    time.sleep(5)  # Wait 5 secs
-
-    h1, h2 = net.get('h1', 'h2')
+    MininetDriver.start(
+        cmd='mn --controller=remote,ip={},port={},protocols=OpenFlow14 --topo=single,2'.format(CONFIG.onos.host,
+                                                                                               CONFIG.fuzzer.port)
+    )
 
     logger.info("Executing ping command: h1 -> h2")
-    exc_trace = h1.cmd("ping -c 1 {}".format(h2.IP()))
-    logger.trace("ping trace:\n{}".format(exc_trace))
-
-    # Waiting for 2 seconds after ping
-    time.sleep(2)
+    stats = MininetDriver.ping_host(src='h1', dst='h2', count=1, wait_timeout=5)
+    logger.trace("Ping results: {}".format(stats.as_dict() if stats is not None else stats))
 
     # Check if mininet crashed
-    mininet_pid = list(get_pid("mininet"))
-    if len(mininet_pid) == 0:  # if 0 (active), print "Active"
+    alive, return_code = MininetDriver.is_alive()
+    if alive is not True and return_code not in (None, ExitCode.OK):
         logger.info("Mininet has crashed at {}".format(datetime.now()))
         logger.info("Saving status to the log message database")
         if not SqlDb.is_connected():
@@ -232,27 +198,19 @@ def run_fuzz_test():
         try:
             # Storing a new log message stating that onos crashed
             level = "error"
-            message = "*** Mininet has crashed ***"
-            SqlDb.execute(
-                "INSERT INTO log_error (date, level, message) VALUES (NOW(6), %s, %s)",
-                (level, message))
+            message = "*** Mininet has crashed (exit code: {}) ***".format(return_code)
+            SqlDb.execute("INSERT INTO log_error (date, level, message) VALUES (NOW(6), %s, %s)", (level, message))
             SqlDb.commit()
 
-        except (Exception,):
+        except Exception:
             logger.exception("An exception happened while recording mininet crash:")
 
         finally:
             SqlDb.disconnect()
-    else:
-        logger.info("Stopping the mininet network")
-        net.stop()
-        time.sleep(1)
 
     # Clean mininet
-    logger.info("Cleaning mininet")
-    subprocess.call(["sudo", "mn", "-c"],
-                    stderr=subprocess.DEVNULL,
-                    stdout=subprocess.DEVNULL)
+    logger.info("Stopping Mininet")
+    MininetDriver.stop()
     logger.debug("Done")
 
     logger.info("Stopping Control Flow Fuzzer")

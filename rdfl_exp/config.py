@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+import logging
 import os
 from configparser import ConfigParser
 
@@ -121,3 +121,21 @@ else:
         os.path.join(app_dirs.user_config_dir, "rdfl_exp.cfg"),
         os.path.join(app_dirs.site_config_dir, "rdfl_exp.cfg")
     ))
+
+# Had a trace level to logging module
+trace_level = logging.DEBUG - 5
+
+def log_to_trace(self, msg, *args, **kwargs):
+    if self.isEnabledFor(trace_level):
+        self._log(trace_level, msg, args, **kwargs)
+
+
+def log_to_root(msg, *args, **kwargs):
+    logging.log(trace_level, msg, *args, **kwargs)
+
+
+logging.addLevelName(trace_level, 'TRACE')
+setattr(logging, 'TRACE', trace_level)
+setattr(logging.getLoggerClass(), 'trace', log_to_trace)
+setattr(logging, 'trace', log_to_root)
+
