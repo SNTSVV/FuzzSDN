@@ -444,6 +444,7 @@ def cleanup(*args):
 
 # ===== ( Main Function ) ==============================================================================================
 
+# TODO: Check for sudo permissions otherwise ask for password
 def main() -> None:
 
     global _crashed

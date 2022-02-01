@@ -13,8 +13,8 @@ from rdfl_exp.utils.terminal import Fore, Style
 if __name__ == '__main__':
 
     # Check that we have root permissions to run the program
-    if os.geteuid() != 0:
+    if os.geteuid() == 0:
         raise SystemExit(Fore.RED + Style.BOLD + "Error" + Style.RESET
-                         + ": This program must be run with root permissions."
-                         + " Try again using \"sudo\".")
+                         + ": This program must not be run with root permissions."
+                         + " Try again without using \"sudo\".")
     main.main()

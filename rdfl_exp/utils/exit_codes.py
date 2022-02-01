@@ -1,43 +1,38 @@
 #!/usr/bin/env python3
+import os
 from enum import IntEnum
 
 
 class ExitCode(IntEnum):
     """
-    Enum class that defines standards exit codes and can be used with SystemExit
+    Enum class that wraps around standards exit codes and can be used with SystemExit
     """
     UNDEF               = -1  # Used when an error code is not defined
-
-    OK                  = 0  # No error occurred.
-    ERROR               = 1  #
-    SHELL_ERROR         = 2  # Misuse of shell builtins(according to Bash documentation)
-    CMD_CANT_EXEC       = 126  # Command cannot be executed
-    CMD_NOT_FOUND       = 127  # Command not found
-    INVALID_EXIT_ARG    = 128  # Invalid argument to exit
-    TERM_CTRL_C         = 130  # Terminated by CTRL+C
-
-    # Exit codes commonly used with Python
-    PY_USAGE            = 64  # Specified command was used incorrectly, such as when the wrong number of arguments are given.
-    PY_DATA_ERR         = 65  # Specified input data was incorrect.
-    PY_NO_INPUT         = 66  # Specified input file did not exist or was not readable.
-    PY_NO_USER          = 67  # Specified user did not exist.
-    PY_NO_HOST          = 68  # Specified host did not exist.
-    PY_UNAVAILABLE      = 69  # A required service is unavailable.
-    PY_SOFTWARE         = 70  # An internal software error was detected.
-    PY_OS_ERR           = 71  # An operating system error was detected, such as the inability to fork or create a pipe.
-    PY_OS_FILE          = 72  # Some system file did not exist, could not be opened, or had some other kind of error.
-    PY_CANT_CREAT       = 73  # A user specified output file could not be created.
-    PY_IOERR            = 74  # An error occurred while doing I/O on some file.
-    PY_TEMPFAIL         = 75  # Temporary failure occurred. This indicates something that may not really be an error, such as a network connection that couldn’t be made during a retryable operation.
-    PY_PROTOCOL         = 76  # A protocol exchange was illegal, invalid, or not understood.
-    PY_NO_PERM          = 77  # Insufficient permissions to perform the operation (but not intended for file system problems).
-    PY_CONFIG           = 78  # Some kind of configuration error occurred.
-    PY_NOT_FOUND        = 79  # Something like "an entry was not found".
+    EX_OK               = os.EX_OK  # No error occurred.
+    EX_SHELLERROR       = 2  # Misuse of shell builtins(according to Bash documentation)
+    EX_CANTEXEC         = 126  # Command cannot be executed
+    EX_CMDNOTFOUND      = 127  # Command not found
+    EX_INVALIDEXITARG   = 128  # Invalid argument to exit
+    EX_CTRLC            = 130  # Terminated by CTRL+C
+    EX_USAGE            = os.EX_USAGE  # Specified command was used incorrectly, such as when the wrong number of arguments are given.
+    EX_DATAERR          = os.EX_DATAERR  # Specified input data was incorrect.
+    EX_NOINPUT          = os.EX_NOINPUT  # Specified input file did not exist or was not readable.
+    EX_NOUSER           = os.EX_NOUSER  # Specified user did not exist.
+    EX_NOHOST           = os.EX_NOHOST  # Specified host did not exist.
+    EX_UNAVAILABLE      = os.EX_UNAVAILABLE  # A required service is unavailable.
+    EX_SOFTWARE         = os.EX_SOFTWARE  # An internal software error was detected.
+    EX_OSERR            = os.EX_OSERR  # An operating system error was detected, such as the inability to fork or create a pipe.
+    EX_OSFILE           = os.EX_OSFILE  # Some system file did not exist, could not be opened, or had some other kind of error.
+    EX_CANTCREAT        = os.EX_CANTCREAT  # A user specified output file could not be created.
+    EX_IOERR            = os.EX_IOERR  # An error occurred while doing I/O on some file.
+    EX_TEMPFAIL         = os.EX_TEMPFAIL  # Temporary failure occurred. This indicates something that may not really be an error, such as a network connection that couldn't be made during a retryable operation.
+    EX_PROTOCOL         = os.EX_PROTOCOL  # A protocol exchange was illegal, invalid, or not understood.
+    EX_NOPERM           = os.EX_NOPERM  # Insufficient permissions to perform the operation (but not intended for file system problems).
+    EX_CONFIG           = os.EX_CONFIG  # Some kind of configuration error occurred.
+    EX_NOTFOUND         = os.EX_NOTFOUND if hasattr(os, 'EX_NOTFOUND') else UNDEF  # Something like "an entry was not found".
 
     @classmethod
-    def has_value(cls, value):
+    def has_member_for_value(cls, value):
         return value in cls._value2member_map_
-    # End def ExitCode
 
-if __name__ == '__main__':
-    print(ExitCode(80))
+# End class exit_code

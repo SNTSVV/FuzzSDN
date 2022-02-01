@@ -8,14 +8,13 @@ import pexpect
 from importlib import resources
 from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
 import rdfl_exp.resources.tools.onos as onos_tools
-
-
-TIMEOUT     = 5
+from rdfl_exp.drivers.commons import sudo_expect
 
 
 class OnosDriver:
 
     __log = logging.getLogger(__name__)
+    __timeout = 5
 
     # ===== Install Uninstall ==========================================================================================
 
@@ -29,30 +28,36 @@ class OnosDriver:
         cls.__log.info("Installing ONOS...")
         try:
             if force is True:
-                child = pexpect.spawn("{} --no-start --force --initd".format(install_exe))
+                child = pexpect.spawn("sudo {} --no-start --force --initd".format(install_exe))
             else:
-                child = pexpect.spawn("{} --no-start --initd".format(install_exe))
+                child = pexpect.spawn("sudo {} --no-start --initd".format(install_exe))
 
             # NOTE: this timeout may need to change depending on the network
-            # and size of ONOS
-            index = child.expect([r"ONOS\sis\salready\sinstalled",
-                                  r"Failed\sto\sstart",
-                                  r"ONOS\sis\sinstalled",
-                                  pexpect.TIMEOUT],
-                                 timeout=180)
-            if index == 0:
+            try:
+                i = sudo_expect(spawn=child,
+                                pattern=[r"ONOS\sis\salready\sinstalled",
+                                         r"Failed\sto\sstart",
+                                         r"ONOS\sis\sinstalled",
+                                         pexpect.TIMEOUT],
+                                timeout=180)
+            except KeyError:
+                cls.__log.error("Unable to stop ONOS due to permission issues. Is sudo configured?")
+                cls.__log.error("Add rdfl_exp to sudoers or configure sudo password in configuration file")
+                return False
+
+            if i == 0:
                 # Process started
                 # main.log.info("ONOS was installed on and started")
                 # self.handle.expect(self.prompt)
                 cls.__log.info("ONOS is already installed")
                 return True
-            elif index == 1:
+            elif i == 1:
                 cls.__log.error("ONOS service failed to start")
                 return False
-            elif index == 2:
+            elif i == 2:
                 cls.__log.info("ONOS has been installed.")
                 return True
-            elif index == 3:
+            elif i == 3:
                 cls.__log.error("ONOS installation timed out")
                 child.sendline("\x03")  # Control-C
                 return False
@@ -92,7 +97,20 @@ class OnosDriver:
         """
         # Call onos service
         cls.__log.info("Starting ONOS...")
-        subprocess.call(["systemctl", "start", "onos"], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+        child = pexpect.spawn("sudo systemctl start onos")
+
+        try:
+            i = sudo_expect(spawn=child,
+                            pattern=[pexpect.EOF],
+                            timeout=180)
+        except KeyError:
+            cls.__log.error("Unable to start ONOS due to permission issues. Is sudo configured?")
+            cls.__log.error("Add rdfl_exp to sudoers or configure sudo password in configuration file")
+            return False
+
+        if i == 0:
+            # QUESTION: Maybe we should check something here ?
+            pass
 
         start_level = False
         app_manager = False
@@ -105,17 +123,17 @@ class OnosDriver:
                                     + "-p 8101 "
                                     + "karaf@localhost ")
 
-            resp = session.expect(['Password:', pexpect.EOF, pexpect.TIMEOUT], timeout=TIMEOUT)
+            resp = session.expect(['Password:', pexpect.EOF, pexpect.TIMEOUT], timeout=cls.__timeout)
             if resp == 0:
                 session.sendline(CONFIG.onos.karaf_password)
                 resp = session.expect([r'.*>.*',
                                        r'Connection\sclosed\sby',
                                        pexpect.EOF,
                                        pexpect.TIMEOUT]
-                                      , timeout=TIMEOUT)
+                                      , timeout=cls.__timeout)
                 if resp == 0:
                     session.sendline("bundle:list | grep 'START LEVEL 100'")
-                    resp = session.expect(['START LEVEL 100', pexpect.EOF, pexpect.TIMEOUT], timeout=TIMEOUT)
+                    resp = session.expect(['START LEVEL 100', pexpect.EOF, pexpect.TIMEOUT], timeout=cls.__timeout)
                     if resp == 0:
                         start_level = True
                 elif resp == 1:
@@ -132,7 +150,7 @@ class OnosDriver:
 
                 cmd = "grep -E \"ApplicationManager .* Started\" {}".format(os.path.join(CONFIG.onos.root_dir, 'karaf', 'data', 'log', "karaf.log"))
                 session = pexpect.spawn(cmd)
-                resp = session.expect(['Started', pexpect.EOF, pexpect.TIMEOUT], timeout=TIMEOUT)
+                resp = session.expect(['Started', pexpect.EOF, pexpect.TIMEOUT], timeout=cls.__timeout)
                 if resp == 0:
                     app_manager = True
                 else:
@@ -152,19 +170,28 @@ class OnosDriver:
     @classmethod
     def stop(cls):
         cls.__log.info("Stopping ONOS...")
-        subprocess.call(["systemctl", "stop", "onos"],
-                        stderr=subprocess.DEVNULL,
-                        stdout=subprocess.DEVNULL)
+        child = pexpect.spawn("sudo systemctl stop onos")
+
+        try:
+            i = sudo_expect(spawn=child, pattern=[pexpect.EOF], timeout=180)
+        except KeyError:
+            cls.__log.error("Unable to stop ONOS due to permission issues. Is sudo configured?")
+            cls.__log.error("Add rdfl_exp to sudoers or configure sudo password in configuration file")
+            return False
+
+        if i == 0:
+            # QUESTION: Maybe we should check something here ?
+            pass
 
         it = 0
         stopped = False
-        while stopped is False and it < 15:
+        while stopped is False and it < 100:
             cmd = r"ps -ef | egrep \'java .*/onos/.* org\.apache\.karaf\.main\.Main\'"
             session = pexpect.spawn(cmd)
 
-            resp = session.expect(['Started', pexpect.EOF, pexpect.TIMEOUT], timeout=TIMEOUT)
+            resp = session.expect(['Started', pexpect.EOF, pexpect.TIMEOUT], timeout=cls.__timeout)
             if resp == 0:
-                sleep(1)
+                sleep(0.1)
             else:
                 stopped = True
 
@@ -200,7 +227,7 @@ class OnosDriver:
                               '404 Not Found',
                               pexpect.EOF,
                               pexpect.TIMEOUT],
-                             TIMEOUT)
+                             cls.__timeout)
 
             if i == 0:
                 activated = True
@@ -242,7 +269,6 @@ class OnosDriver:
 
         try:
             dir_list = os.listdir(os.path.join(CONFIG.onos.root_dir, 'karaf', 'data', 'log'))
-
         except FileNotFoundError:
             # If there is no log directory, it may be because onos hasn't been started yet...
             # check if there is a root directory for onos
@@ -254,7 +280,20 @@ class OnosDriver:
                 if item.startswith("karaf") and item.endswith(".log"):
                     path = os.path.join(CONFIG.onos.root_dir, 'karaf', 'data', 'log', item)
                     cls.__log.debug("Flushing ONOS log at \"{}\"".format(path))
-                    os.remove(path)
+                    try:
+                        os.remove(path)
+                    except PermissionError:
+                        # It is highly probable that sudo is required to delete those files.
+                        # If so, try again using sudo
+                        child = pexpect.spawn("sudo rm {}".format(path))
+                        try:
+                            sudo_expect(spawn=child, pattern=[pexpect.EOF], timeout=180)
+                        except KeyError:
+                            cls.__log.error("Unable to remove ONOS log file \"{}\". Is sudo configured?".format(path))
+                            cls.__log.error("Add rdfl_exp to sudoers or configure sudo password in configuration file")
+                            return False
+                    finally:
+                        cls.__log.trace("Removed \"{}\"".format(path))
 
         cls.__log.info("ONOS logs have been flushed.")
         return True

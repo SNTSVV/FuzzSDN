@@ -7,11 +7,11 @@ from typing import Optional, Tuple
 import pexpect
 
 from rdfl_exp.analytics.ping_stats import PingStats
-
+from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
+from rdfl_exp.drivers.commons import sudo_expect
 
 from rdfl_exp.utils.exit_codes import ExitCode
 
-SUDO_PWD = 'ubuntu'  # FIXME automatically find sudo pwd
 MININET_PROMPT = "mininet>"
 
 
@@ -53,27 +53,22 @@ class MininetDriver:
                 cmd_ = "sudo mn -c"
 
                 child = pexpect.spawn(cmd_)
-                index = child.expect([r'password\sfor\s',
-                                      r'Cleanup\scomplete',
-                                      pexpect.EOF,
-                                      pexpect.TIMEOUT],
-                                     timeout)
+                try:
+                    i = sudo_expect(child,
+                                    pattern=[r'Cleanup\scomplete',
+                                             pexpect.EOF,
+                                             pexpect.TIMEOUT],
+                                    timeout=timeout)
+                except KeyError:
+                    cls.__log.error("Unable to start Mininet due to permission issues. Is sudo configured?")
+                    cls.__log.error("Add rdfl_exp to sudoers or configure sudo password in configuration file")
+                    return False
 
-                if index == 0:
-                    # Sudo asking for password
-                    cls.__log.info("Sending sudo password")
-                    child.sendline(SUDO_PWD)
-                    # add 1 to the index so it matches the previous one
-                    index = 1 + child.expect([r'Cleanup\scomplete',
-                                              pexpect.EOF,
-                                              pexpect.TIMEOUT],
-                                             timeout)
-
-                if index == 1:
+                if i == 0:
                     cls.__log.info("Cleanup is complete")
-                elif index == 2:
+                elif i == 1:
                     cls.__log.error("Connection is terminated")
-                elif index == 3:  # timeout
+                elif i == 2:  # timeout
                     cls.__log.error("Something while cleaning Mininet took too long... ")
                     return False
 
@@ -102,61 +97,67 @@ class MininetDriver:
                 else:
                     if type(cmd) in (tuple, list):
                         cmd_ = " ".join(cmd)
+
                     elif type(cmd) == str:
                         cmd_ = cmd
                     else:
                         raise AttributeError("Wrong argument type \"cmd\" was given (got a: {}, expected a \"str\", a \"tuple\" or a \"list\")".format(type(cmd)))
+
                     cls.__log.info("Starting Mininet (with cmd: \"{}\")".format(cmd))
+
+                # Add sudo if the command does not start with sudo
+                if not cmd_.startswith('sudo'):
+                    cmd_ = "sudo {}".format(cmd)
 
                 # Send the command and check if network started
                 cls.__log.info("Sending \"{}\" to Mininet CLI".format(cmd_))
                 child = pexpect.spawn(cmd_)
                 start_time = time.time()
                 while True:
-                    index = child.expect([MININET_PROMPT,
-                                           r'Exception|Error',
-                                           r'No\ssuch\sfile\sor\sdirectory',
-                                           pexpect.EOF,
-                                           pexpect.TIMEOUT],
-                                          timeout)
-                    if index == 0:
+                    try:
+                        i = sudo_expect(child,
+                                        pattern=[MININET_PROMPT,
+                                                 r'Exception|Error',
+                                                 r'No\ssuch\sfile\sor\sdirectory',
+                                                 pexpect.EOF,
+                                                 pexpect.TIMEOUT],
+                                        timeout=timeout)
+                    except KeyError:
+                        cls.__log.error("Unable to start Mininet due to permission issues. Is sudo configured?")
+                        cls.__log.error("Add rdfl_exp to sudoers or configure sudo password in configuration file")
+                        return False
+
+                    if i == 0:
                         cls.__log.info("Mininet built. Time taken: {}".format(time.time() - start_time))
                         cls.__handle = child
                         return True
-                    elif index == 1:
+                    elif i == 1:
                         response = str(child.before + child.after)
-                        print(response)
-                        response += str(child.before + child.after)
-                        cls.__log.error("Launching Mininet failed: {}".format(response))
+                        cls.__log.error("Launching Mininet failed:\n{}".format(response))
                         return False
 
-                    elif index == 2:
-                        cls.__log.error(child.before + child.after)
-                        print(index, "{}".format(child.before + child.after))
+                    elif i == 2:
+                        cls.__log.error("No such file or directory.")
+                        cls.__log.debug(child.before + child.after)
                         return False
 
-                    elif index == 3:
+                    elif i == 3:
                         cls.__log.error("Connection timeout")
-                        print("Connection timeout")
-                        print(child.before)
-                        print(child.after)
+                        cls.__log.debug(child.before + child.after)
                         return False
 
-                    elif index == 4:  # timeout
+                    elif i == 4:  # timeout
                         cls.__log.error("Something took too long... ")
                         cls.__log.debug(child.before + child.after)
-                        print("Something took too long...\n{}".format(child.before + child.after))
                         return False
             else:
-                cls.warning("Trying to connect to Miniet while it's already connected")
+                cls.__log.warning("Trying to connect to Miniet while it's already connected")
                 return True
         except pexpect.TIMEOUT:
             cls.__log.exception("TIMEOUT exception found while starting Mininet")
-            cls.__log.error("   " + child.before)
             return False
         except pexpect.EOF:
             cls.__log.error("EOF exception found while starting Mininet")
-            cls.__log.error("   " + child.before)
             return False
         except Exception:
             cls.__log.exception("Uncaught exception while starting Mininet")
@@ -229,7 +230,8 @@ class MininetDriver:
             if cls.__handle.isalive():
                 return True, None
             else:
-                return False, ExitCode(cls.__handle.exitstatus) if ExitCode.has_value(cls.__handle.exitstatus) else ExitCode.UNDEF
+                return False, ExitCode(cls.__handle.exitstatus) if ExitCode.has_member_for_value(
+                    cls.__handle.exitstatus) else ExitCode.UNDEF
         else:
             return False, None
     # End def is_alive
