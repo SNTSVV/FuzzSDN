@@ -22,28 +22,28 @@ optional arguments:
                         in the cluster.
 """
 
-from os import environ
 import argparse
-import re
 import json
+import re
+from os import environ
 
 convert = lambda text: int(text) if text.isdigit() else text.lower()
 alphanum_key = lambda key: [convert(c) for c in re.split('([0-9]+)', key)]
 
 
-def get_vars_by_type(type):
-    vars = []
+def get_vars_by_type(type_):
+    vars_ = []
     for var in environ:
-        if re.match(r"{}[0-9]+".format(type), var):
-            vars.append(var)
-    return sorted(vars, key=alphanum_key)
+        if re.match(r"{}[0-9]+".format(type_), var):
+            vars_.append(var)
+    return sorted(vars_, key=alphanum_key)
 
 
 def get_vars():
-    _vars = get_vars_by_type('OCC')
-    if len(_vars) == 0:
-        _vars = get_vars_by_type('OC')
-    return _vars
+    vars_ = get_vars_by_type('OCC')
+    if len(vars_) == 0:
+        vars_ = get_vars_by_type('OC')
+    return vars_
 
 
 def get_nodes(ips=None, default_port=5679):
@@ -55,20 +55,23 @@ def get_nodes(ips=None, default_port=5679):
     for ip_string in ips:
         address_tuple = ip_string.split(":")
         if len(address_tuple) == 3:
-            id = address_tuple[0]
+
+            id_ = address_tuple[0]
             ip = address_tuple[1]
             port = int(address_tuple[2])
         else:
-            id = 'atomix-{}'.format(i)
+
+            id_ = 'atomix-{}'.format(i)
             i += 1
             ip = ip_string
             port = default_port
-        result.append(node(id, ip, port))
+        result.append(node(id_, ip, port))
     return result
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Generate the partitions json file given a list of IPs or from environment variables.")
+    parser = argparse.ArgumentParser(
+        description="Generate the partitions json file given a list of IPs or from environment variables.")
     parser.add_argument(
         'node',
         metavar='node_ip',

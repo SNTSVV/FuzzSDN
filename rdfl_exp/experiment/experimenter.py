@@ -8,11 +8,13 @@ import re
 from enum import Enum
 from importlib import resources
 from timeit import default_timer as timer
+from typing import Optional
 
 from iteround import saferound
 
 import rdfl_exp.resources.criteria
-from rdfl_exp.machine_learning.rule import CTX_PKT_IN_tmp, convert_to_fuzzer_actions
+from rdfl_exp.experiment.analyzer import Analyzer
+from rdfl_exp.machine_learning.rule import CTX_PKT_IN_tmp, RuleSet, convert_to_fuzzer_actions
 from rdfl_exp.utils.terminal import progress_bar
 
 
@@ -23,6 +25,7 @@ class FuzzMode(Enum):
 # End class FuzzMode
 
 
+# noinspection PyUnresolvedReferences
 class Experimenter:
     """
     The experimenter class is responsible for running any experience defined in a script under "scenarios"
@@ -43,12 +46,13 @@ class Experimenter:
             'has_term'      : bool()
         }
         self.criterion = dict()
+        self.__analyzer: Optional[Analyzer] = None
 
         # Fuzzing parameters
-        self.fuzz_mode = FuzzMode.UNDEFINED
-        self.rule_set = None
-        self.enable_mutation = True
-        self.mutation_rate = 1.0
+        self.fuzz_mode                      = FuzzMode.UNDEFINED
+        self.rule_set: Optional[RuleSet]    = None
+        self.enable_mutation                = True
+        self.mutation_rate                  = 1.0
 
         # Machine learning parameters
         self.ml_alg = None
@@ -57,8 +61,16 @@ class Experimenter:
         self.cv_folds = 10
     # End def __init__
 
+    # ===== ( Properties ) =============================================================================================
+
+    @property
+    def analyzer(self):
+        return self.__analyzer
+    # End def analyzer
+
     # ===== ( Setters ) ================================================================================================
 
+    # TODO: Convert all those setters to properties
     def set_scenario(self, name):
         """
         Set the scenario that should be used
@@ -79,6 +91,13 @@ class Experimenter:
             # Check if the scenario as a test function
             if not hasattr(self.scenario, "test") or not hasattr(self.scenario.test, '__call__'):
                 raise AttributeError("The function \"test\" is not defined in scenario \"{}\"".format(self.scenario.__name__))
+
+            self.__analyzer = Analyzer()
+            if name.startswith('onos') is True:
+                self.log.debug("Configuring Analyzer for ONOS controller")
+                self.__analyzer.controller = 'onos'
+            else:
+                self.log.warning("No known analyzer configuration for controller \"{}\"".format(name.split("_")[0]))
 
         except ModuleNotFoundError as e:
             self.log.error("Couldn't find scenario \"{}\".".format(name))
@@ -172,7 +191,11 @@ class Experimenter:
         # Build the fuzzer instruction
         fuzz_instr = self.__build_fuzzer_instruction(count=count)
 
+        # Tell the Analyzer
+        self.__analyzer.new_iteration()
+
         for i in range(count):
+
             # Start a time
             start_time = timer()
 
@@ -190,6 +213,9 @@ class Experimenter:
                         self.log.warning("Experimenter is not running in safe mode, resuming the experiment.")
 
             # ===== TEST ===============================================================================================
+            # Start the analysis before the core test
+            self.__analyzer.start_analysis()
+
             # Try to run the 'test' function
             try:
                 self.log.debug("Running \"{}#test\"".format(self.scenario.__name__))
@@ -201,6 +227,9 @@ class Experimenter:
                 else:
                     self.log.warning("Experimenter is not running in safe mode, resuming the experiment.")
 
+            # Finish the analysis after the core test
+            self.__analyzer.finish_analysis()
+
             # ===== AFTER EACH =========================================================================================
             # Try to run the 'after_each' function
             if self.scenario_ctx['has_after'] is True:
@@ -208,7 +237,8 @@ class Experimenter:
                     self.log.debug("Running \"{}#after_each\"".format(self.scenario.__name__))
                     self.scenario.after_each()
                 except Exception as e:
-                    self.log.exception("An exception occurred while running \"{}#after_each\"".format(self.scenario.__name__))
+                    self.log.exception("An exception occurred while running \"{}#after_each\""
+                                       .format(self.scenario.__name__))
                     if self.safe_mode is True:
                         raise e
                     else:
@@ -216,11 +246,11 @@ class Experimenter:
 
             # Stop the timer
             stop_time = timer()
+
             # Print log information
-            self.log.info("Test {} out of {} of scenario \"{}\" has been completed in {}s.".format(i + 1,
-                                                                                                   count,
-                                                                                                   self.scenario.__name__,
-                                                                                                   stop_time - start_time))
+            self.log.info("Test {} out of {} of scenario \"{}\" has been completed in {}s."
+                          .format(i + 1, count, self.scenario.__name__, stop_time - start_time))
+
             # Increment the progress bar
             progress_bar(i + 1, count, prefix='Progress:', suffix='Complete ({}/{})'.format(i + 1, count), length=100)
 
@@ -262,8 +292,6 @@ class Experimenter:
 
         # Else
         elif self.fuzz_mode == FuzzMode.RULE:
-            # Create a list of actions
-            fuzz_action = list()
             # Get the budget
             budget_list = self.__get_budget_for_rules(sample_size=count)
 

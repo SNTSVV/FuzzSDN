@@ -6,8 +6,11 @@ A class to manipulate all operations with a database
 
 import copy
 import logging
+from typing import Optional
 
 import MySQLdb
+from MySQLdb.connections import Connection
+from MySQLdb.cursors import Cursor
 
 
 class Database:
@@ -20,8 +23,8 @@ class Database:
     __database = None
 
     # Connection and cursor used by MySQLdb
-    __db_connection = None
-    __db_cursor = None
+    __db_connection : Optional[Connection]  = None
+    __db_cursor     : Optional[Cursor]  = None
 
     # Internals
     __is_init = False
@@ -119,15 +122,21 @@ class Database:
             return connection, connection.cursor()
 
     @classmethod
+    def get_cursor(cls):
+        return cls.__db_cursor
+
+    @classmethod
     def disconnect(cls):
         """
         Disconnect from the database.
         """
         if cls.__is_connected is True:
-            cls.__db_cursor = None
+            if cls.__db_cursor is not None:
+                cls.__db_cursor.close()
+                cls.__db_cursor = None
             cls.__db_connection.close()
-            cls.__db_connection = None
-            cls.__is_connected = False
+        cls.__db_connection = None
+        cls.__is_connected = False
     # End def disconnect
 
     @classmethod

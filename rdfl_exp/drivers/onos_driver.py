@@ -2,17 +2,20 @@
 import logging
 import os.path
 import subprocess
+from importlib import resources
 from time import sleep
 
 import pexpect
-from importlib import resources
-from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
+
 import rdfl_exp.resources.tools.onos as onos_tools
+from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
 from rdfl_exp.drivers.commons import sudo_expect
 
 
 class OnosDriver:
-
+    """
+    Driver for ONOS SDN Controller.
+    """
     __log = logging.getLogger(__name__)
     __timeout = 5
 
@@ -88,6 +91,8 @@ class OnosDriver:
             return False
         return True
     # End def uninstall
+
+    # ===== Start and Stop =============================================================================================
 
     @classmethod
     def start(cls):
@@ -202,6 +207,8 @@ class OnosDriver:
             cls.__log.error("ONOS did not stop properly.")
             return False
     # End def stop
+
+    # ===== App activation =============================================================================================
 
     @classmethod
     def activate_app(cls, app_name: str, max_try=15):

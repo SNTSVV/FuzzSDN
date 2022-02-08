@@ -5,6 +5,7 @@ Configuration module for rdfl_exp
 """
 
 import getpass
+import logging
 import os
 import pwd
 import tempfile
@@ -17,8 +18,6 @@ from appdirs import AppDirs
 from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
 from rdfl_exp.utils.terminal import Fore, Style
 
-import logging
-
 # ===== ( Globals ) ============================================================
 
 # Load the application directories
@@ -26,6 +25,7 @@ APP_DIRS = AppDirs("rdfl_exp")
 
 # Directories
 OUT_DIR   = os.path.join(APP_DIRS.user_data_dir, "out")    # Path to the output directory
+LOG_TRACE_DIR = join(APP_DIRS.user_data_dir, 'log_trace', datetime.now().strftime("%Y%m%d_%H%M%S"))
 EXP_PATH  = str()                                         # Path to the experiment folder. Defined when running config.init
 
 
@@ -122,6 +122,9 @@ def _setup_dir_structure():
                 + ": Cannot create user data directory at \"{}\". ".format(APP_DIRS.user_data_dir)
             )
 
+    # TODO: refactor this whole module
+    Path(LOG_TRACE_DIR).mkdir(parents=True, exist_ok=True)
+
     # Check if the user cache directory exits and if the run directory exists as well
     if not os.path.exists(APP_DIRS.user_cache_dir):
         try:
@@ -132,7 +135,7 @@ def _setup_dir_structure():
         except Exception:
             raise SystemExit(
                 Fore.RED + Style.BOLD + "Error" + Style.RESET
-                + ": Cannot create directiories at \"{}\". ".format(APP_DIRS.user_cache_dir)
+                + ": Cannot create directories at \"{}\". ".format(APP_DIRS.user_cache_dir)
                 + "Please verify the script got root permissions"
             )
 

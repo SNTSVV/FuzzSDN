@@ -7,26 +7,25 @@ import logging
 import math
 import os
 import pwd
-import shutil
 import signal
 import sys
+import threading
 import time
 from importlib import resources
 from os.path import join
 
-import pandas as pd
 from weka.core import jvm, packages
 
 from rdfl_exp import setup
 from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
-from rdfl_exp.experiment import data as exp_data
 from rdfl_exp.experiment.experimenter import Experimenter, FuzzMode
 from rdfl_exp.experiment.learner import Learner
-from rdfl_exp.machine_learning import data as ml_data
 from rdfl_exp.machine_learning.rule import RuleSet
 from rdfl_exp.resources import scenarios
 from rdfl_exp.stats import Stats
 from rdfl_exp.utils import csv, file
+from rdfl_exp.utils.database import Database as SqlDb
+from rdfl_exp.utils.exit_codes import ExitCode
 from rdfl_exp.utils.terminal import Style
 
 # ===== ( locals ) ============================================================
@@ -237,7 +236,6 @@ def run() -> None:
     # Create variables used by the algorithm
     precision = 0   # Algorithm precision
     recall = 0      # Algorithm recall
-    dataset_path = join(setup.tmp_dir(), "dataset.csv")  # Create a file where the dataset will be stored
     it = 0  # iteration index
 
     # Initialize the rule set
@@ -291,66 +289,26 @@ def run() -> None:
         experimenter.run(_context['nb_of_samples'])
 
         # 2. Fetch the dataset
-        if not os.path.exists(dataset_path):
-            # Fetch the dataset
-            exp_data.fetch(dataset_path)
-            # Copy the raw version of the dataset to the exp folder
-            shutil.copy(src=dataset_path,
-                        dst=join(setup.EXP_PATH, "datasets",
-                                 "it_{}_raw.csv".format(it)))
-            # Format the dataset
-            ml_data.format_dataset(dataset_path,
-                                   method="faf",
-                                   target_error=_context['target_class'],
-                                   csv_sep=';')
-        else:
-            # Fetch the data into a temporary dictionary
-            tmp_dataset_path = join(setup.tmp_dir(), "temp_data.csv")
-            exp_data.fetch(tmp_dataset_path)
-            # Copy the raw version of the dataset to the exp folder
-            shutil.copy(src=tmp_dataset_path,
-                        dst=join(setup.EXP_PATH, "datasets",
-                                 "it_{}_raw.csv".format(it)))
-            # Format the dataset
-            ml_data.format_dataset(tmp_dataset_path,
-                                   method="faf",
-                                   target_error=_context['target_class'],
-                                   csv_sep=';')
-            # Merge the data into the previous dataset
-            csv.merge(csv_in=[tmp_dataset_path, dataset_path],
-                      csv_out=dataset_path,
-                      out_sep=';',
-                      in_sep=[';', ';'])
-            # Get the ratio of target_class
-            df = pd.read_csv(dataset_path, sep=";")
-            # Get the class count
-            classes_count = df['class'].value_counts()
-            total = classes_count[_context['target_class']] + classes_count[_context['other_class']]
 
-        # Save the dataset to the experience folder
-        shutil.copy(
-            src=dataset_path,
-            dst=join(setup.EXP_PATH, "datasets", "it_{}.csv".format(it))
-        )
+        # Write the raw data to the file
+        data = experimenter.analyzer.get_data()
+        data.to_csv(join(setup.EXP_PATH, "datasets", "it_{}_raw.csv".format(it)), index=False, encoding='utf-8')
+
+        # Write the formatted data to the file
+        data = experimenter.analyzer.get_data(format_error=_context['target_class'])
+        data.to_csv(join(setup.EXP_PATH, "datasets", "it_{}.csv".format(it)), index=False, encoding='utf-8')
 
         # Convert the set to an arff file
         csv.to_arff(
-            csv_path=dataset_path,
-            arff_path=join(setup.tmp_dir(), "dataset.arff"),
-            csv_sep=';',
-            relation='dataset_iteration_{}'.format(it),
-            exclude=['pkt_struct', 'fuzz_info', 'action']
-        )
-
-        # Save the arff dataset as well
-        shutil.copy(
-            src=join(setup.tmp_dir(), "dataset.arff"),
-            dst=join(setup.EXP_PATH, "datasets", "it_{}.arff".format(it))
+            csv_path=join(setup.EXP_PATH, "datasets", "it_{}.csv".format(it)),
+            arff_path=join(setup.EXP_PATH, "datasets", "it_{}.arff".format(it)),
+            csv_sep=',',
+            relation='dataset_iteration_{}'.format(it)
         )
 
         # 3. Perform machine learning algorithms
         start_of_ml = time.time()
-        learner.load_data(join(setup.tmp_dir(), "dataset.arff"))
+        learner.load_data(join(setup.EXP_PATH, "datasets", "it_{}.arff".format(it)))
         learner.learn()
         end_of_ml = time.time()
 
@@ -433,12 +391,18 @@ def cleanup(*args):
             jvm.stop()
             _log.debug("JVM has been stopped.")
 
+        if SqlDb.is_connected():
+            SqlDb.disconnect()
+
+    for thread in threading.enumerate():
+        print(thread)
+
     # Exit with code 0
     _log.info("Exiting rdfl_exp.")
     if _crashed is True:
         sys.exit(1)
     else:
-        sys.exit(0)
+        sys.exit(int(ExitCode.EX_OK))
 # End def cleanup
 
 

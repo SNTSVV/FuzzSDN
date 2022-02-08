@@ -24,8 +24,8 @@ export ATOMIX_INSTALL_DIR="${ATOMIX_INSTALL_DIR:-/opt/atomix}" # Installation di
 
 # Parameters
 export OCI="${OCI:-localhost}"          # ONOS Controller Instance
-export ONOS_USER="${ONOS_USER:-sdn}"    # ONOS user on system
-export ONOS_GROUP="${ONOS_GROUP:-sdn}"  # ONOS group on system
+export ONOS_USER="${ONOS_USER:-$(logname)}"    # ONOS user on system
+export ONOS_GROUP="${ONOS_GROUP:$(logname)}"  # ONOS group on system
 export ONOS_PWD="${ONOS_PWD:-rocks}"    # ONOS user password on system
 
 # Add ONOS-specific directories to the executable PATH

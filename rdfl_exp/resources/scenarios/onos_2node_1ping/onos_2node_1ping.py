@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # coding: utf-8
-import json
 import logging
 import os
 import signal
@@ -9,17 +8,12 @@ import sys
 import time
 from datetime import datetime
 
-from mininet.log import setLogLevel
-from mininet.net import Mininet
-from mininet.node import Host, OVSKernelSwitch
-from mininet.topo import Topo
-
+from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
+from rdfl_exp.drivers.fuzzer_driver import FuzzerDriver
 from rdfl_exp.drivers.mininet_driver import MininetDriver
 from rdfl_exp.drivers.onos_driver import OnosDriver
 from rdfl_exp.utils.database import Database as SqlDb
 from rdfl_exp.utils.exit_codes import ExitCode
-from rdfl_exp.utils.log import LogPipe
-from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
 
 # ===== ( Parameters ) =================================================================================================
 
@@ -77,9 +71,6 @@ def before_each():
     # Flush the logs of ONOS
     success &= OnosDriver.flush_logs()
 
-    # Set mininet log level to WARNING
-    setLogLevel('warning')
-
     # Stop running instances of onos
     success &= OnosDriver.stop()
 
@@ -98,6 +89,15 @@ def after_each():
         logger.info("Disconnecting from the database...")
         SqlDb.disconnect()
         logger.info("Database is disconnected")
+
+    # Clean mininet
+    logger.info("Stopping Mininet")
+    MininetDriver.stop()
+    logger.debug("Done")
+
+    logger.info("Stopping Control Flow Fuzzer")
+    FuzzerDriver.stop(5)
+    logger.debug("Done")
 
     OnosDriver.stop()
     logger.debug("done")
@@ -121,11 +121,9 @@ def test(instruction=None, retries=1):
     """
 
     # Write the instruction to the fuzzer
-    logger.info("Writing instructions to {}".format(CONFIG.fuzzer.instr_path))
-    logger.debug("Instruction to write:\n{}".format(json.dumps(instruction, sort_keys=False, indent=4)))
-
-    with open(CONFIG.fuzzer.instr_path, 'w') as rf:
-        rf.write(instruction)
+    logger.debug("Writing fuzzer instructions")
+    if instruction is not None:
+        FuzzerDriver.set_instructions(instruction)
 
     # Get the initial count of the database to be sure that a new data point is generated
     initial_db_count = count_db_entries()
@@ -135,6 +133,7 @@ def test(instruction=None, retries=1):
     run_fuzz_test()
 
     # Verify that a new datapoint has been added
+    # TODO: Remove check for log entries, it is not relevant anymore and the feature will be removed in the fuzzer.
     db_count = count_db_entries()
 
     logger.debug("Database count delta = {}".format(db_count - initial_db_count))
@@ -168,13 +167,7 @@ def run_fuzz_test():
         os.kill(pid, signal.SIGKILL)
 
     logger.info("Starting Control Flow Fuzzer")
-    exp_stderr_pipe = LogPipe(logging.ERROR, "PacketFuzzer.jar")
-    exp_stdout_pipe = LogPipe(logging.DEBUG, "PacketFuzzer.jar")
-    cff_process = subprocess.Popen(["java", "-jar", CONFIG.fuzzer.jar_path],
-                                   stderr=exp_stderr_pipe,
-                                   stdout=exp_stdout_pipe)
-
-    time.sleep(2)  # Wait 2 sec to be sure
+    FuzzerDriver.start()
 
     logger.info("Starting Mininet network")
 
@@ -186,10 +179,11 @@ def run_fuzz_test():
     logger.info("Executing ping command: h1 -> h2")
     stats = MininetDriver.ping_host(src='h1', dst='h2', count=1, wait_timeout=5)
     logger.trace("Ping results: {}".format(stats.as_dict() if stats is not None else stats))
+    time.sleep(5)
 
     # Check if mininet crashed
     alive, return_code = MininetDriver.is_alive()
-    if alive is not True and return_code not in (None, ExitCode.OK):
+    if alive is not True and return_code not in (None, ExitCode.EX_OK):
         logger.info("Mininet has crashed at {}".format(datetime.now()))
         logger.info("Saving status to the log message database")
         if not SqlDb.is_connected():
@@ -207,37 +201,6 @@ def run_fuzz_test():
 
         finally:
             SqlDb.disconnect()
-
-    # Clean mininet
-    logger.info("Stopping Mininet")
-    MininetDriver.stop()
-    logger.debug("Done")
-
-    logger.info("Stopping Control Flow Fuzzer")
-    exp_stderr_pipe.close()
-    exp_stdout_pipe.close()
-    cff_process.terminate()
-    logger.debug("Done")
-
-    # Check if onos crashed
-    onos_status = subprocess.call(["systemctl", "is-active", "--quiet", "onos"])
-    if onos_status != 0:  # if 0 (active), print "Active"
-        logger.info("*** Onos has crashed at {}".format(datetime.now()))
-        logger.info("*** Saving status to the log message database")
-        if not SqlDb.is_connected():
-            SqlDb.connect('control_flow_fuzzer')
-
-        try:
-            # Storing a new log message stating that onos crashed
-            level = "error"
-            message = "*** Onos has crashed ***"
-            SqlDb.execute(
-                "INSERT INTO log_error (date, level, message) VALUES (NOW(6), %s, %s)",
-                (level, message))
-            SqlDb.commit()
-
-        except (Exception,):
-            logger.exception("An exception happened while recording onos crash:")
 # End def run_fuzz_test
 
 
@@ -273,13 +236,3 @@ def get_pid(name: str):
                 yield int(args[1])
                 break
 # End def get_pid
-
-
-def write_usr_instr(instructions: str):
-    """Write the usr rules for the fuzzer."""
-    logger.info("Writing instructions to {}".format(CONFIG.fuzzer.instr_path))
-    logger.debug("Instruction to write:\n{}".format(json.dumps(instructions, sort_keys=False, indent=4)))
-
-    with open(CONFIG.fuzzer.instr_path, 'w') as rf:
-        rf.write(instructions)
-# End def write_usr_rules
