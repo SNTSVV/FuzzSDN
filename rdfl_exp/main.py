@@ -18,9 +18,7 @@ from weka.core import jvm, packages
 
 from rdfl_exp import setup
 from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
-from rdfl_exp.experiment.experimenter import Experimenter, FuzzMode
-from rdfl_exp.experiment.learner import Learner
-from rdfl_exp.machine_learning.rule import RuleSet
+from rdfl_exp.experiment import Experimenter, FuzzMode, Learner, RuleSet
 from rdfl_exp.resources import scenarios
 from rdfl_exp.stats import Stats
 from rdfl_exp.utils import csv, file

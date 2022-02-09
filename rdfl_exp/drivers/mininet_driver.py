@@ -7,9 +7,7 @@ from typing import Optional, Tuple
 import pexpect
 
 from rdfl_exp.analytics.ping_stats import PingStats
-from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
 from rdfl_exp.drivers.commons import sudo_expect
-
 from rdfl_exp.utils.exit_codes import ExitCode
 
 MININET_PROMPT = "mininet>"
@@ -170,7 +168,6 @@ class MininetDriver:
         
         :return: True if Mininet successfully stops or if the handle doesn't exists, False otherwise
         """
-        response = ''
         if cls.__handle is not None:
             cls.__log.info("Stopping mininet...")
             try:

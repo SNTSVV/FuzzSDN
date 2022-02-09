@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import json
 import logging
-# Params
 import os
 import subprocess
 from time import sleep

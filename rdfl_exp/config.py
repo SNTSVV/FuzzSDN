@@ -5,6 +5,7 @@ from configparser import ConfigParser
 
 from appdirs import AppDirs
 
+
 # ===== ( Config Section ) =============================================================================================
 
 class ConfigurationSection(object):
@@ -124,6 +125,7 @@ else:
 
 # Had a trace level to logging module
 trace_level = logging.DEBUG - 5
+
 
 def log_to_trace(self, msg, *args, **kwargs):
     if self.isEnabledFor(trace_level):

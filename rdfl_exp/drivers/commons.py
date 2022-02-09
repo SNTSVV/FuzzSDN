@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-A utility class for common functions used accros all drivers
+A utility class for common functions used across all drivers
 """
 # QUESTION: Should this module be moved to utils ?
 from typing import Iterable

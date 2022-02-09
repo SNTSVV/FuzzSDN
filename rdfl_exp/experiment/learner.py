@@ -3,18 +3,14 @@
 import logging
 import os
 import re
-import sys
-import traceback
 from copy import copy
 
 from weka.classifiers import Classifier, Evaluation, FilteredClassifier
-from weka.core import jvm, packages
-from weka.core.classes import Random, deepcopy
+from weka.core.classes import Random
 from weka.core.converters import Loader
-from weka.core.dataset import Instances
 from weka.filters import Filter, MultiFilter
 
-from rdfl_exp.machine_learning.rule import Rule, RuleSet
+from rdfl_exp.experiment import Rule, RuleSet
 
 
 class Learner:
@@ -141,8 +137,6 @@ class Learner:
 
     def learn(self):
         """
-        :param data_path: The path to the dataset
-        :return:
         """
 
         # Build the classifier

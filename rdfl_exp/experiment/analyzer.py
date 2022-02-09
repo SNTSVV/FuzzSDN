@@ -8,9 +8,7 @@ from typing import Optional
 import pandas as pd
 from pypika import Column, Query, Tables
 
-from rdfl_exp.analytics.log.log_parser import LogParser
-from rdfl_exp.analytics.log.onos_log_parser import OnosLogParser
-from rdfl_exp.analytics.log.ryu_log_parser import RyuLogParser
+from rdfl_exp.analytics.log import LogParser, OnosLogParser
 from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
 from rdfl_exp.setup import LOG_TRACE_DIR
 from rdfl_exp.utils.database import Database as SqlDb
@@ -70,10 +68,6 @@ class Analyzer:
         if value.lower() == 'onos':
             self.__controller = 'onos'
             self.__log_parser = OnosLogParser()
-
-        elif value.lower() == 'ryu':
-            self.__controller = 'ryu'
-            self.__log_parser = RyuLogParser()
 
         else:
             raise AttributeError("Unknown controller \"{}\". Supported controllers are: {}".format(value, ','.join(

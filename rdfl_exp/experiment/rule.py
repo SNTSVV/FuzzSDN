@@ -3,8 +3,8 @@
 import itertools
 import operator
 import random
+import re as regex
 from copy import deepcopy
-import re as RegEx
 from datetime import datetime
 from typing import List
 
@@ -13,84 +13,6 @@ from sympy import *
 from z3 import z3
 
 from rdfl_exp.utils import smt
-
-# ==== ( Lookup tables ) ==============================================================================================
-
-# LUT to convert "field" conditions into fuzzer actions
-FIELD_AS_FEATURE_LUT = {
-    # Fields for Fields as feature
-    "of_version"    : {"loc": 0, "size": 1},
-    "of_type"       : {"loc": 1, "size": 1},
-    "length"        : {"loc": 2, "size": 2},
-    "xid"           : {"loc": 4, "size": 4},
-    "buffer_id"     : {"loc": 8, "size": 4},
-    "total_len"     : {"loc": 12, "size": 2},
-    "reason"        : {"loc": 14, "size": 1},
-    "table_id"      : {"loc": 15, "size": 1},
-    "cookie"        : {"loc": 16, "size": 8},
-    "match_type"    : {"loc": 24, "size": 2},
-    "match_length"  : {"loc": 26, "size": 2},
-    "match_pad"     : {"loc": 28, "size": 4},
-    "oxm_0_class"   : {"loc": 32, "size": 2},
-    "oxm_0_field"   : {"loc": 34, "size": 1},
-    "oxm_0_has_mask": {"loc": 34, "size": 1},
-    "oxm_0_length"  : {"loc": 35, "size": 1},
-    "oxm_0_value"   : {"loc": 36, "size": 4},
-    "pad"           : {"loc": 40, "size": 2},
-    "eth_dst"       : {"loc": 42, "size": 6},
-    "eth_src"       : {"loc": 48, "size": 6},
-    "ethertype"     : {"loc": 54, "size": 2},
-    "arp_htype"     : {"loc": 56, "size": 2},
-    "arp_ptype"     : {"loc": 58, "size": 2},
-    "arp_hlen"      : {"loc": 60, "size": 1},
-    "arp_plen"      : {"loc": 61, "size": 1},
-    "arp_oper"      : {"loc": 62, "size": 2},
-    "arp_sha"       : {"loc": 64, "size": 6},
-    "arp_spa"       : {"loc": 70, "size": 4},
-    "arp_tha"       : {"loc": 74, "size": 6},
-    "arp_tpa"       : {"loc": 80, "size": 4},
-}
-
-# LUT to convert "bytes" condition into fuzzer actions. The LUT must be generated at least once before usage using the
-# function generate_bytes_as_feature_lut
-BYTES_AS_FEATURE_LUT = dict()
-
-# LUT to convert "domain knowledge" based conditions into "field" based conditions
-DOMAIN_KNOWLEDGE_CDT_LUT = {
-    "(match_type_is_valid = True)":         "(match_type = 1)",
-    "(match_type_is_valid = False)":        "(match_type != 1)",
-
-    "(reason_NoMatch = True)":              "(reason = 0)",
-    "(reason_NoMatch = False)":             "(reason != 0)",
-    "(reason_Action = True)":               "(reason = 1)",
-    "(reason_Action = False)":              "(reason != 1)",
-    "(reason_InvalidTTL = True)":           "(reason = 2)",
-    "(reason_InvalidTTL = False)":          "(reason != 2)",
-    "(reason_Illegal = True)":              "(reason > 2)",
-    "(reason_Illegal = False)":             "(reason <= 2)",
-
-    "(oxm_class_NXM_0 = True)":             "(oxm_class = 0)",
-    "(oxm_class_NXM_0 = False)":            "(oxm_class != 0)",
-    "(oxm_class_NXM_1 = True)":             "(oxm_class = 1)",
-    "(oxm_class_NXM_1 = False)":            "(oxm_class != 1)",
-    "(oxm_class_OPENFLOW_BASIC = True)":    "(oxm_class = 32768)",
-    "(oxm_class_OPENFLOW_BASIC = False)":   "(oxm_class != 32768)",
-    "(oxm_class_EXPERIMENTER = True)":      "(oxm_class = 65535)",
-    "(oxm_class_EXPERIMENTER = False)":     "(oxm_class != 65535)",
-
-    "(oxm_class_INVALID = True)":           "(oxm_class != 0) and (oxm_class != 1) and (oxm_class != 32768) and (oxm_class != 65535)",
-    "(oxm_class_INVALID = False)":          "((oxm_class = 0) or (oxm_class = 1) or (oxm_class = 32768) or (oxm_class = 65535))",
-
-    "(match_pad_is_zero = True)":           "(match_pad = 0)",
-    "(match_pad_is_zero = False)":          "(match_pad != 0)",
-
-    "(pad_is_zero = True)":                 "(pad = 0)",
-    "(pad_is_zero = False)":                "(pad != 0)",
-
-    "(ethertype_is_arp = True)":            "(pad = 2054)",
-    "(ethertype_is_arp = False)":           "(pad != 2054)"
-}
-
 
 # TODO: Calculate ctx when parsing a packet from the input data
 CTX_PKT_IN_tmp = {
@@ -128,16 +50,6 @@ CTX_PKT_IN_tmp = {
 }
 
 
-def generate_bytes_as_feature_lut():
-    """Generate the BYTES_AS_FEATURE_LUT automatically."""
-    global BYTES_AS_FEATURE_LUT
-
-    BYTES_AS_FEATURE_LUT = dict()
-    for i in range(256):
-        BYTES_AS_FEATURE_LUT["byte_{}".format(i)] = {'loc': i, 'size': 1}
-# End def generate_bytes_as_feature_lut
-
-
 # ===== ( RuleSet class ) ==============================================================================================
 
 class RuleSet(object):
@@ -145,7 +57,7 @@ class RuleSet(object):
     # ===== ( Constructor ) ============================================================================================
 
     def __init__(self, rules=None):
-        self.rules = list() if rules is None else list(rules)
+        self.rules: List[Rule] = list() if rules is None else list(rules)
     # End def __init__
 
     # ===== ( Overrides ) ==============================================================================================
@@ -223,7 +135,6 @@ class RuleSet(object):
         # Else we calculate the confidence of the rule at idx
         elif relative is True:
             if relative_to_class is True:
-                rules_with_same_class = ()
                 return self.confidence(idx, False) / sum(self.confidence(i) for i in range(len(self)) if self.rules[i].get_class() == self.rules[idx].get_class())
             else:
                 return self.confidence(idx, False) / sum(self.confidence(i) for i in range(len(self)))
@@ -335,18 +246,18 @@ class Rule(object):
                 tmp_rule = tmp_rule.replace(elem, DOMAIN_KNOWLEDGE_CDT_LUT[elem])
 
         # Get the class of the rule
-        match = RegEx.search(rgx_cls, str(rule_str))
+        match = regex.search(rgx_cls, str(rule_str))
         if match:
             rule_cls = match.group("cls").strip()
 
         # Get the stats of the rule
-        match = RegEx.search(rgx_stats, rule_str)
+        match = regex.search(rgx_stats, rule_str)
         if match:
             rule_cvg = float(match.group("cvg"))
             rule_fp = float(match.group("fp"))
 
         # Match the rules conditions
-        match = RegEx.search(rgx_rules, rule_str)
+        match = regex.search(rgx_rules, rule_str)
         if match:
             rule_cdt = match.group("rule").replace(' ', '')  # Remove all spaces
 
@@ -354,7 +265,7 @@ class Rule(object):
             rule_cdt = rule_cdt.replace("and", "&")
             rule_cdt = rule_cdt.replace("or", "|")
 
-            match = RegEx.findall(r'(\w+[><=!]{1,2}\d+)', rule_cdt)
+            match = regex.findall(r'(\w+[><=!]{1,2}\d+)', rule_cdt)
             processed_match = list()
             for m in match:
                 if m not in processed_match:
@@ -475,8 +386,8 @@ class Rule(object):
         cnf_expr = to_cnf(self.expr)
 
         # Compile the regex use for finding symbols
-        rgx_sym         = RegEx.compile(r'(?P<symbol>\w+) *(?P<operator>[><=!]{1,2}) *(?P<value>\d+)')
-        rgx_sym_and_not = RegEx.compile(r'(?P<symbol>~*\w+) *(?P<operator>[><=!]{1,2}) *(?P<value>\d+)')
+        rgx_sym         = regex.compile(r'(?P<symbol>\w+) *(?P<operator>[><=!]{1,2}) *(?P<value>\d+)')
+        rgx_sym_and_not = regex.compile(r'(?P<symbol>~*\w+) *(?P<operator>[><=!]{1,2}) *(?P<value>\d+)')
         # match = RegEx.findall(rgx_sym, cnf_expr)
 
         # Create a list of symbols present in the equation
@@ -540,54 +451,62 @@ class Rule(object):
 
         return models
     # End def get models
-# End class Rule
 
+    # TODO: handle poorly defined conditions, like "(field > value) and (field < value - 1)" (which is impossible)
+    def convert_to_fuzzer_actions(self,
+                                  n: int = 1,
+                                  include_header: bool = False,
+                                  enable_mutation: bool = True,
+                                  mutation_rate: float = 1.0,
+                                  ctx: dict = None):
+        """
+        Transform the rule into a set of fuzzer interpretable actions.
 
-# ===== ( Methods ) =================================================================================================
+        :param n:               The number of fuzzer actions to generate.
+        :param include_header:  Whether or not to include the header in the fuzz actions (default to False).
+        :param enable_mutation: Whether or not mutations should be enabled (default to True).
+        :param mutation_rate:   The mutation rate (default to 1.0). This information is used only if enable_mutation is
+                                set to True
+        :param ctx:             A context. optional.
 
-# TODO: handle poorly defined conditions, like "(field > value) and (field < value - 1)" (which is impossible)
-def convert_to_fuzzer_actions(rule: Rule,
-                              n: int = 1,
-                              include_header: bool = False,
-                              enable_mutation: bool = True,
-                              mutation_rate: float = 1.0,
-                              ctx: dict = None):
-    """ Transform the rules into a set of fuzzer interpretable actions """
+        :returns: A list of n fuzzer actions.
+        """
 
-    # Verify arguments
-    if n < 1:
-        raise ValueError("\"n\" must be >= 1 (got: {})".format(n))
+        # Verify arguments
+        if n < 1:
+            raise ValueError("\"n\" must be >= 1 (got: {})".format(n))
 
-    # Prepare actions
-    fuzzer_actions = list()
-    # The fuzzer action to be generated
-    single_action = {
-        "intent" : "MUTATE_PACKET_RULE",
-        "target" : "OF_PACKET",
-        "includeHeader": include_header,
-        "enableMutation": enable_mutation,
-        "rule": {
-            "id": rule.id,
-            "clauses": list()
+        # Prepare actions
+        fuzzer_actions = list()
+        # The fuzzer action to be generated
+        single_action = {
+            "intent": "MUTATE_PACKET_RULE",
+            "target": "OF_PACKET",
+            "includeHeader": include_header,
+            "enableMutation": enable_mutation,
+            "rule": {
+                "id": self.id,
+                "clauses": list()
+            }
         }
-    }
 
-    if enable_mutation:
-        single_action['mutationRateMultiplier'] = mutation_rate
+        if enable_mutation:
+            single_action['mutationRateMultiplier'] = mutation_rate
 
-    # get the Models
-    models = rule.get_models(n, ctx)
+        # get the Models
+        models = self.get_models(n, ctx)
 
-    for model in models:
-        action = deepcopy(single_action)
-        for field in model.keys():
-            action['rule']["clauses"].append(
-                {
-                    'field': field,
-                    'value': model[field]
-                }
-            )
-        fuzzer_actions.append(action)
+        for model in models:
+            action = deepcopy(single_action)
+            for field in model.keys():
+                action['rule']["clauses"].append(
+                    {
+                        'field': field,
+                        'value': model[field]
+                    }
+                )
+            fuzzer_actions.append(action)
 
-    return fuzzer_actions
-# End def convert_to_fuzzer_actions
+        return fuzzer_actions
+    # End def convert_to_fuzzer_actions
+# End class Rule

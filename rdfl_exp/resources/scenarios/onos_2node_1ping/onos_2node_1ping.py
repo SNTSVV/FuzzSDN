@@ -9,9 +9,9 @@ import time
 from datetime import datetime
 
 from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
-from rdfl_exp.drivers.fuzzer_driver import FuzzerDriver
-from rdfl_exp.drivers.mininet_driver import MininetDriver
-from rdfl_exp.drivers.onos_driver import OnosDriver
+from rdfl_exp.drivers import FuzzerDriver
+from rdfl_exp.drivers import MininetDriver
+from rdfl_exp.drivers import OnosDriver
 from rdfl_exp.utils.database import Database as SqlDb
 from rdfl_exp.utils.exit_codes import ExitCode
 

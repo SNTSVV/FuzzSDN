@@ -1,8 +1,6 @@
 import json
 
-from rdfl_exp.experiment.experimenter import Experimenter
-from rdfl_exp.experiment.learner import Learner
-from rdfl_exp.machine_learning.rule import RuleSet
+from rdfl_exp.experiment import Experimenter, Learner
 
 
 class Stats:

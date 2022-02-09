@@ -3,7 +3,7 @@
 import itertools
 import math
 from collections.abc import Iterable
-from copy import copy, deepcopy
+from copy import copy
 
 
 class Interval:

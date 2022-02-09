@@ -2,8 +2,7 @@
 import logging
 import os.path
 
-from rdfl_exp.analytics.log.log_parser import LogParser
-from rdfl_exp.analytics.log.regexes import LOG_RGX
+from rdfl_exp.analytics.log import LOG_RGX, LogParser
 from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
 
 

@@ -13,8 +13,7 @@ from typing import Optional
 from iteround import saferound
 
 import rdfl_exp.resources.criteria
-from rdfl_exp.experiment.analyzer import Analyzer
-from rdfl_exp.machine_learning.rule import CTX_PKT_IN_tmp, RuleSet, convert_to_fuzzer_actions
+from rdfl_exp.experiment import Analyzer, CTX_PKT_IN_tmp, RuleSet
 from rdfl_exp.utils.terminal import progress_bar
 
 
@@ -299,8 +298,7 @@ class Experimenter:
                 # Create the action for the rule i
                 self.log.trace("Budget for rule {}: {}".format(i, budget_list[i]))
                 if budget_list[i] > 0:
-                    actions = convert_to_fuzzer_actions(
-                        rule=self.rule_set[i],
+                    actions = self.rule_set[i].convert_to_fuzzer_actions(
                         n=budget_list[i],
                         include_header=False,
                         enable_mutation=True,

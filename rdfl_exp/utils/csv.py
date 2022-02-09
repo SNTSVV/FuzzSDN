@@ -17,10 +17,9 @@ def merge(csv_in: list, csv_out, in_sep : list = None, out_sep=','):
     :param out_sep:
     """
     csv_len = len(csv_in)
+    in_sep = [','] * csv_len if in_sep is None else in_sep
 
-    if in_sep is None:
-        sep = [','] * csv_len
-    elif len(in_sep) != csv_len:
+    if len(in_sep) != csv_len:
         raise AttributeError("length of sep != len of csv ({} sep for {} csv)".format(len(in_sep), csv_len))
 
     # combine all files in the list
