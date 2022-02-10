@@ -240,11 +240,6 @@ class Rule(object):
         # Copy the rule string
         tmp_rule = deepcopy(rule_str)
 
-        # Replace all the elements according to the LUT
-        for elem in DOMAIN_KNOWLEDGE_CDT_LUT:
-            if elem in tmp_rule:
-                tmp_rule = tmp_rule.replace(elem, DOMAIN_KNOWLEDGE_CDT_LUT[elem])
-
         # Get the class of the rule
         match = regex.search(rgx_cls, str(rule_str))
         if match:
