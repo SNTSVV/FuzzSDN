@@ -52,5 +52,30 @@ LOG_RGX = {
         'OPENFLOW_ERROR':             r'Received\serror\smessage\s(?P<msg>[^(]*)'  # Match the error type
                                       r'\(xid=(?P<xid>[^,]*)'                       # Match the XID
                                       r',\scode=(?P<code>[^,]*)'                    # Match the error code
+    },
+
+    'RYU': {
+        # Matches an EVENT
+        'EVENT':            r'EVENT\s+'             # Match event token
+                            r'(?P<event>.*)',       # Match event message into event group
+
+        'OPF_ERROR':  r'OFPErrorMsg\('                                      # Match the beginning of the error message
+                      r'type=(?P<type>0[xX][0-9a-fA-F]+)'                   # Match the error message
+                      r',\scode=(?P<code>0[xX][0-9a-fA-F]+)'                # Match the code
+                      r',\sdata=(?P<data>b\'(?:\\x[0-9a-fA-F]{2})*\')\)',   # Match the data byte string
+
+        # Match Parsing errors
+        'PARSING_ERROR':    r'Encountered an error while parsing OpenFlow packet from switch.\s'
+                            r'This implies the switch sent a malformed OpenFlow packet\.\s*'
+                            r'(?P<message>.+)',     # Match the of message
+
+        # Matches an exception and parses it
+        'EXCEPTION':        r'Traceback \(most recent call last\):'                 # Match literally
+                            r'(?:\n.*)+?'                                           # Repeat in a non capturing group matching a newline followed by 0+ times any character
+                            r'\n(?P<type>\S*?(?:exception|error|Error|Exception))'   # Match newline and capturing group "type" 0+ characters non greedy and than match Exception of Error followed by ":"
+                            r':?[^\S\n]*'                                           # Match a ":" plus a whitespace characters
+                            r'(?P<reason>.+)?',                                     # Capturing group 1+ times any character as the reason
+
+
     }
 }

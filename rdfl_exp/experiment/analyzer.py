@@ -8,7 +8,7 @@ from typing import Optional
 import pandas as pd
 from pypika import Column, Query, Tables
 
-from rdfl_exp.analytics.log import LogParser, OnosLogParser
+from rdfl_exp.analytics.log import LogParser, OnosLogParser, RyuLogParser
 from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
 from rdfl_exp.setup import LOG_TRACE_DIR
 from rdfl_exp.utils.database import Database as SqlDb
@@ -69,6 +69,10 @@ class Analyzer:
             self.__controller = 'onos'
             self.__log_parser = OnosLogParser()
 
+        elif value.lower() == 'ryu':
+            self.__controller = 'ryu'
+            self.__log_parser = RyuLogParser()
+
         else:
             raise AttributeError("Unknown controller \"{}\". Supported controllers are: {}".format(value, ','.join(
                 '\"{}\"'.format(c) for c in allowed_controllers)))
@@ -127,12 +131,19 @@ class Analyzer:
 
         if format_error is not None:
 
-            if format_error in ('non_parsing_error', 'parsing_error'):
-                df['class'] = df['error_type'].apply(lambda x: "parsing_error" if x == "PARSING_ERROR" else "non_parsing_error")
+            format_error_lambda_dict = {
+                'OFPBAC_BAD_OUT_PORT'   : lambda x: "OFPBAC_BAD_OUT_PORT" if x == "OFPBAC_BAD_OUT_PORT" else "OTHER_REASON",
 
-            elif format_error in ('unknown_reason', 'known_reason'):
-                df['class'] = df['error_reason'].apply(lambda x: 'unknown_reason' if x is None else 'known_reason')
+                'unknown_reason'        : lambda x: 'unknown_reason' if x is None else 'known_reason',
+                'known_reason'          : lambda x: 'unknown_reason' if x is None else 'known_reason',
 
+                'non_parsing_error'     : lambda x: "parsing_error" if x == "PARSING_ERROR" else "non_parsing_error",
+                'parsing_error'         : lambda x: "parsing_error" if x == "PARSING_ERROR" else "non_parsing_error",
+            }
+            lambda_ = format_error_lambda_dict.get(format_error, None)
+
+            if lambda_ is not None:
+                df['class'] = df['error_reason'].apply(lambda_)
             else:
                 raise ValueError("Unknown target error '{}'".format(format_error))
 

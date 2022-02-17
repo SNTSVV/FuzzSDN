@@ -18,6 +18,7 @@ from weka.core import jvm, packages
 
 from rdfl_exp import setup
 from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
+from rdfl_exp.drivers import FuzzerDriver, OnosDriver, RyuDriver
 from rdfl_exp.experiment import Experimenter, FuzzMode, Learner, RuleSet
 from rdfl_exp.resources import scenarios
 from rdfl_exp.stats import Stats
@@ -79,7 +80,7 @@ def parse_arguments():
     # ===== ( Experiment args ) ========================================================================================
 
     # Positional argument to choose the target
-    error_types = ('unknown_reason', 'known_reason', 'parsing_error', 'non_parsing_error')
+    error_types = ('unknown_reason', 'known_reason', 'parsing_error', 'non_parsing_error', 'OFPBAC_BAD_OUT_PORT')
     parser.add_argument('target_class',
                         metavar='ERROR_TYPE',
                         type=str,
@@ -171,6 +172,9 @@ def parse_arguments():
     elif args.target_class == "non_parsing_error":
         args.other_class = "parsing_error"
 
+    elif args.target_class == "OFPBAC_BAD_OUT_PORT":
+        args.other_class = "OTHER_REASON"
+
     # Format the criterion
     if args.criterion_kwargs:
         kwargs = dict()
@@ -253,9 +257,11 @@ def run() -> None:
 
     # Set up the experimenter
     experimenter = Experimenter()
-    experimenter.set_mutation(_context['enable_mutation'], _context['mutation_rate'])
-    experimenter.set_scenario(_context['scenario'])
-    experimenter.set_criterion(_context['criterion']['name'], **_context['criterion']['kwargs'])
+    experimenter.enable_mutation        = _context['enable_mutation']
+    experimenter.mutation_rate          = _context['mutation_rate']
+    experimenter.scenario               = _context['scenario']
+    experimenter.criterion              = _context['criterion']['name'], _context['criterion']['kwargs']
+    experimenter.samples_per_iteration  = _context['nb_of_samples']
 
     # Setup the Learner
     learner = Learner()
@@ -278,13 +284,14 @@ def run() -> None:
 
         if not learner.has_rules():
             _log.info("No rules in set of rule. Generating random samples")
-            experimenter.set_fuzzing_mode(FuzzMode.RANDOM)
-            experimenter.set_rule_set(None)
-        else:
-            experimenter.set_fuzzing_mode(FuzzMode.RULE)
-            experimenter.set_rule_set(learner.get_rules())
+            experimenter.fuzz_mode  = FuzzMode.RANDOM
+            experimenter.ruleset    = None
 
-        experimenter.run(_context['nb_of_samples'])
+        else:
+            experimenter.fuzz_mode  = FuzzMode.RULE
+            experimenter.ruleset    = learner.get_rules()
+
+        experimenter.run()
 
         # 2. Fetch the dataset
 
@@ -360,6 +367,19 @@ def cleanup(*args):
 
     if CONFIG.general.cleanup is True:
         _log.info("Cleaning up rdfl_exp...")
+
+        # Stop all the the drivers
+        _log.debug("Stopping all the drivers...")
+        try:
+            FuzzerDriver.stop()
+            OnosDriver.stop()
+            RyuDriver.stop()
+
+        except Exception:
+            _log.exception("An exception occurred while stopping the SDN controllers...")
+        finally:
+            _log.debug("PID file has been removed.")
+
         # Ensure the cache, and data directories have the user's permissions
         _log.debug("Restoring ownership permissions to user {}...".format(setup.get_user()))
         uid = pwd.getpwnam(setup.get_user()).pw_uid
@@ -391,9 +411,6 @@ def cleanup(*args):
 
         if SqlDb.is_connected():
             SqlDb.disconnect()
-
-    for thread in threading.enumerate():
-        print(thread)
 
     # Exit with code 0
     _log.info("Exiting rdfl_exp.")

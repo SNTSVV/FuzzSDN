@@ -7,17 +7,23 @@ from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
 
 
 class OnosLogParser(LogParser):
+    """
+    Log Parser class for ONOS SDN Controller
+    """
 
     def __init__(self):
         super().__init__()
         self.__log = logging.getLogger(__name__)
         self.__log_path = os.path.join(os.path.expanduser(CONFIG.onos.root_dir), 'karaf', 'data', 'log', 'karaf.log')
+    # End def __init__
 
-    def parse_log(self):
-        self.__log.info("Parsing ONOS log file at: \"{}\"".format(self.__log_path))
+    def parse_log(self, path=None):
+        self.__log.info("Parsing ONOS log file at: \"{}\"".format(self.__log_path if path in (None, '') else path))
         # Read the log first
-        self.__log.debug("Loading the file...")
-        self.load_from_file(self.__log_path)
+        if path is None or path == '':
+            self.load_from_file(self.__log_path)
+        else:
+            self.load_from_file(path)
 
         has_error = False
         error_type = None
@@ -77,6 +83,6 @@ class OnosLogParser(LogParser):
                     error_effect = 'SWITCH_DISCONNECTED'
 
         return has_error, error_type, error_reason, error_effect, self.log_trace
-
     # End def parse_log
+
 # End class OnosLogParser
