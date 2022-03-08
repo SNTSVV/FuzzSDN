@@ -29,56 +29,79 @@ class OnosLogParser(LogParser):
         error_type = None
         error_reason = None
         error_effect = None
+        
+        hello_happened = False
 
         self.__log.debug("Detecting error tokens the log...")
-        matches = self._match(LOG_RGX['ONOS'])
+        key_and_matches = self._match(LOG_RGX['ONOS'])
 
-        for match in matches:
+        for key_match in key_and_matches:
             # When no error was previously detected
-            if has_error is False:
-                if match['rgx_key'] == 'PROCESSING_ERROR':
-                    self.__log.trace("Processing error detected.")
-                    has_error = True
-                    error_type = 'PROCESSING_ERROR'
-                    continue  # Process the next match
+            rgx_key = key_match['rgx_key']
+            rgx_match = key_match['match']
 
-                elif match['rgx_key'] == 'OPENFLOW_ERROR':
-                    self.__log.trace("OpenFlow error detected.")
-                    has_error = True
-                    error_type = 'OPENFLOW_ERROR'
-                    error_reason = match['match']['code']
-                    continue  # Process the next match
-
-                elif match['rgx_key'] == 'PKT_DESERIALIZATION_ERROR':
-                    self.__log.trace("Packet Deserialization Error detected.")
-                    has_error = True
-                    error_type = 'PKT_DESERIALIZATION_ERROR'
-                    error_reason = "{}: {}".format(match['match']['exception'], match['match']['reason'])
-                    continue  # Process the next match
-            # If there already was an error
+            # If there is no hello message yet, then nothing should be processed
+            if hello_happened is False:
+                if rgx_key == 'OF_HELLO':
+                    hello_happened = True
             else:
-                # If the previous error is a processing error
-                if error_type == 'PROCESSING_ERROR':
-                    # If its an exception in the decoder...
-                    if match['rgx_key'] == 'DECODER_EXCEPTION':
-                        if "OFParseError" in match['match']['exception']:
-                            self.__log.trace("OFParseError detected (reason: \"{}\")".format(match['match']['reason']))
-                            error_type = 'PARSING_ERROR'
-                            error_reason = match['match']['reason']
-
-                        elif 'NullPointerException' in match['match']['exception']:
-                            self.__log.trace("NullPointerException detected (reason: \"{}\")".format(match['match']['reason']))
-                            error_type = 'NULL_POINTER_EXCEPTION'
-                            error_reason = match['match']['reason']
-
-                        else:
-                            self.__log.trace("Unknown Exception (exception: {}, reason: \"{}\")".format(match['match']['exception'], match['match']['reason']))
-                            error_type = "UNKNOWN: {}".format(match['match']['exception'])
-                            error_reason = match['match']['exception']
+                if has_error is False:
+                    if rgx_key == 'PROCESSING_ERROR':
+                        self.__log.trace("Processing error detected.")
+                        has_error = True
+                        error_type = 'PROCESSING_ERROR'
                         continue  # Process the next match
 
-                # If there is an error and we detect a switch disconnection
-                if match['rgx_key'] == 'SWITCH_DISCONNECTED' and has_error is True:
+                    elif rgx_key == 'OPENFLOW_ERROR':
+                        self.__log.trace("OpenFlow error detected.")
+                        has_error = True
+                        error_type = 'OPENFLOW_ERROR'
+                        error_reason = rgx_match['code']
+                        continue  # Process the next match
+
+                    elif rgx_key == 'PKT_DESERIALIZATION_ERROR':
+                        self.__log.trace("Packet Deserialization Error detected.")
+                        has_error = True
+                        error_type = 'PKT_DESERIALIZATION_ERROR'
+                        if 'null' in str(rgx_match['reason']).lower():
+                            error_reason = None
+                        else:
+                            error_reason = rgx_match['reason']
+                        continue  # Process the next match
+
+                # If there already was an error
+                else:
+                    # If the previous error is a processing error
+                    if error_type == 'PROCESSING_ERROR':
+                        # If its an exception in the decoder...
+                        if rgx_key == 'DECODER_EXCEPTION':
+                            if "OFParseError" in rgx_match['exception']:
+                                self.__log.trace("OFParseError detected (reason: \"{}\")".format(rgx_match['reason']))
+                                error_type = 'PARSING_ERROR'
+                                error_reason = rgx_match['reason']
+
+                            elif 'NullPointerException' in rgx_match['exception']:
+                                self.__log.trace("NullPointerException detected (reason: \"{}\")".format(rgx_match['reason']))
+                                error_type = 'NULL_POINTER_EXCEPTION'
+                                if str(rgx_match['reason']).lower() == 'null':
+                                    error_reason = None
+                                else:
+                                    error_reason = rgx_match['reason']
+                            elif 'IllegalArgumentException' in rgx_match['exception']:
+                                self.__log.trace("IllegalArgumentException detected (reason: \"{}\")".format(rgx_match['reason']))
+                                error_type = 'ILLEGAL_ARGUMENT_EXCEPTION'
+                                if str(rgx_match['reason']).lower() == 'null':
+                                    error_reason = None
+                                else:
+                                    error_reason = rgx_match['reason']
+                            else:
+                                self.__log.trace("Unknown Exception (exception: {}, reason: \"{}\")".format(rgx_match['exception'], rgx_match['reason']))
+                                error_type = "UNKNOWN: {}".format(rgx_match['exception'])
+                                error_reason = rgx_match['reason']
+                            continue  # Process the next match
+
+                # Find if there is a switch disconnection
+                if rgx_key == 'SWITCH_DISCONNECTED' and has_error is True:
                     self.__log.trace("Switch disconnection detected")
                     error_effect = 'SWITCH_DISCONNECTED'
 
@@ -86,3 +109,17 @@ class OnosLogParser(LogParser):
     # End def parse_log
 
 # End class OnosLogParser
+
+if __name__ == '__main__':
+    from natsort import natsorted
+    parser = OnosLogParser()
+    directory = '/Users/raphael.ollando/Desktop/onos_log/test/'
+    files = natsorted([name for name in os.listdir(directory) if os.path.isfile(os.path.join(directory, name))])
+
+    for f in files:
+        if f.startswith('log_trace') is False:
+            continue
+        results = parser.parse_log(os.path.join(directory, f))
+        if results[0] is True:
+            print(f)
+            # print("{}: has error: {} | error_type: {} | error_reason: {} | error_effect: {}".format(f, results[0], results[1], results[2], results[3]))

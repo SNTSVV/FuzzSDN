@@ -9,7 +9,6 @@ import os
 import pwd
 import signal
 import sys
-import threading
 import time
 from importlib import resources
 from os.path import join
@@ -22,7 +21,7 @@ from rdfl_exp.drivers import FuzzerDriver, OnosDriver, RyuDriver
 from rdfl_exp.experiment import Experimenter, FuzzMode, Learner, RuleSet
 from rdfl_exp.resources import scenarios
 from rdfl_exp.stats import Stats
-from rdfl_exp.utils import csv, file
+from rdfl_exp.utils import csv, utils
 from rdfl_exp.utils.database import Database as SqlDb
 from rdfl_exp.utils.exit_codes import ExitCode
 from rdfl_exp.utils.terminal import Style
@@ -109,6 +108,15 @@ def parse_arguments():
                         nargs='*',
                         type=str,
                         help="kwargs for the criterion (optional)")
+
+    # Argument to choose the experiment mode
+    mode_choices = ('standard', 'no_learning')
+    parser.add_argument('-m', '--mode',
+                        type=str,
+                        choices=mode_choices,
+                        default='standard',
+                        dest='mode',
+                        help="Select the mode of operation. Allowed modes are: {}".format(', '.join("\'{}\'".format(mc) for mc in mode_choices)))
 
     # Argument to choose the number of sample to generate
     parser.add_argument('-s', '--samples',
@@ -206,8 +214,9 @@ def init() -> None:
             'name'  : args.criterion_name,
             'kwargs': args.criterion_kwargs
         },
-        'target_class'      : args.target_class,  # Class to predict
-        'other_class'       : args.other_class,  # Class to predict
+        'mode'              : args.mode,            # Experimentation mode
+        'target_class'      : args.target_class,    # Class to predict
+        'other_class'       : args.other_class,     # Class to predict
 
         # Iterations
         'it_max'            : 50,
@@ -245,9 +254,17 @@ def run() -> None:
     rule_set.target_class = _context['target_class']
     rule_set.other_class  = _context['other_class']
 
-    ## Get the initial rules
-    # rules = input_data["initial_rules"] if "initial_rules" in input_data else rules
+    ## Get the criterion kwargs string
+    if len(_context['criterion']['kwargs']) > 0:
+        criterion_kwargs_str = " (kwargs: {})"
+        criterion_kwargs_str.format(", ".join("{}=\'{}\'".format(key, _context['criterion']['kwargs'][key]) for key in
+                                              _context['criterion']['kwargs'].keys()))
+    else:
+        criterion_kwargs_str = ''
     # Display header:
+    print(Style.BOLD, "*** Scenario: {}".format(_context['scenario']), Style.RESET)
+    print(Style.BOLD, "*** Criterion: {}{}".format(_context['criterion']['name'], criterion_kwargs_str), Style.RESET)
+    print(Style.BOLD, "*** Mode: {}".format(_context['mode']), Style.RESET)
     print(Style.BOLD, "*** Target class: {}".format(_context['target_class']), Style.RESET)
     print(Style.BOLD, "*** Machine learning algorithm: {}".format(_context['ml_algorithm']), Style.RESET)
     print(Style.BOLD, "*** Preprocessing strategy: {}".format(_context['pp_strategy']), Style.RESET)
@@ -282,7 +299,7 @@ def run() -> None:
 
         # 1. Generate new data from the rule set
 
-        if not learner.has_rules():
+        if not learner.has_rules() or _context['mode'] == 'no_learning':
             _log.info("No rules in set of rule. Generating random samples")
             experimenter.fuzz_mode  = FuzzMode.RANDOM
             experimenter.ruleset    = None
@@ -296,11 +313,11 @@ def run() -> None:
         # 2. Fetch the dataset
 
         # Write the raw data to the file
-        data = experimenter.analyzer.get_data()
+        data = experimenter.analyzer.get_dataset()
         data.to_csv(join(setup.EXP_PATH, "datasets", "it_{}_raw.csv".format(it)), index=False, encoding='utf-8')
 
         # Write the formatted data to the file
-        data = experimenter.analyzer.get_data(format_error=_context['target_class'])
+        data = experimenter.analyzer.get_dataset(error_class=_context['target_class'])
         data.to_csv(join(setup.EXP_PATH, "datasets", "it_{}.csv".format(it)), index=False, encoding='utf-8')
 
         # Convert the set to an arff file
@@ -384,9 +401,9 @@ def cleanup(*args):
         _log.debug("Restoring ownership permissions to user {}...".format(setup.get_user()))
         uid = pwd.getpwnam(setup.get_user()).pw_uid
         gid = grp.getgrnam(setup.get_user()).gr_gid
-        file.recursive_chown(setup.APP_DIRS.user_cache_dir, uid, gid)
-        file.recursive_chown(setup.APP_DIRS.user_log_dir, uid, gid)
-        file.recursive_chown(setup.APP_DIRS.user_data_dir, uid, gid)
+        utils.recursive_chown(setup.APP_DIRS.user_cache_dir, uid, gid)
+        utils.recursive_chown(setup.APP_DIRS.user_log_dir, uid, gid)
+        utils.recursive_chown(setup.APP_DIRS.user_data_dir, uid, gid)
         _log.debug("Permissions have been restored.")
 
         # Clean the temporary directory

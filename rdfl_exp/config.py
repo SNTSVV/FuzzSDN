@@ -4,6 +4,7 @@ import os
 from configparser import ConfigParser
 
 from appdirs import AppDirs
+from rdfl_exp.utils import str_to_typed_value
 
 
 # ===== ( Config Section ) =============================================================================================
@@ -19,7 +20,7 @@ class ConfigurationSection(object):
     def __getattr__(self, option):
         if self.__parser.has_option(self.__name, option):
             if option not in self.__cache:
-                self.__cache[option] = _typed_value(self.__parser.get(self.__name, option))
+                self.__cache[option] = str_to_typed_value(self.__parser.get(self.__name, option))
             return self.__cache[option]
         else:
             raise KeyError("No option \"{}\" in section: \"{}\"".format(option, self.__name))
@@ -74,33 +75,6 @@ class Configuration:
         f.close()
     # End def save
 # End class Config
-
-
-# ===== ( Utility functions ) ==========================================================================================
-
-def _is_type(value, _type):
-    """Simply check the type of a value."""
-    try:
-        _type(value)
-        return True
-    except Exception:
-        return False
-# End def _is_type
-
-
-def _typed_value(value):
-    """ Transform a string value to an actual data type of the same value. """
-    if _is_type(value, int):  # Int
-        return int(value)
-    elif _is_type(value, float):  # Float
-        return float(value)
-    elif value.lower() in ['true', 'false', 'yes', 'no', 'on', 'off']:  # Boolean
-        return True if value.lower() in ['true', 'yes', 'on'] else False
-    elif _is_type(value, None):  # None
-        return None
-    else:
-        return value
-# End def _typed_value
 
 
 # ===== ( Setup configuration ) ========================================================================================

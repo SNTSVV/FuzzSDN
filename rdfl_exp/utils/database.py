@@ -29,7 +29,7 @@ class Database:
     # Internals
     __is_init = False
     __is_connected = False
-    logger = None
+    __log = None
 
     @classmethod
     def init(cls, hostname, username, password, force=False):
@@ -46,8 +46,8 @@ class Database:
         cls.__user = username
         cls.__password = password
 
-        cls.logger = logging.getLogger(__name__)
-        cls.logger.debug("Database module started.")
+        cls.__log = logging.getLogger(__name__)
+        cls.__log.debug("Database module started.")
 
         cls.__is_init = True
 
@@ -91,7 +91,7 @@ class Database:
                                                   cls.__password,
                                                   cls.__database)
         except Exception as e:
-            cls.logger.exception("Exception '{}' happened while connecting:".format(e))
+            cls.__log.exception("Exception '{}' happened while connecting:".format(e))
             raise RuntimeError("Can't connect to the database")
         else:
             cls.__db_cursor = cls.__db_connection.cursor()
@@ -116,7 +116,7 @@ class Database:
                                          cls.__password,
                                          cls.__database)
         except Exception as e:
-            cls.logger.exception("Exception '{}' happened while connecting:".format(e))
+            cls.__log.exception("Exception '{}' happened while connecting:".format(e))
             raise RuntimeError("Can't connect to the database")
         else:
             return connection, connection.cursor()
@@ -158,7 +158,7 @@ class Database:
             raise RuntimeError("Not connected to any database")
 
         cls.__db_cursor.execute(query, parameters or ())
-        cls.logger.debug("SQL Command: {} {}".format(query, parameters))
+        cls.__log.debug("SQL Command: {} {}".format(query, parameters))
     # End def execute
 
     @classmethod
@@ -170,7 +170,7 @@ class Database:
             raise RuntimeError("Not connected to any database")
 
         cls.__db_cursor.execute(query, parameters or ())
-        cls.logger.debug("SQL Command: {} {}".format(query, parameters))
+        cls.__log.debug("SQL Command: {} {}".format(query, parameters))
         cls.commit()
 
         return cls.fetchall()
@@ -184,7 +184,7 @@ class Database:
         if cls.__is_connected is False:
             raise RuntimeError("Not connected to any database")
 
-        cls.logger.debug("Commit last queries")
+        cls.__log.debug("Commit last queries")
         cls.__db_connection.commit()
     # End def commit
 
@@ -196,7 +196,7 @@ class Database:
         if cls.__is_connected is False:
             raise RuntimeError("Not connected to any database")
 
-        cls.logger.debug("Fetching all rows")
+        cls.__log.debug("Fetching all rows")
         return cls.__db_cursor.fetchall()
     # End def fetchall
 
@@ -208,7 +208,7 @@ class Database:
         if cls.__is_connected is False:
             raise RuntimeError("Not connected to any database")
 
-        cls.logger.debug("Fetching one row")
+        cls.__log.debug("Fetching one row")
         return cls.__db_cursor.fetchone()
     # End def fetchone
 
@@ -220,7 +220,7 @@ class Database:
         if cls.__is_connected is False:
             raise RuntimeError("Not connected to any database")
 
-        cls.logger.debug("Fetching one row")
+        cls.__log.debug("Fetching one row")
         return cls.__db_cursor.fetchmany(size=size)
     # End def fetchone
 

@@ -3,14 +3,18 @@
 import logging
 import os
 import re
+import sys
 from copy import copy
+from typing import Optional
 
 from weka.classifiers import Classifier, Evaluation, FilteredClassifier
+from weka.core import jvm, packages
 from weka.core.classes import Random
 from weka.core.converters import Loader
 from weka.filters import Filter, MultiFilter
 
 from rdfl_exp.experiment import Rule, RuleSet
+from rdfl_exp.utils import str_to_typed_value
 
 
 class Learner:
@@ -28,6 +32,7 @@ class Learner:
         self.other_class    = "2"
         self.seed           = None
         self.ml_alg         = None
+        self.ml_hp : Optional[dict] = None
         self.pp_strat       = None
         self.cv_folds       = 10
 
@@ -62,8 +67,17 @@ class Learner:
     # End def set_seed
 
     def set_learning_algorithm(self, alg : str):
-        self.ml_alg = alg.upper()
+
+        alg_split = alg.split(',')
+        self.ml_alg = alg_split[0].upper()
         self.log.debug("machine learning algorithm set to \"{}\"".format(alg))
+
+        # parse the hyper-parameters
+        self.ml_hp = dict()
+        if len(alg_split) > 1:
+            for param in alg_split[1:]:
+                key, value = param.split('=')
+                self.ml_hp[key.strip()] = str_to_typed_value(value.strip())
     # End def set_learning_algorithm
 
     def set_preprocessing_strategy(self, pp_strat):
@@ -132,7 +146,7 @@ class Learner:
         loader = Loader("weka.core.converters.ArffLoader")
 
         self.dataset = loader.load_file(data_path)
-        self.dataset .class_is_last()
+        self.dataset.class_is_last()
     # End def load_data
 
     def learn(self):
@@ -175,12 +189,38 @@ class Learner:
         # Create the classifier
         self.log.debug("Creating the classifier...")
         _clf = None
+
         if self.ml_alg == 'RIPPER':
-            _clf = Classifier(classname="weka.classifiers.rules.JRip")
+
             self.context['algorithm'] = "RIPPER"
+            # NOTE: This is a simple solution for handling the hyperparameters. a more complex solution might be needed
+            #       in the future.
+            options = None
+            if self.ml_hp:
+                options = list()
+                for key in self.ml_hp.keys():
+                    # Number of folds
+                    if key == 'nof':
+                        options.extend(('-F', str(self.ml_hp[key])))
+                    # Minimum total weight
+                    if key == 'mtw':
+                        options.extend(('-N', str(self.ml_hp[key])))
+                    # Number of optimization runs
+                    if key == 'o':
+                        options.extend(('-O', str(self.ml_hp[key])))
+                    # Check error rate
+                    if key == 'cer' and self.ml_hp[key] is False:
+                        options.append('-E')
+                    # Use Pruning
+                    if key == 'up' and self.ml_hp[key] is False:
+                        options.append('-P')
+
+            print(options)
+            _clf = Classifier(classname="weka.classifiers.rules.JRip", options=options)
+
         else:
             raise ValueError("Classifying algorithm \"{}\" is not supported.".format(self.ml_alg))
-
+        print(_clf)
         # Create the final classifier
         if _fltr is None:
             self.classifier = _clf

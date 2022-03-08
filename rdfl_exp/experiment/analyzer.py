@@ -30,7 +30,6 @@ class Analyzer:
         self.__it_cnt       = -1  # Counts the framework iteration. Starts at -1 so it's 0 at the first iteration
 
         # Flags
-        self.__db_init                      = False
         self.__sample_data_table_created    = False
         self.__log_analysis_table_created   = False
 
@@ -43,9 +42,8 @@ class Analyzer:
                     username=CONFIG.mysql.user,
                     password=CONFIG.mysql.password)
                 self.__log.debug("The SQL database has been initialized successfully")
-                self.__db_init = True
         finally:
-            if self.__db_init is False:
+            if SqlDb.is_init() is False:
                 self.__log.error("An issue happened while initializing the database.")
     # End def __init__
 
@@ -80,12 +78,14 @@ class Analyzer:
 
     # ===== ( Getters ) ================================================================================================
 
-    def get_data(self, iteration=None, format_error=None) -> pd.DataFrame:
+    def get_dataset(self, iteration=None, error_class=None) -> pd.DataFrame:
         """
+        Outputs the analyzed dataset as a Pandas' dataframe.
 
-        :param iteration:
-        :param format_error:
-        :return:
+        :param iteration: Output the dataset of a given iteration. If set to None, the whole dataset is output.
+        :param error_class: Parse the dataset according to the error class. If set to None, no error class is inferred.
+
+        :return: a pd.DataFrame
         """
         # Get the latest available dataset
         # query: FROM `samples_data` SELECT samples.*, log.* JOIN `log_analysis` ON samples_data.id == log.log_id
@@ -114,7 +114,7 @@ class Analyzer:
         finally:
             SqlDb.disconnect()
 
-        # Transform the SQL data to a pandas dataframe
+        # Transform the SQL data to a pandas dataframe and drop the unused columns
         df = pd.DataFrame(data, columns=field_names)
         df.drop(
             [
@@ -122,33 +122,55 @@ class Analyzer:
                 'seq_id',
                 'iter_id',
                 'log_id',
-                'has_error'
             ],
             axis='columns',
             inplace=True,
             errors='ignore'
         )
 
-        if format_error is not None:
+        # Transform the has_error column into boolean values
+        df['has_error'] = df['has_error'].apply(lambda x: x == b'\x01')
 
-            format_error_lambda_dict = {
-                'OFPBAC_BAD_OUT_PORT'   : lambda x: "OFPBAC_BAD_OUT_PORT" if x == "OFPBAC_BAD_OUT_PORT" else "OTHER_REASON",
+        if error_class is not None:
 
-                'unknown_reason'        : lambda x: 'unknown_reason' if x is None else 'known_reason',
-                'known_reason'          : lambda x: 'unknown_reason' if x is None else 'known_reason',
+            # OFPBAC_BAD_OUT_PORT
+            if error_class == 'OFPBAC_BAD_OUT_PORT':
+                if self.__controller == 'ryu':
+                    df['class'] = df['error_reason'].apply(
+                        lambda row: "OFPBAC_BAD_OUT_PORT" if row == "OFPBAC_BAD_OUT_PORT" else "OTHER_REASON")
 
-                'non_parsing_error'     : lambda x: "parsing_error" if x == "PARSING_ERROR" else "non_parsing_error",
-                'parsing_error'         : lambda x: "parsing_error" if x == "PARSING_ERROR" else "non_parsing_error",
-            }
-            lambda_ = format_error_lambda_dict.get(format_error, None)
+                elif self.__controller == 'onos':
+                    df['class'] = df.error_reason.apply(
+                        lambda row: "OFPBAC_BAD_OUT_PORT" if 'BAD_OUT_PORT' in row else "OTHER_REASON"
+                    )
 
-            if lambda_ is not None:
-                df['class'] = df['error_reason'].apply(lambda_)
+            # Unknown Reason / Known Reason
+            elif error_class in ('unknown_reason', 'known_reason'):
+                df['class'] = df.apply(
+                    lambda row: 'unknown_reason' if row.has_error is True and row.error_reason is None else 'known_reason',
+                    axis='columns'
+                )
+            # Parsing / Non parsing error
+            elif error_class in ('parsing_error', 'non_parsing_error'):
+                df['class'] = df['error_reason'].apply(
+                    lambda row: "parsing_error" if row == "PARSING_ERROR" else "non_parsing_error")
+
+            # Unknown Target Error
             else:
-                raise ValueError("Unknown target error '{}'".format(format_error))
+                raise ValueError("Unknown target error '{}'".format(error_class))
 
-            # Drop the error columns
-            df.drop(['error_type', 'error_reason', 'error_effect'], axis='columns', inplace=True, errors='ignore')
+            # Drop the error-related columns
+            df.drop(
+                [
+                    'has_error',
+                    'error_type',
+                    'error_reason',
+                    'error_effect'
+                ],
+                axis='columns',
+                inplace=True,
+                errors='ignore'
+            )
 
         return df
     # End def get_data
@@ -175,7 +197,7 @@ class Analyzer:
         """
         # TODO: take into account, the fact that there could be many different packets fuzzed
         # Read the fuzzer report
-        pkt_struct, fields, _ = self.__read_fuzz_report()
+        pkt_struct, pkt_values, _ = self.__read_fuzz_report()
 
         log_parse_results = self.__log_parser.parse_log()
 
@@ -199,15 +221,15 @@ class Analyzer:
             # NOTE: For now, the seq_id is equal to the sample_id but it is planned in the future that a seq_id could be
             #       given to several samples part of a same sequence
             stmt_1 = Query.into("samples_data").insert(
-                self.__sample_cnt, self.__sample_cnt, self.__it_cnt, *(fields.get(k, None) for k in fields.keys()))
+                self.__sample_cnt, self.__sample_cnt, self.__it_cnt, *(pkt_values.get(k, None) for k in pkt_values.keys()))
 
             # Then add the logs
             # NOTE: For now, the log_id has the same value as the sample_count, but this should be different.
             stmt_2 = Query.into("log_analysis").insert(self.__sample_cnt,
-                                                       1 if log_parse_results[0] is True else 0,
-                                                       log_parse_results[1],
-                                                       log_parse_results[2],
-                                                       log_parse_results[3])
+                                                       1 if log_parse_results[0] is True else 0,    # has_error
+                                                       log_parse_results[1],                        # error_type
+                                                       log_parse_results[2],                        # error_reason
+                                                       log_parse_results[3])                        # error_effect
 
             # Execute the two queries
             self.__log.trace("SQL query: {}".format(stmt_1.get_sql(quote_char=None)))
@@ -236,7 +258,7 @@ class Analyzer:
         # Get the fuzzed packet
         fuzzed_packet = base64.b64decode(data['finalPacket'])
 
-        pkt_fields = dict()
+        pkt_values = dict()
         # Get each field and the associated value, stores it in a
         for field in pkt_struct:
             value = int.from_bytes(fuzzed_packet[field['offset']: field['offset'] + field['length']], byteorder='big')
@@ -249,9 +271,17 @@ class Analyzer:
                 value &= field['mask']
                 value >>= mtz
             # Store the value in the pkt_fields dictionary
-            pkt_fields[field['name']] = value
+            pkt_values[field['name']] = value
 
-        return pkt_struct, pkt_fields, None
+        # Parse the mutations and actions
+        pkt_actions = list()
+        for action_element in data['fuzzActions']:
+            action_dict = dict()
+            action_dict['action'] = action_element['action']['intent']
+            action_dict['mutation'] = action_element['mutations']
+            pkt_actions.append(action_dict.copy())
+
+        return pkt_struct, pkt_values, pkt_actions
     # End def __read_fuzz_report
 
     # ==== ( Database Private Methods ) ================================================================================
@@ -317,7 +347,7 @@ class Analyzer:
             .create_table("log_analysis") \
             .columns(
                 Column("log_id", 'BIGINT', nullable=False),
-                Column("has_error", 'BIT', nullable=False),
+                Column("has_error", 'BIT(1)', nullable=False),
                 Column('error_type', 'VARCHAR(255)', nullable=True),
                 Column('error_reason', 'VARCHAR(255)', nullable=True),
                 Column('error_effect', 'VARCHAR(255)', nullable=True)) \
