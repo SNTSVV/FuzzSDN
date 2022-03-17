@@ -330,33 +330,39 @@ def run() -> None:
 
         # 3. Perform machine learning algorithms
         start_of_ml = time.time()
-        learner.load_data(join(setup.EXP_PATH, "datasets", "it_{}.arff".format(it)))
-        learner.learn()
-        end_of_ml = time.time()
+        try:
 
-        # Get recall and precision from the evaluator results
-        ml_results = learner.get_results()
-        recall    = ml_results['cross-validation'][_context['target_class']]['recall']
-        precision = ml_results['cross-validation'][_context['target_class']]['precision']
+            learner.load_data(join(setup.EXP_PATH, "datasets", "it_{}.arff".format(it)))
+            learner.learn()
 
-        # Avoid cases where precision or recall are NaN values
-        recall = 0.0 if math.isnan(recall) else recall
-        precision = 0.0 if math.isnan(precision) else precision
-        # print("Recall: {:.2f}%, Precision: {:.2f}%".format(recall*100, precision*100))
+            # Get recall and precision from the evaluator results
+            ml_results = learner.get_results()
+            recall    = ml_results['cross-validation'][_context['target_class']]['recall']
+            precision = ml_results['cross-validation'][_context['target_class']]['precision']
 
-        # Budget calculation
-        target_cnt, other_cnt = learner.get_size_of_classes()
-        class_ratio = target_cnt / (target_cnt + other_cnt)
-        s_target = min(0.5 * (learner.get_dataset_size() + _context['nb_of_samples']) - class_ratio * learner.get_dataset_size(),
-                       _context['nb_of_samples'])
-        s_other = max(_context['nb_of_samples'] - s_target, 0)
+            # Avoid cases where precision or recall are NaN values
+            recall = 0.0 if math.isnan(recall) else recall
+            precision = 0.0 if math.isnan(precision) else precision
 
-        for i in range(len(learner.ruleset)):
-            if learner.ruleset[i].get_class() == _context['target_class']:
-                learner.ruleset[i].set_budget(learner.ruleset.confidence(i, relative=True, relative_to_class=True) * s_target / _context['nb_of_samples'])
-            else:  # other_class
-                learner.ruleset[i].set_budget(learner.ruleset.confidence(i, relative=True, relative_to_class=True) * s_other / _context['nb_of_samples'])
+            # Budget calculation
+            target_cnt, other_cnt = learner.get_size_of_classes()
+            class_ratio = target_cnt / (target_cnt + other_cnt)
+            s_target = min(0.5 * (learner.get_dataset_size() + _context['nb_of_samples']) - class_ratio * learner.get_dataset_size(),
+                           _context['nb_of_samples'])
+            s_other = max(_context['nb_of_samples'] - s_target, 0)
+
+            for i in range(len(learner.ruleset)):
+                if learner.ruleset[i].get_class() == _context['target_class']:
+                    learner.ruleset[i].set_budget(learner.ruleset.confidence(i, relative=True, relative_to_class=True) * s_target / _context['nb_of_samples'])
+                else:  # other_class
+                    learner.ruleset[i].set_budget(learner.ruleset.confidence(i, relative=True, relative_to_class=True) * s_other / _context['nb_of_samples'])
+
+        except Exception:
+            _log.exception("An exception occured while trying to learn the rules:")
+            _log.warning("Continuing with previous learner")
+
         # End of iteration total time
+        end_of_ml = time.time()
         end_of_it = time.time()
 
         # Update the timing statistics and classifier statistics statistics and save the statistics

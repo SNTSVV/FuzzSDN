@@ -12,8 +12,8 @@ class Stats:
         cls._stats = cls._create_stats_dict(context["target_class"], context["other_class"])
         cls._stats['context']['scenario']               = context['scenario']
         cls._stats['context']['criterion']              = context['criterion']
-        cls._stats['context']['ml_algorithm']           = context['ml_algorithm'].upper()
-        cls._stats['context']['pp_strategy']            = context['pp_strategy'].lower()
+        cls._stats['context']['ml_algorithm']           = context['ml_algorithm']
+        cls._stats['context']['pp_strategy']            = context['pp_strategy']
         cls._stats['context']['iteration_limit']        = context['it_max']
         cls._stats['context']['samples_per_iteration']  = context['nb_of_samples']
         cls._stats['context']['enable_mutation']        = context['enable_mutation']
@@ -58,37 +58,57 @@ class Stats:
         cls._stats['learning']['data']['class_ratio'] += [target_count / (target_count + other_count)]
 
         # Update the machine learning results
-        cls._stats['learning']['results']["instances"]  += [ml_results['evaluation']['total_num_instances']]
-        cls._stats['learning']['results']["accuracy"]   += [ml_results['evaluation']['correctly_classified'] / ml_results['evaluation']['total_num_instances']]
-        cls._stats['learning']['results']['confidence'] += [rule_set.confidence()]
+        if 'evaluation' in ml_results:
+            cls._stats['learning']['results']["instances"]  += [ml_results['evaluation']['total_num_instances']]
+            cls._stats['learning']['results']["accuracy"]   += [ml_results['evaluation']['correctly_classified'] / ml_results['evaluation']['total_num_instances']]
+        else:
+            cls._stats['learning']['results']["instances"]  += [None]
+            cls._stats['learning']['results']["accuracy"]   += [None]
+
+        if rule_set is not None:
+            cls._stats['learning']['results']['confidence'] += [rule_set.confidence()]
+        else:
+            cls._stats['learning']['results']['confidence'] += [None]
 
         # Add the rules and their statistics at each iteration
         rules_info = list()
-        for i in range(len(rule_set)):
-            rule_dict = dict()
-            rule_dict['id']                     = rule_set[i].id
-            rule_dict['class']                  = rule_set[i].get_class()
-            rule_dict['support']                = rule_set.support(i)
-            rule_dict['confidence']             = rule_set.confidence(i, relative=False)
-            rule_dict['relative_confidence']    = rule_set.confidence(i, relative=True)
-            rule_dict['budget']                 = rule_set[i].get_budget()
-            rule_dict['repr']                   = str(rule_set[i])
-            rules_info += [rule_dict]
+        try:
+            for i in range(len(rule_set)):
+                rule_dict = dict()
+                rule_dict['id']                     = rule_set[i].id
+                rule_dict['class']                  = rule_set[i].get_class()
+                rule_dict['support']                = rule_set.support(i)
+                rule_dict['confidence']             = rule_set.confidence(i, relative=False)
+                rule_dict['relative_confidence']    = rule_set.confidence(i, relative=True)
+                rule_dict['budget']                 = rule_set[i].get_budget()
+                rule_dict['repr']                   = str(rule_set[i])
+                rules_info += [rule_dict]
+        except TypeError:
+            # Then rule_set is empty
+            rules_info = list()
 
         cls._stats['learning']['results']['rules']   += [rules_info]
 
         for evl_method in ('cross-validation', 'evaluation'):
             for class_ in classes:
-                if class_ in ml_results[evl_method]:
-                    cls._stats['learning']['results'][evl_method][class_]['fp_rate']     += [ml_results[evl_method][class_]['fp_rate']]
-                    cls._stats['learning']['results'][evl_method][class_]['tp_rate']     += [ml_results[evl_method][class_]['tp_rate']]
-                    cls._stats['learning']['results'][evl_method][class_]['precision']   += [ml_results[evl_method][class_]['precision']]
-                    cls._stats['learning']['results'][evl_method][class_]['recall']      += [ml_results[evl_method][class_]['recall']]
-                    cls._stats['learning']['results'][evl_method][class_]['f_measure']   += [ml_results[evl_method][class_]['f_measure']]
-                    cls._stats['learning']['results'][evl_method][class_]['mcc']         += [ml_results[evl_method][class_]['mcc']]
-                    cls._stats['learning']['results'][evl_method][class_]['roc']         += [ml_results[evl_method][class_]['roc']]
-                    cls._stats['learning']['results'][evl_method][class_]['prc']         += [ml_results[evl_method][class_]['prc']]
-
+                if evl_method in ml_results and class_ in ml_results.get(evl_method, dict()):
+                    cls._stats['learning']['results'][evl_method][class_]['fp_rate']    += [ml_results[evl_method][class_]['fp_rate']]
+                    cls._stats['learning']['results'][evl_method][class_]['tp_rate']    += [ml_results[evl_method][class_]['tp_rate']]
+                    cls._stats['learning']['results'][evl_method][class_]['precision']  += [ml_results[evl_method][class_]['precision']]
+                    cls._stats['learning']['results'][evl_method][class_]['recall']     += [ml_results[evl_method][class_]['recall']]
+                    cls._stats['learning']['results'][evl_method][class_]['f_measure']  += [ml_results[evl_method][class_]['f_measure']]
+                    cls._stats['learning']['results'][evl_method][class_]['mcc']        += [ml_results[evl_method][class_]['mcc']]
+                    cls._stats['learning']['results'][evl_method][class_]['roc']        += [ml_results[evl_method][class_]['roc']]
+                    cls._stats['learning']['results'][evl_method][class_]['prc']        += [ml_results[evl_method][class_]['prc']]
+                else:
+                    cls._stats['learning']['results'][evl_method][class_]['fp_rate']    += [None]
+                    cls._stats['learning']['results'][evl_method][class_]['tp_rate']    += [None]
+                    cls._stats['learning']['results'][evl_method][class_]['precision']  += [None]
+                    cls._stats['learning']['results'][evl_method][class_]['recall']     += [None]
+                    cls._stats['learning']['results'][evl_method][class_]['f_measure']  += [None]
+                    cls._stats['learning']['results'][evl_method][class_]['mcc']        += [None]
+                    cls._stats['learning']['results'][evl_method][class_]['roc']        += [None]
+                    cls._stats['learning']['results'][evl_method][class_]['prc']        += [None]
     # End def add_iteration_statistics
 
     # ====== ( create the dict ) ===========================================================================================
