@@ -6,7 +6,7 @@
 function _usage() {
   cat <<_EOF_
 usage:
- $(basename $0) [node]
+ $(basename "$0") [node]
 options:
 - [node] : The node to configure
 summary:

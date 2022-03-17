@@ -16,7 +16,7 @@ export M2_REPO=${M2_REPO:-~/.m2/repository}
 export KARAF_VERSION=4.2.9
 export KARAF_ZIP=${KARAF_ZIP:-~/Downloads/apache-karaf-$KARAF_VERSION.zip}
 export KARAF_TAR=${KARAF_TAR:-~/Downloads/apache-karaf-$KARAF_VERSION.tar.gz}
-export KARAF_DIST=$(basename $KARAF_ZIP .zip)
+local_karaf_dist=$(basename "$KARAF_ZIP" .zip); export KARAF_DIST=$local_karaf_dist
 
 # Installation directories
 export ONOS_INSTALL_DIR="${ONOS_INSTALL_DIR:-/opt/onos}"     # Installation directory on remote
