@@ -137,11 +137,11 @@ def parse_arguments():
     # Argument to choose the preprocessing strategy
     parser.add_argument('-P', '--preprocessing-strategy',
                         type=str,
-                        default='SMOTE-5',
+                        default=None,
                         dest='pp_strategy',
                         help="Select which preprocessing strategy to use. (default: \"%(default)s\")")
 
-    # Argument to choose disable the mutation of additional fields
+    # Argument to choose the number of cross validation folds
     parser.add_argument('--cross-validation-folds',
                         type=int,
                         default=10,

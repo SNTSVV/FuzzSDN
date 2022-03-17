@@ -11,6 +11,7 @@ from weka.classifiers import Classifier, Evaluation, FilteredClassifier
 from weka.core import jvm, packages
 from weka.core.classes import Random
 from weka.core.converters import Loader
+from weka.core.dataset import Instances
 from weka.filters import Filter, MultiFilter
 
 from rdfl_exp.experiment import Rule, RuleSet
@@ -27,22 +28,29 @@ class Learner:
         # Sets the logger
         self.log = logging.getLogger(__name__)
 
-        # Sets variables
-        self.target_class   = "1"
-        self.other_class    = "2"
-        self.seed           = None
-        self.ml_alg         = None
-        self.ml_hp : Optional[dict] = None
-        self.pp_strat       = None
-        self.cv_folds       = 10
+        # Classification
+        self.target_class   : str = "1"
+        self.other_class    : str = "2"
+
+        # ML Algorithms
+        self.ml_alg         : Optional[str] = None
+        self.ml_hp          : Optional[dict] = None
+
+        # pp_strat
+        self.pp_strat       : Optional[str] = None
+        self.pp_hp          : Optional[dict] = None
+
+        # Learning Parameters
+        self.seed: Optional[int] = None
+        self.cv_folds: int = 10
 
         # Dataset
-        self.dataset        = None
+        self.dataset        : Optional[Instances] = None
 
         # result variables
-        self.context        = dict()
-        self.result         = dict()
-        self.ruleset        = None
+        self.context        : Optional[dict] = None
+        self.result         : Optional[dict] = None
+        self.ruleset        : Optional[RuleSet] = None
         self.classifier     = None
         self.evl_cv         = None
         self.evl_bld        = None
@@ -53,7 +61,7 @@ class Learner:
         self.target_class = target_class
         self.other_class = other_class
         self.log.debug("Target class set to \"{}\". Other class set to \"{}\".".format(target_class, other_class))
-    # End def set_cross_validation_folds
+    # End def set_classes
 
     def set_seed(self, seed):
         if seed is None:
@@ -69,20 +77,31 @@ class Learner:
     def set_learning_algorithm(self, alg : str):
 
         alg_split = alg.split(',')
+
         self.ml_alg = alg_split[0].upper()
+        self.ml_hp = None
         self.log.debug("machine learning algorithm set to \"{}\"".format(alg))
 
         # parse the hyper-parameters
-        self.ml_hp = dict()
         if len(alg_split) > 1:
+            self.ml_hp = dict()
             for param in alg_split[1:]:
                 key, value = param.split('=')
                 self.ml_hp[key.strip()] = str_to_typed_value(value.strip())
     # End def set_learning_algorithm
 
     def set_preprocessing_strategy(self, pp_strat):
-        self.pp_strat = pp_strat
+        pp_split = pp_strat.split(',')
+        self.pp_hp = None
+        self.pp_strat = pp_split[0].upper()
         self.log.debug("preprocess_strategy set to \"{}\"".format(pp_strat))
+
+        # parse the hyper-parameters
+        if len(pp_split) > 1:
+            self.pp_hp = dict()
+            for param in pp_split[1:]:
+                key, value = param.split('=')
+                self.pp_hp[key.strip()] = str_to_typed_value(value.strip())
     # End def set_preprocess_strategy
 
     def set_cross_validation_folds(self, cv_folds : int):
@@ -138,7 +157,7 @@ class Learner:
             return False
     # End def has_rules
 
-    # ===== ( Learning function ) ======================================================================================
+    # ===== ( Public function ) ========================================================================================
 
     def load_data(self, data_path):
         # load data from arff file
@@ -193,7 +212,7 @@ class Learner:
         if self.ml_alg == 'RIPPER':
 
             self.context['algorithm'] = "RIPPER"
-            # NOTE: This is a simple solution for handling the hyperparameters. a more complex solution might be needed
+            # NOTE: This is a simple solution for handling the hyper-parameters. a more complex solution might be needed
             #       in the future.
             options = None
             if self.ml_hp:
@@ -215,12 +234,11 @@ class Learner:
                     if key == 'up' and self.ml_hp[key] is False:
                         options.append('-P')
 
-            print(options)
             _clf = Classifier(classname="weka.classifiers.rules.JRip", options=options)
 
         else:
             raise ValueError("Classifying algorithm \"{}\" is not supported.".format(self.ml_alg))
-        print(_clf)
+
         # Create the final classifier
         if _fltr is None:
             self.classifier = _clf
@@ -271,7 +289,7 @@ class Learner:
         self.result['evaluation']       = _get_stats_from_evaluator(self.evl_bld, (self.target_class, self.other_class))
     # End def learn
 
-    # ===== ( Helper Functions ) =======================================================================================
+    # ===== ( Private Functions ) ======================================================================================
 
     # def _preprocess_data(strategy: str, dataset: Union[Instances, list[Instances]]) -> Union[Instances, list[Instances]]:
     def __build_pp_filters(self):
@@ -327,8 +345,24 @@ class Learner:
                     class1_cnt += 1
                 else:
                     class2_cnt += 1
-            smote_factor = 100 * (max(class1_cnt, class2_cnt) - min(class1_cnt, class2_cnt)) / min(class1_cnt,
-                                                                                                   class2_cnt)
+            min_cls_cnt = min(class1_cnt, class2_cnt)
+            max_cls_cnt = max(class1_cnt, class2_cnt)
+            percentage = 100 * (max_cls_cnt - min_cls_cnt) / min_cls_cnt  # Default percentage
+            if self.ml_hp:
+                # Sets a target ratio below 0.5
+                if 'target-ratio' in self.ml_hp:
+                    target_ratio = max(0.0, min(0.5, float(self.ml_hp['target-ratio'])))
+                    if min_cls_cnt / (min_cls_cnt + max_cls_cnt) < target_ratio:
+                        percentage *= (target_ratio / 0.5)  # Make the percentage to be close to the target ratio
+                    else:
+                        percentage = 0.0  # If within the target ratio range then nothing should be done
+
+                if 'threshold' in self.ml_hp:
+                    if min(class1_cnt, class2_cnt) / (class1_cnt + class2_cnt) > max(0.0, float(self.ml_hp['threshold'])):
+                        percentage = 0.0
+
+                if 'multiplier' in self.ml_hp:
+                    percentage *= max(0.0, float(self.ml_hp['multiplier']))
 
             # Create the filters
             filters.append(
@@ -336,7 +370,7 @@ class Learner:
                     classname="weka.filters.supervised.instance.SMOTE",
                     options=[
                         '-K', str(n),
-                        '-P', str(smote_factor)
+                        '-P', str(percentage)
                     ]
                 )
             )
@@ -354,7 +388,7 @@ class Learner:
             # Fill the information to the last result dictionary
             self.context["pp_filter"]["strategy"] = "SMOTE"
             self.context["pp_filter"]["neighbors"] = n
-            self.context["pp_filter"]["factor"] = smote_factor
+            self.context["pp_filter"]["factor"] = percentage
 
         else:
             raise ValueError("Unknown strategy: {}".format(self.pp_strat))
