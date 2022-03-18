@@ -109,17 +109,3 @@ class OnosLogParser(LogParser):
     # End def parse_log
 
 # End class OnosLogParser
-
-if __name__ == '__main__':
-    from natsort import natsorted
-    parser = OnosLogParser()
-    directory = '/Users/raphael.ollando/Desktop/onos_log/test/'
-    files = natsorted([name for name in os.listdir(directory) if os.path.isfile(os.path.join(directory, name))])
-
-    for f in files:
-        if f.startswith('log_trace') is False:
-            continue
-        results = parser.parse_log(os.path.join(directory, f))
-        if results[0] is True:
-            print(f)
-            # print("{}: has error: {} | error_type: {} | error_reason: {} | error_effect: {}".format(f, results[0], results[1], results[2], results[3]))

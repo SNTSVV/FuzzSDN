@@ -234,7 +234,7 @@ def _setup_logger():
 
     # Add the configuration
     level_d = {
-        'TRACE' : logging.TRACE if logging.TRACE is not None else logging.DEBUG,
+        'TRACE' : logging.TRACE if hasattr(logging, 'TRACE') else logging.DEBUG,
         'DEBUG' : logging.DEBUG,
         'INFO'  : logging.INFO,
         'WARN'  : logging.WARNING,

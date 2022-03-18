@@ -6,10 +6,11 @@ from copy import copy
 from typing import Optional
 
 import pandas as pd
-from pypika import Column, Query, Tables
+from pypika import Column, JoinType, Query, Tables
 
 from rdfl_exp.analytics.log import LogParser, OnosLogParser, RyuLogParser
 from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
+from rdfl_exp.experiment import RuleSet
 from rdfl_exp.setup import LOG_TRACE_DIR
 from rdfl_exp.utils.database import Database as SqlDb
 
@@ -22,16 +23,18 @@ class Analyzer:
         self.__log = logging.getLogger(__name__)
 
         # Analytics
-        self.__controller: str = None
-        self.__log_parser: Optional[LogParser] = None
+        self.__controller   : Optional[str] = None
+        self.__log_parser   : Optional[LogParser] = None
 
         # Counters
         self.__sample_cnt   = -1  # Counts the samples. Starts at -1 so it's 0 at the first iteration
         self.__it_cnt       = -1  # Counts the framework iteration. Starts at -1 so it's 0 at the first iteration
 
         # Flags
-        self.__sample_data_table_created    = False
-        self.__log_analysis_table_created   = False
+        self.__sample_table_created     = False
+        self.__log_table_created        = False
+        self.__rules_table_created      = False
+        self.__current_it_has_ruleset   = False
 
         # Init the SQL database object if needed
         try:
@@ -78,31 +81,49 @@ class Analyzer:
 
     # ===== ( Getters ) ================================================================================================
 
-    def get_dataset(self, iteration=None, error_class=None) -> pd.DataFrame:
+    def get_dataset(self, iteration=None, error_class=None, debug=False) -> pd.DataFrame:
         """
         Outputs the analyzed dataset as a Pandas' dataframe.
 
         :param iteration: Output the dataset of a given iteration. If set to None, the whole dataset is output.
         :param error_class: Parse the dataset according to the error class. If set to None, no error class is inferred.
+        :param debug: whether or not to output debug information
 
         :return: a pd.DataFrame
         """
         # Get the latest available dataset
-        # query: FROM `samples_data` SELECT samples.*, log.* JOIN `log_analysis` ON samples_data.id == log.log_id
-        sample, log = Tables('samples_data', 'log_analysis')
+        # query: FROM `samples` SELECT samples.*, log.* JOIN `logs` ON samples.id == log.log_id
+        samples, rules, logs = Tables('samples', 'rules', 'logs')
         stmt = Query \
-            .from_(sample) \
-            .join(log) \
-            .on(sample.sample_id == log.log_id) \
-            .select(sample.star, log.star)
+            .from_(samples) \
+            .join(logs, how=JoinType.left) \
+            .on(samples.sample_id == logs.log_id) \
+
+        if debug is True:
+            stmt = stmt.join(rules, how=JoinType.left).on(samples.rule_id == rules.rule_id)
+            stmt = stmt.select(samples.star,
+                               rules.expression,
+                               rules.classification,
+                               rules.coverage,
+                               rules.misclassified,
+                               logs.has_error,
+                               logs.error_type,
+                               logs.error_reason,
+                               logs.error_effect)
+        else:
+            stmt = stmt.select(samples.star,
+                               logs.has_error,
+                               logs.error_type,
+                               logs.error_reason,
+                               logs.error_effect)
 
         if iteration is not None:
-            stmt = stmt.where(sample.iter_id <= iteration)
+            stmt = stmt.where(samples.iter_id <= iteration)
 
         try:
             if not SqlDb.is_connected():
                 SqlDb.connect(DB_NAME)
-            self.__log.trace("SQL query: {}".format(stmt.get_sql(quote_char=None)))
+
             SqlDb.execute(stmt.get_sql(quote_char=None))
             SqlDb.commit()
 
@@ -116,23 +137,24 @@ class Analyzer:
 
         # Transform the SQL data to a pandas dataframe and drop the unused columns
         df = pd.DataFrame(data, columns=field_names)
-        df.drop(
-            [
-                'sample_id',
-                'seq_id',
-                'iter_id',
-                'log_id',
-            ],
-            axis='columns',
-            inplace=True,
-            errors='ignore'
-        )
+        if not debug:
+            df.drop(
+                [
+                    'sample_id',
+                    'seq_id',
+                    'iter_id',
+                    'log_id',
+                    'rule_id'
+                ],
+                axis='columns',
+                inplace=True,
+                errors='ignore'
+            )
 
         # Transform the has_error column into boolean values
         df['has_error'] = df['has_error'].apply(lambda x: x == b'\x01')
 
         if error_class is not None:
-
             # OFPBAC_BAD_OUT_PORT
             if error_class == 'OFPBAC_BAD_OUT_PORT':
                 if self.__controller == 'ryu':
@@ -146,10 +168,16 @@ class Analyzer:
 
             # Unknown Reason / Known Reason
             elif error_class in ('unknown_reason', 'known_reason'):
-                df['class'] = df.apply(
-                    lambda row: 'unknown_reason' if row.has_error is True and row.error_reason is None else 'known_reason',
-                    axis='columns'
-                )
+                if self.__controller == 'onos':
+                    df['class'] = df.apply(
+                        lambda row: 'unknown_reason' if row.has_error is True and row.error_reason is None else 'known_reason',
+                        axis='columns'
+                    )
+                elif self.__controller == 'ryu':
+                    df['class'] = df.apply(
+                        lambda row: 'unknown_reason' if row.error_reason is None else 'known_reason',
+                        axis='columns'
+                    )
             # Parsing / Non parsing error
             elif error_class in ('parsing_error', 'non_parsing_error'):
                 df['class'] = df['error_reason'].apply(
@@ -160,20 +188,59 @@ class Analyzer:
                 raise ValueError("Unknown target error '{}'".format(error_class))
 
             # Drop the error-related columns
-            df.drop(
-                [
-                    'has_error',
-                    'error_type',
-                    'error_reason',
-                    'error_effect'
-                ],
-                axis='columns',
-                inplace=True,
-                errors='ignore'
-            )
+            if not debug:
+                df.drop(
+                    [
+                        'has_error',
+                        'error_type',
+                        'error_reason',
+                        'error_effect'
+                    ],
+                    axis='columns',
+                    inplace=True,
+                    errors='ignore'
+                )
 
         return df
     # End def get_data
+
+    # ===== ( Setters ) ================================================================================================
+
+    def set_ruleset_for_iteration(self, ruleset : RuleSet):
+
+        # Create the rule table if necessary
+        if self.__rules_table_created is False:
+            self.__create_rules_table()
+
+        # Ignore this step if some rules where already set for this ruleset
+        if self.__current_it_has_ruleset is True:
+            self.__log.warning("Tried to add another ruleset for the current iteration. The instruction was ignored.")
+            return
+
+        try:
+            if not SqlDb.is_connected():
+                SqlDb.connect(DB_NAME)
+
+            for rule in ruleset:
+                stmt = Query.into("rules").insert(
+                        rule.id,            # rule_id
+                        self.__it_cnt,      # iter_id
+                        str(rule.expr),     # expr
+                        rule.class_,        # class
+                        rule.coverage,      # coverage
+                        rule.misclassified  # misclassified)
+                    )
+                SqlDb.execute(stmt.get_sql(quote_char=None))
+
+            # Commit all the statements at the same time
+            SqlDb.commit()
+
+        except Exception as e:
+            raise e
+
+        finally:
+            SqlDb.disconnect()
+    # End def set_ruleset_for_iteration
 
     # ===== ( Analyze ) ================================================================================================
 
@@ -183,6 +250,7 @@ class Analyzer:
         :return:
         """
         self.__it_cnt += 1
+        self.__current_it_has_ruleset = False
     # End def new_iteration
 
     def start_analysis(self):
@@ -197,7 +265,7 @@ class Analyzer:
         """
         # TODO: take into account, the fact that there could be many different packets fuzzed
         # Read the fuzzer report
-        pkt_struct, pkt_values, _ = self.__read_fuzz_report()
+        pkt_struct, pkt_values, pkt_actions = self.__read_fuzz_report()
 
         log_parse_results = self.__log_parser.parse_log()
 
@@ -206,34 +274,48 @@ class Analyzer:
             f.write(log_parse_results[4])
 
         # Create the samples and log table if required
-        if self.__sample_data_table_created is False:
-            self.__create_sample_data_table_from_packet_struct(pkt_struct)
+        if self.__sample_table_created is False:
+            self.__create_sample_table_from_packet_struct(pkt_struct)
 
-        if self.__log_analysis_table_created is False:
-            self.__create_log_analysis_table()
+        if self.__log_table_created is False:
+            self.__create_logs_table()
+
+        if self.__rules_table_created is False:
+            self.__create_rules_table()
 
         # Insert the table result into the database
         try:
             if not SqlDb.is_connected():
                 SqlDb.connect(DB_NAME)
 
+            # Determine if a rule should be added
+            rule_id = None
+            for pkt_action in pkt_actions:
+                if pkt_action['action']['intent'] == 'mutate_packet_rule':
+                    rule_id = int(pkt_action['action']['ruleID'])
+                    break  # break out of the loop
+
             # First add the samples
             # NOTE: For now, the seq_id is equal to the sample_id but it is planned in the future that a seq_id could be
             #       given to several samples part of a same sequence
-            stmt_1 = Query.into("samples_data").insert(
-                self.__sample_cnt, self.__sample_cnt, self.__it_cnt, *(pkt_values.get(k, None) for k in pkt_values.keys()))
+            stmt_1 = Query.into("samples").insert(
+                self.__sample_cnt,                                      # sample_id
+                self.__sample_cnt,                                      # seq_id
+                self.__it_cnt,                                          # iter_id
+                rule_id,                                                # rule_id
+                *(pkt_values.get(k, None) for k in pkt_values.keys())   # fields_data
+            )
 
             # Then add the logs
             # NOTE: For now, the log_id has the same value as the sample_count, but this should be different.
-            stmt_2 = Query.into("log_analysis").insert(self.__sample_cnt,
-                                                       1 if log_parse_results[0] is True else 0,    # has_error
-                                                       log_parse_results[1],                        # error_type
-                                                       log_parse_results[2],                        # error_reason
-                                                       log_parse_results[3])                        # error_effect
+            stmt_2 = Query.into("logs").insert(self.__sample_cnt,                           # log_id
+                                               self.__it_cnt,                               # iter_id
+                                               1 if log_parse_results[0] is True else 0,    # has_error
+                                               log_parse_results[1],                        # error_type
+                                               log_parse_results[2],                        # error_reason
+                                               log_parse_results[3])                        # error_effect
 
             # Execute the two queries
-            self.__log.trace("SQL query: {}".format(stmt_1.get_sql(quote_char=None)))
-            self.__log.trace("SQL query: {}".format(stmt_2.get_sql(quote_char=None)))
             SqlDb.execute(stmt_1.get_sql(quote_char=None))
             SqlDb.execute(stmt_2.get_sql(quote_char=None))
             SqlDb.commit()
@@ -243,7 +325,7 @@ class Analyzer:
             SqlDb.disconnect()
     # End def finish_analysis
 
-    # ===== ( Analyze ) ================================================================================================
+    # ===== ( Private Methods ) ========================================================================================
 
     # TODO: Parse actions and the mutations
     @staticmethod
@@ -273,20 +355,10 @@ class Analyzer:
             # Store the value in the pkt_fields dictionary
             pkt_values[field['name']] = value
 
-        # Parse the mutations and actions
-        pkt_actions = list()
-        for action_element in data['fuzzActions']:
-            action_dict = dict()
-            action_dict['action'] = action_element['action']['intent']
-            action_dict['mutation'] = action_element['mutations']
-            pkt_actions.append(action_dict.copy())
-
-        return pkt_struct, pkt_values, pkt_actions
+        return pkt_struct, pkt_values, data['fuzzActions']
     # End def __read_fuzz_report
 
-    # ==== ( Database Private Methods ) ================================================================================
-
-    def __create_sample_data_table_from_packet_struct(self, pkt_struct):
+    def __create_sample_table_from_packet_struct(self, pkt_struct):
         """
         Create the
         :param pkt_struct:
@@ -314,43 +386,44 @@ class Analyzer:
             sql_sample_cols.append(Column(field, type_))
 
         stmt = Query \
-            .create_table("samples_data") \
+            .create_table("samples") \
             .columns(
-                Column("sample_id", 'INT', nullable=False),
-                Column("seq_id", 'INT', nullable=False),
-                Column("iter_id", 'INT', nullable=False),
+                Column("sample_id"  , 'INT', nullable=False),
+                Column("seq_id"     , 'INT', nullable=False),
+                Column("iter_id"    , 'INT', nullable=False),
+                Column("rule_id"    , 'INT', nullable=True),
                 *sql_sample_cols) \
             .unique("sample_id", "iter_id") \
             .primary_key("sample_id")
 
-        self.__log.trace("SQL query: {}".format(stmt.get_sql(quote_char=None)))
         try:
             if not SqlDb.is_connected():
                 SqlDb.connect(DB_NAME)
 
             # Clear
-            SqlDb.execute('DROP TABLE IF EXISTS `samples_data`')  # Drop the table if it exists
+            SqlDb.execute('DROP TABLE IF EXISTS `samples`')  # Drop the table if it exists
             SqlDb.execute(stmt.get_sql(quote_char=None))  # Create the table
             SqlDb.commit()
             self.__log.debug("SQL database has been cleaned.")
-            self.__sample_data_table_created = True
+            self.__sample_table_created = True
 
         finally:
             SqlDb.disconnect()
-    # End def __create_sample_data_table_from_packet_strut
+    # End def __create_sample_table_from_packet_strut
 
-    def __create_log_analysis_table(self):
+    def __create_logs_table(self):
         """
         Create the log analysis table
         """
         stmt = Query \
-            .create_table("log_analysis") \
+            .create_table("logs") \
             .columns(
-                Column("log_id", 'BIGINT', nullable=False),
-                Column("has_error", 'BIT(1)', nullable=False),
-                Column('error_type', 'VARCHAR(255)', nullable=True),
-                Column('error_reason', 'VARCHAR(255)', nullable=True),
-                Column('error_effect', 'VARCHAR(255)', nullable=True)) \
+                Column("log_id"         , 'INT UNSIGNED', nullable=False),
+                Column('iter_id'        , 'INT UNSIGNED', nullable=False),
+                Column("has_error"      , 'BIT(1)'      , nullable=False),
+                Column('error_type'     , 'VARCHAR(255)', nullable=True),
+                Column('error_reason'   , 'VARCHAR(255)', nullable=True),
+                Column('error_effect'   , 'VARCHAR(255)', nullable=True)) \
             .unique("log_id") \
             .primary_key("log_id")
 
@@ -361,14 +434,49 @@ class Analyzer:
             self.__log.info("Clearing the SQL database...")
 
             # Clear
-            SqlDb.execute('DROP TABLE IF EXISTS `log_analysis`')  # Drop the table if it exists
+            SqlDb.execute('DROP TABLE IF EXISTS `logs`')  # Drop the table if it exists
             SqlDb.execute(stmt.get_sql(quote_char=None))  # Create the table
             SqlDb.commit()
 
             self.__log.debug("SQL database has been cleaned.")
-            self.__log_analysis_table_created = True
+            self.__log_table_created = True
 
         finally:
             SqlDb.disconnect()
-    # End def __create_log_analysis_table
+    # End def __create_log_table
+
+    def __create_rules_table(self):
+        """
+        Create the log analysis table
+        """
+        stmt = Query \
+            .create_table("rules") \
+            .columns(
+                Column("rule_id"        , 'BIGINT'      , nullable=False),
+                Column("iter_id"        , 'BIGINT'      , nullable=False),
+                Column("expression"     , 'TEXT'        , nullable=False),
+                Column('classification' , 'VARCHAR(255)', nullable=False),
+                Column('coverage'       , 'INT UNSIGNED', nullable=False),
+                Column('misclassified'  , 'INT UNSIGNED', nullable=False)) \
+            .unique("rule_id") \
+            .primary_key("rule_id")
+
+        try:
+            if not SqlDb.is_connected():
+                SqlDb.connect(DB_NAME)
+
+            self.__log.info("Clearing the SQL database...")
+
+            # Clear
+            SqlDb.execute('DROP TABLE IF EXISTS `rules`')  # Drop the table if it exists
+            SqlDb.execute(stmt.get_sql(quote_char=None))  # Create the table
+            SqlDb.commit()
+
+            self.__log.debug("SQL database has been cleaned.")
+            self.__rules_table_created = True
+
+        finally:
+            SqlDb.disconnect()
+    # End def __create_rules_table
+
 # End class Analyzer

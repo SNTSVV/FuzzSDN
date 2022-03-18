@@ -68,7 +68,6 @@ class RuleSet(object):
         string += "\nNumber of Rules: {}\n".format(len(self.rules))
         string += "Support: {}\n".format(self.support())
         string += "Confidence: {}\n".format(self.confidence())
-
         return string
 
     def __getitem__(self, index):
@@ -140,7 +139,7 @@ class RuleSet(object):
                 return self.confidence(idx, False) / sum(self.confidence(i) for i in range(len(self)))
         else:
             rule = self.rules[idx]
-            return (rule.coverage - rule.false_positives) / rule.coverage
+            return (rule.coverage - rule.misclassified) / rule.coverage
     # End def confidence
 
     def budget(self, idx, method: int = 0):
@@ -183,7 +182,7 @@ class RuleSet(object):
         if bold_rule is not None and len(std_rules) > 0:
             # If the target rule is single and is a bold rule, then we change its expression
             bold_rule_cvg = bold_rule.coverage
-            bold_rule_fp  = bold_rule.false_positives
+            bold_rule_mis  = bold_rule.misclassified
             bold_rule_cls = bold_rule.class_
 
             bold_rule = None
@@ -194,7 +193,7 @@ class RuleSet(object):
                     bold_rule &= ~rule
 
             bold_rule.coverage = bold_rule_cvg
-            bold_rule.false_positives = bold_rule_fp
+            bold_rule.misclassified = bold_rule_mis
             bold_rule.class_ = bold_rule_cls
 
             bold_rule.id = bold_rule_id
@@ -215,11 +214,11 @@ class Rule(object):
 
     # ===== ( Constructor ) ====================================================
 
-    def __init__(self, expr, class_=None, cvg: float = 0.0, fp: float = 0.0, _id=None):
+    def __init__(self, expr, class_=None, cvg: float = 0.0, mc: float = 0.0, _id=None):
         self.expr               = expr
         self.class_             = class_
         self.coverage           = cvg
-        self.false_positives    = fp
+        self.misclassified      = mc
         self.budget             = 0.0
         self.id                 = next(Rule.new_id) if _id is None else _id
     # End def __init__
@@ -230,15 +229,14 @@ class Rule(object):
         rule_cdt = None
         rule_cls = None
         rule_cvg = None
-        rule_fp = None
+        rule_mis = None
 
         # Define the regex used for matching different part if the string
         rgx_rules = r"(?P<rule>.*)(?==>)"  # Regex used to find the class. Matches patterns like "word=word" located after a "=>"
         rgx_cls = r"(?<==>\s)(?P<lbl>\w*)=(?P<cls>\w*)"  # Regex used to find the class. Matches patterns like "word=word" located after a "=>"
-        rgx_stats = r"(?<=\()(?P<cvg>\d+.\d+)\/(?P<fp>\d+.\d+)(?=\))"
+        rgx_stats = r"(?<=\()(?P<cvg>\d+.\d+)\/(?P<mis>\d+.\d+)(?=\))"
 
         # Copy the rule string
-        tmp_rule = deepcopy(rule_str)
 
         # Get the class of the rule
         match = regex.search(rgx_cls, str(rule_str))
@@ -249,7 +247,7 @@ class Rule(object):
         match = regex.search(rgx_stats, rule_str)
         if match:
             rule_cvg = float(match.group("cvg"))
-            rule_fp = float(match.group("fp"))
+            rule_mis = float(match.group("mis"))
 
         # Match the rules conditions
         match = regex.search(rgx_rules, rule_str)
@@ -272,7 +270,7 @@ class Rule(object):
             else:
                 rule_cdt = None
 
-        return Rule(rule_cdt, rule_cls, rule_cvg, rule_fp)
+        return Rule(rule_cdt, rule_cls, rule_cvg, rule_mis)
     # End def from_string
 
     # ===== ( Operator overriding ) ====================================================================================
@@ -308,7 +306,7 @@ class Rule(object):
     # ====== ( Overloading ) ===========================================================================================
 
     def __repr__(self):
-        return "Rule@{:05d}: {} => class={} ({}/{})".format(self.id, str(self.expr), self.class_, self.coverage, self.false_positives)
+        return "Rule@{:05d}: {} => class={} ({}/{})".format(self.id, str(self.expr), self.class_, self.coverage, self.misclassified)
     # End def __repr__
 
     # ====== ( Getters ) ===============================================================================================
@@ -326,7 +324,7 @@ class Rule(object):
     # End def get_budget
 
     def get_confidence(self) -> float:
-        return (self.coverage - self.false_positives) / self.coverage
+        return (self.coverage - self.misclassified) / self.coverage
     # End def get_confidence
 
     # ====== ( Setters ) ===============================================================================================
@@ -436,6 +434,7 @@ class Rule(object):
         z3.set_option('smt.arith.random_initial_value', True)
         z3.set_option('smt.random_seed', datetime.now().microsecond)
         z3.set_option('smt.phase_selection', 5)
+        z3.set_option('sat.phase', 'random')
         z3_models = smt.get_model(z3_formula, n, exact=True)  # Get z3 models
         # Build the dictionary
         for z3_model in z3_models:

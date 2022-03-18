@@ -37,9 +37,58 @@ def str_to_typed_value(value):
         return None
     else:
         return value
-# End def typed_value
+# End def str_to_typed_value
 
 
+# ===== (dict and list) ================================================================================================
+
+
+def dict_replace(obj: dict, old, new) -> dict:
+    """
+    Replace all the elements in a dictionary with a certain value, no matter the key.
+
+    :param obj: The dict to perform the replacement on
+    :param old: The value to be replaced
+    :param new: The new value to replace
+    """
+    x = {}
+    for k, v in obj.items():
+        if isinstance(v, dict):
+            v = dict_replace(v, old, new)
+        elif isinstance(v, list):
+            v = list_replace(v, old, new)
+        elif v == old:
+            v = new
+        x[k] = v
+    return x
+
+
+# End def dict_replace
+
+
+def list_replace(obj: list, old, new) -> list:
+    """
+    Replace all the elements in a list with a certain value, no matter the key.
+
+    :param obj: The list to perform the replacement on
+    :param old: The value to be replaced
+    :param new: The new value to replace
+    """
+
+    x = []
+    for e in obj:
+        if isinstance(e, list):
+            e = list_replace(e, old, new)
+        elif isinstance(e, dict):
+            e = dict_replace(e, old, new)
+        elif e == old:
+            e = new
+        x.append(e)
+    return x
+# End def list_replace
+
+
+# ===== ( Files ) ======================================================================================================
 def recursive_chown(path, owner, group=None):
     """
     Recursively change the owner of all the files in a folder

@@ -62,7 +62,25 @@ class Experimenter:
     @property
     def analyzer(self):
         return self.__analyzer
-    # End def analyzer
+    # End def analyzer.getter
+
+    @analyzer.setter
+    def analyzer(self, obj):
+        if isinstance(obj, Analyzer):
+            self.__analyzer = obj
+            if self.__scenario_name.startswith('onos') is True:
+                self.__log.debug("Configuring Analyzer for ONOS controller")
+                self.__analyzer.controller = 'onos'
+            elif self.__scenario_name.startswith('ryu') is True:
+                self.__analyzer.controller = 'ryu'
+            elif self.__scenario_name is not None and self.__scenario_name != '':
+                self.__log.warning("No known analyzer configuration for controller \"{}\"".format(self.__scenario_name.split("_")[0]))
+
+        elif obj is None:
+            self.__analyzer = None
+        else:
+            raise AttributeError("Expected object of type \'Analyzer\' or \'None\', not \'{}\'".format(type(obj)))
+    # End def analyzer.setter
 
     @property
     def scenario(self):
@@ -90,14 +108,14 @@ class Experimenter:
             if not hasattr(self.__scenario, "test") or not hasattr(self.__scenario.test, '__call__'):
                 raise AttributeError("The function \"test\" is not defined in scenario \"{}\"".format(self.__scenario.__name__))
 
-            self.__analyzer = Analyzer()
-            if name.startswith('onos') is True:
-                self.__log.debug("Configuring Analyzer for ONOS controller")
-                self.__analyzer.controller = 'onos'
-            elif name.startswith('ryu') is True:
-                self.__analyzer.controller = 'ryu'
-            else:
-                self.__log.warning("No known analyzer configuration for controller \"{}\"".format(name.split("_")[0]))
+            if self.__analyzer is not None:
+                if name.startswith('onos') is True:
+                    self.__log.debug("Configuring Analyzer for ONOS controller")
+                    self.__analyzer.controller = 'onos'
+                elif name.startswith('ryu') is True:
+                    self.__analyzer.controller = 'ryu'
+                else:
+                    self.__log.warning("No known analyzer configuration for controller \"{}\"".format(name.split("_")[0]))
 
         except ModuleNotFoundError as e:
             self.__log.error("Couldn't find scenario \"{}\".".format(name))
@@ -193,9 +211,6 @@ class Experimenter:
         # Build the fuzzer instruction
         fuzz_instr = self.__build_fuzzer_instruction(count=self.samples_per_iteration)
 
-        # Tell the Analyzer
-        self.__analyzer.new_iteration()
-
         for i in range(self.samples_per_iteration):
 
             # Start a time
@@ -213,7 +228,8 @@ class Experimenter:
 
             # ===== TEST ===============================================================================================
             # Start the analysis before the core test
-            self.__analyzer.start_analysis()
+            if self.__analyzer is not None:
+                self.__analyzer.start_analysis()
 
             # Try to run the 'test' function
             try:
@@ -224,7 +240,8 @@ class Experimenter:
                 raise e
 
             # Finish the analysis after the core test
-            self.__analyzer.finish_analysis()
+            if self.__analyzer is not None:
+                self.__analyzer.finish_analysis()
 
             # ===== AFTER EACH =========================================================================================
             # Try to run the 'after_each' function
@@ -233,8 +250,7 @@ class Experimenter:
                     self.__log.debug("Running \"{}#after_each\"".format(self.__scenario.__name__))
                     self.__scenario.after_each()
                 except Exception as e:
-                    self.__log.exception("An exception occurred while running \"{}#after_each\""
-                                       .format(self.__scenario.__name__))
+                    self.__log.exception("An exception occurred while running \"{}#after_each\"".format(self.__scenario.__name__))
                     raise e
 
             # Stop the timer
@@ -298,8 +314,8 @@ class Experimenter:
                     actions = self.ruleset[i].convert_to_fuzzer_actions(
                         n=budget_list[i],
                         include_header=False,
-                        enable_mutation=True,
-                        mutation_rate=self.mutation_rate,
+                        enable_mutation=self.enable_mutation,
+                        mutation_rate=self.mutation_rate if self.enable_mutation is True else 0.0,
                         ctx=CTX_PKT_IN_tmp
                     )
                     self.__log.trace("Number of actions generated for rule {}: {}".format(i, len(actions)))
@@ -320,4 +336,6 @@ class Experimenter:
         rounded_budget = [int(x) for x in saferound(budget_list, places=0)]
         self.__log.trace("Calculated budget for {} rules: {}".format(len(self.ruleset), rounded_budget))
         return rounded_budget
+    # End def __get_budget_for_rules
+
 # End class Experimenter

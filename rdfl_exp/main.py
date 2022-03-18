@@ -18,7 +18,7 @@ from weka.core import jvm, packages
 from rdfl_exp import setup
 from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
 from rdfl_exp.drivers import FuzzerDriver, OnosDriver, RyuDriver
-from rdfl_exp.experiment import Experimenter, FuzzMode, Learner, RuleSet
+from rdfl_exp.experiment import Analyzer, Experimenter, FuzzMode, Learner, RuleSet
 from rdfl_exp.resources import scenarios
 from rdfl_exp.stats import Stats
 from rdfl_exp.utils import csv, utils
@@ -273,12 +273,16 @@ def run() -> None:
         print(Style.BOLD, "*** Mutation Rate: {}".format(_context['mutation_rate']), Style.RESET)
 
     # Set up the experimenter
+    analyzer = Analyzer()
+
+    # Set up the experimenter
     experimenter = Experimenter()
     experimenter.enable_mutation        = _context['enable_mutation']
     experimenter.mutation_rate          = _context['mutation_rate']
     experimenter.scenario               = _context['scenario']
     experimenter.criterion              = _context['criterion']['name'], _context['criterion']['kwargs']
     experimenter.samples_per_iteration  = _context['nb_of_samples']
+    experimenter.analyzer               = analyzer
 
     # Setup the Learner
     learner = Learner()
@@ -289,8 +293,9 @@ def run() -> None:
 
     while True:  # Infinite loop
 
-        # Register timestamp at the beginning of the iteration
+        # Register timestamp at the beginning of the iteration and set a new iteration for the analyzer
         start_of_it = time.time()
+        analyzer.new_iteration()
 
         # Write headers
         print(Style.BOLD, "*** Iteration {}".format(it + 1), Style.RESET)
@@ -303,10 +308,10 @@ def run() -> None:
             _log.info("No rules in set of rule. Generating random samples")
             experimenter.fuzz_mode  = FuzzMode.RANDOM
             experimenter.ruleset    = None
-
         else:
             experimenter.fuzz_mode  = FuzzMode.RULE
             experimenter.ruleset    = learner.get_rules()
+            analyzer.set_ruleset_for_iteration(learner.get_rules())
 
         experimenter.run()
 
@@ -319,6 +324,10 @@ def run() -> None:
         # Write the formatted data to the file
         data = experimenter.analyzer.get_dataset(error_class=_context['target_class'])
         data.to_csv(join(setup.EXP_PATH, "datasets", "it_{}.csv".format(it)), index=False, encoding='utf-8')
+
+        # Write the debug dataset to the file
+        data = experimenter.analyzer.get_dataset(error_class=_context['target_class'], debug=True)
+        data.to_csv(join(setup.EXP_PATH, "datasets", "it_{}_debug.csv".format(it)), index=False, encoding='utf-8')
 
         # Convert the set to an arff file
         csv.to_arff(

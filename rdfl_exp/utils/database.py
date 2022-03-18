@@ -158,7 +158,7 @@ class Database:
             raise RuntimeError("Not connected to any database")
 
         cls.__db_cursor.execute(query, parameters or ())
-        cls.__log.debug("SQL Command: {} {}".format(query, parameters))
+        cls.__log.debug("SQL Command: {} {}".format(query, parameters if not None else ''))
     # End def execute
 
     @classmethod
@@ -170,7 +170,7 @@ class Database:
             raise RuntimeError("Not connected to any database")
 
         cls.__db_cursor.execute(query, parameters or ())
-        cls.__log.debug("SQL Command: {} {}".format(query, parameters))
+        cls.__log.debug("SQL Command: {} {}".format(query, parameters if not None else ''))
         cls.commit()
 
         return cls.fetchall()

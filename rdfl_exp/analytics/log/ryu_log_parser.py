@@ -37,9 +37,6 @@ class RyuLogParser(LogParser):
 
         matches = super()._match(LOG_RGX['RYU'])
 
-        # First get a list of the regex keys for analysis
-        matches_keys = [m['rgx_key'] for m in matches]
-
         for key_match in matches:
             key = key_match['rgx_key']
             match = key_match['match']

@@ -24,11 +24,10 @@ class RyuDriver:
     # ===== Start Stop methods =========================================================================================
 
     @classmethod
-    def start(cls, app_name, force=False, persist=False, save_log=True):
+    def start(cls, app_name, persist=False, save_log=True):
         """
 
         :param app_name: Name of the application to start Ryu with
-        :param force:
         :param persist: If set to True, untie RYU from the
         :param save_log:
         :return:
