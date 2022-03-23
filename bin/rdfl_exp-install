@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+
+# fail on error and report it, debug all lines
+set -eu -o pipefail
+
+# Verify that the script is run as root
+if [ "$EUID" -ne 0 ]
+  then echo "This script must be run as root"
+  exit
+fi
+
+# Set the working directory as the directory of the script
+cd "$(dirname "$0")" || exit 1
+
+[ "$SUDO_USER" ] && USER=$SUDO_USER || USER=$(whoami)
+CONFIG_DIR="$(getent passwd "$SUDO_USER" | cut -d: -f6)/.config/rdfl_exp"
+
+# Update package manager and upgrade most packages
+apt-get update --assume-yes
+
+# Install dependencies
+apt-get install --assume-yes --quiet openjdk-11-jdk
+apt-get install --assume-yes --quiet libjpeg-dev python3.8-dev
+
+## ask user to add environment variable for JAVA_HOME
+if [[ -z "$JAVA_HOME" ]]; then
+    while true; do
+    read -rp "Do you wish to add JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64 to /etc/environment ? " yn
+    case $yn in
+        [Yy]* ) echo "JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64" >> /etc/environment; ./etc/environment; break;;
+        [Nn]* ) echo "Please add environment variable: JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64 to .bashrc" 1>&2;;
+        * ) echo "Please answer yes or no.";;
+    esac
+done
+    echo "Please add environment variable: JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64 to .bashrc or /etc/environment" 1>&2
+fi
+
+# Check mysql installation
+apt-get install libmysqlclient-dev -y
+apt-get install mysql-server -y
+mysql -e "CREATE DATABASE IF NOT EXISTS rdfl_exp /*\!40100 DEFAULT CHARACTER SET utf8 */;"
+mysql -e "CREATE USER IF NOT EXISTS rdfl_exp@localhost IDENTIFIED BY 'rdfl_exp';"
+mysql -e "GRANT ALL PRIVILEGES ON rdfl_exp.* TO 'rdfl_exp'@'localhost';"
+mysql -e "FLUSH PRIVILEGES;"
+
+# Create the main directory if it doesn't exist yet
+mkdir -p "$CONFIG_DIR"
+cp ../etc/rdfl_exp.cfg "$CONFIG_DIR/rdfl_exp.cfg"  # Copy the configuration file from etc to the root directory
+
+# Finally, set the permissions to the user
+chown -R "$USER":"$USER" "$CONFIG_DIR"
+
+
+echo ""
+echo "RDFL_EXP configuration complete."
+echo ""
+
+# Exit from the script with success (0)
+exit 0
