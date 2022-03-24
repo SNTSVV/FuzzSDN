@@ -14,7 +14,7 @@ with open('requirements.txt', 'r') as f:
 setup(
     # Metadata
     name='rdfl_exp',
-    version='0.1.0',
+    version='0.2.0',
     description='Rule Detection with Feedback Loop Experiment',
     url='',
     author='raphael.ollando',
