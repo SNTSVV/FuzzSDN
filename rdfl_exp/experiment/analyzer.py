@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 import os
+from collections import Counter
 from copy import copy
 from typing import Optional
 
@@ -12,6 +13,7 @@ from rdfl_exp.analytics.log import LogParser, OnosLogParser, RyuLogParser
 from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
 from rdfl_exp.experiment import RuleSet
 from rdfl_exp.setup import LOG_TRACE_DIR
+from rdfl_exp.utils.metrics import imbalance_ratio, geometric_diversity, fraction_of_borderline_points
 from rdfl_exp.utils.database import Database as SqlDb
 
 DB_NAME = "rdfl_exp"
@@ -204,6 +206,39 @@ class Analyzer:
         return df
     # End def get_data
 
+    def get_dataset_metrics(self, iteration=None, error_class=None):
+        """
+        Calculate the imbalance ratio at iteration X
+        :param iteration:
+        :param error_class:
+        :return: a {dict} of the metrics
+        """
+        data = self.get_dataset(iteration=iteration, error_class=error_class, debug=False)
+
+        # Extract the feature vector and the target vector
+        X = data.drop(columns=['class']).values
+        y = data['class'].values
+
+        self.__log.trace("Computing Imbalance Ratio...")
+        ir_score = imbalance_ratio(X, y)
+        self.__log.trace("Done. IR = {}".format(ir_score))
+        self.__log.trace("Computing Geometric Diversity...")
+        gd_score = geometric_diversity(X)
+        self.__log.trace("Done. IR = {}".format(gd_score))
+        self.__log.trace("Computing N1 score...")
+        n1_score = fraction_of_borderline_points(X, y)
+        self.__log.trace("Done. IR = {}".format(n1_score))
+
+        metrics = {
+            'instances': Counter(y),
+            'ir_score' : ir_score,
+            'gd_score' : gd_score,
+            'n1_score' : n1_score
+        }
+
+        return metrics
+    # End def get_metrics
+
     # ===== ( Setters ) ================================================================================================
 
     def set_ruleset_for_iteration(self, ruleset : RuleSet):
@@ -242,7 +277,7 @@ class Analyzer:
             SqlDb.disconnect()
     # End def set_ruleset_for_iteration
 
-    # ===== ( Analyze ) ================================================================================================
+    # ===== ( Analysis ) ===============================================================================================
 
     def new_iteration(self):
         """

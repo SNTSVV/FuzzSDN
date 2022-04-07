@@ -21,12 +21,12 @@ from rdfl_exp.drivers import FuzzerDriver, OnosDriver, RyuDriver
 from rdfl_exp.experiment import Analyzer, Experimenter, FuzzMode, Learner, RuleSet
 from rdfl_exp.resources import scenarios
 from rdfl_exp.stats import Stats
-from rdfl_exp.utils import csv, utils
+from rdfl_exp.utils import csv_ops, utils
 from rdfl_exp.utils.database import Database as SqlDb
 from rdfl_exp.utils.exit_codes import ExitCode
 from rdfl_exp.utils.terminal import Style
 
-# ===== ( locals ) ============================================================
+# ===== ( locals ) =====================================================================================================
 
 _log = logging.getLogger(__name__)
 _is_init = False
@@ -315,9 +315,7 @@ def run() -> None:
 
         experimenter.run()
 
-        # 2. Fetch the dataset
-
-        # Write the raw data to the file
+        # 2. Create the datasets
         data = experimenter.analyzer.get_dataset()
         data.to_csv(join(setup.EXP_PATH, "datasets", "it_{}_raw.csv".format(it)), index=False, encoding='utf-8')
 
@@ -330,7 +328,7 @@ def run() -> None:
         data.to_csv(join(setup.EXP_PATH, "datasets", "it_{}_debug.csv".format(it)), index=False, encoding='utf-8')
 
         # Convert the set to an arff file
-        csv.to_arff(
+        csv_ops.to_arff(
             csv_path=join(setup.EXP_PATH, "datasets", "it_{}.csv".format(it)),
             arff_path=join(setup.EXP_PATH, "datasets", "it_{}.arff".format(it)),
             csv_sep=',',
@@ -367,8 +365,8 @@ def run() -> None:
                     learner.ruleset[i].set_budget(learner.ruleset.confidence(i, relative=True, relative_to_class=True) * s_other / _context['nb_of_samples'])
 
         except Exception:
-            _log.exception("An exception occured while trying to learn the rules:")
-            _log.warning("Continuing with previous learner")
+            _log.exception("An exception occured while trying to create a models")
+            _log.warning("Continuing with previous model")
 
         # End of iteration total time
         end_of_ml = time.time()
@@ -379,6 +377,7 @@ def run() -> None:
             learning_time=end_of_ml - start_of_ml,
             iteration_time=end_of_it - start_of_it,
             experimenter=experimenter,
+            analyzer=analyzer,
             learner=learner
         )
         Stats.save(join(setup.EXP_PATH, 'stats.json'))
