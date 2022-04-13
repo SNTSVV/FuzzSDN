@@ -1,6 +1,7 @@
 import json
+from typing import Optional
 
-from rdfl_exp.experiment import Analyzer, Experimenter, Learner
+from rdfl_exp.experiment import Analyzer, Experimenter, Learner, Model, ModelInfo
 
 
 class Stats:
@@ -12,8 +13,9 @@ class Stats:
         cls._stats = cls._create_stats_dict(context["target_class"], context["other_class"])
         cls._stats['context']['scenario']               = context['scenario']
         cls._stats['context']['criterion']              = context['criterion']
-        cls._stats['context']['ml_algorithm']           = context['ml_algorithm']
-        cls._stats['context']['pp_strategy']            = context['pp_strategy']
+        cls._stats['context']['mode']                   = context['mode']
+        cls._stats['context']['algorithm']              = context['ml_algorithm']
+        cls._stats['context']['filter']                 = context['pp_strategy']
         cls._stats['context']['iteration_limit']        = context['it_max']
         cls._stats['context']['samples_per_iteration']  = context['nb_of_samples']
         cls._stats['context']['enable_mutation']        = context['enable_mutation']
@@ -21,21 +23,29 @@ class Stats:
     # End def __init__
 
     @classmethod
-    def save(cls, path: str):
+    def save(cls, path: str, pretty : bool = False):
         """
         Save the statistics to a file.
         :param path: The os path to the statistic file
+        :type: bool
+        :param pretty:
+        :type: bool
         """
         with open(path, 'w') as stats_file:
-            json.dump(cls._stats, stats_file)
+            if pretty is True:
+                json.dump(cls._stats, stats_file, indent=4, sort_keys=True)
+            else:
+                json.dump(cls._stats, stats_file)
     # End def save
 
     @classmethod
-    def add_iteration_statistics(cls, learning_time, iteration_time, experimenter: Experimenter, analyzer: Analyzer, learner : Learner):
-
-        ml_results  = learner.get_results()
-        rule_set    = learner.get_rules()
-
+    def add_iteration_statistics(
+            cls,
+            learning_time,
+            iteration_time,
+            learner : Learner,
+            model: Optional[Model]
+    ):
         # List the classes
         target_class, other_class = cls._stats["context"]["target_class"], cls._stats["context"]["other_class"]
 
@@ -47,65 +57,64 @@ class Stats:
         cls._stats["timing"]["iteration"]   += [str(iteration_time)]
 
         # Add the information about the data
-
-        metrics = analyzer.get_dataset_metrics(cls._stats["context"]["iterations"] - 1, error_class=target_class)
-        cls._stats['data']['total_count']   += [sum(metrics['instances'].values())]
-        cls._stats['data']['target_count']  += [metrics['instances'][target_class]]
-        cls._stats['data']['other_count']   += [metrics['instances'][other_class]]
-
-        # Add the learning context
-        cls._stats['learning']['context'] += [learner.get_context()]
+        count = learner.get_instances_count()
+        cls._stats['data']['count']['all']          += [count['all']]
+        cls._stats['data']['count'][target_class]   += [count[target_class]]
+        cls._stats['data']['count'][other_class]    += [count[other_class]]
 
         # Update the machine learning results
-        if 'evaluation' in ml_results:
-            cls._stats['learning']["accuracy"]   += [ml_results['evaluation']['correctly_classified'] / ml_results['evaluation']['total_num_instances']]
+        if model is not None:
+            cls._stats['learning']["accuracy"]   += [model.info.accuracy]
         else:
-            cls._stats['learning']["accuracy"]   += [None]
+            cls._stats['learning']["accuracy"] += [None]
 
-        if rule_set is not None:
-            cls._stats['learning']['confidence'] += [rule_set.confidence()]
+        if model is not None and model.ruleset is not None:
+            cls._stats['learning']['confidence'] += [model.ruleset.confidence()]
         else:
             cls._stats['learning']['confidence'] += [None]
 
         # Add the rules and their statistics at each iteration
         rules_info = list()
         try:
-            for i in range(len(rule_set)):
+            for i in range(len(model.ruleset)):
                 rule_dict = dict()
-                rule_dict['id']                     = rule_set[i].id
-                rule_dict['class']                  = rule_set[i].get_class()
-                rule_dict['support']                = rule_set.support(i)
-                rule_dict['confidence']             = rule_set.confidence(i, relative=False)
-                rule_dict['relative_confidence']    = rule_set.confidence(i, relative=True)
-                rule_dict['budget']                 = rule_set[i].get_budget()
-                rule_dict['repr']                   = str(rule_set[i])
+                rule_dict['id']                     = model.ruleset[i].id
+                rule_dict['class']                  = model.ruleset[i].get_class()
+                rule_dict['support']                = model.ruleset.support(i)
+                rule_dict['confidence']             = model.ruleset.confidence(i, relative=False)
+                rule_dict['relative_confidence']    = model.ruleset.confidence(i, relative=True)
+                rule_dict['budget']                 = model.ruleset[i].get_budget()
+                rule_dict['repr']                   = str(model.ruleset[i])
                 rules_info += [rule_dict]
-        except TypeError:
+        except (TypeError, AttributeError):
             # Then rule_set is empty
-            rules_info = list()
+            rules_info = None
+        finally:
+            cls._stats['learning']['rules']   += [rules_info]
 
-        cls._stats['learning']['rules']   += [rules_info]
-
-        for evl_method in ('cross-validation', 'evaluation'):
-            for class_ in (target_class, other_class):
-                if evl_method in ml_results and class_ in ml_results.get(evl_method, dict()):
-                    cls._stats['learning'][evl_method][class_]['fp_rate']    += [ml_results[evl_method][class_]['fp_rate']]
-                    cls._stats['learning'][evl_method][class_]['tp_rate']    += [ml_results[evl_method][class_]['tp_rate']]
-                    cls._stats['learning'][evl_method][class_]['precision']  += [ml_results[evl_method][class_]['precision']]
-                    cls._stats['learning'][evl_method][class_]['recall']     += [ml_results[evl_method][class_]['recall']]
-                    cls._stats['learning'][evl_method][class_]['f_measure']  += [ml_results[evl_method][class_]['f_measure']]
-                    cls._stats['learning'][evl_method][class_]['mcc']        += [ml_results[evl_method][class_]['mcc']]
-                    cls._stats['learning'][evl_method][class_]['roc']        += [ml_results[evl_method][class_]['roc']]
-                    cls._stats['learning'][evl_method][class_]['prc']        += [ml_results[evl_method][class_]['prc']]
-                else:
-                    cls._stats['learning'][evl_method][class_]['fp_rate']    += [None]
-                    cls._stats['learning'][evl_method][class_]['tp_rate']    += [None]
-                    cls._stats['learning'][evl_method][class_]['precision']  += [None]
-                    cls._stats['learning'][evl_method][class_]['recall']     += [None]
-                    cls._stats['learning'][evl_method][class_]['f_measure']  += [None]
-                    cls._stats['learning'][evl_method][class_]['mcc']        += [None]
-                    cls._stats['learning'][evl_method][class_]['roc']        += [None]
-                    cls._stats['learning'][evl_method][class_]['prc']        += [None]
+        for class_ in (target_class, other_class):
+            if model is not None and class_ in model.info.classes:
+                cls._stats['learning'][class_]['num_tp']    += [model.info.num_fp[class_]]
+                cls._stats['learning'][class_]['num_fp']    += [model.info.num_tp[class_]]
+                cls._stats['learning'][class_]['num_tn']    += [model.info.num_tn[class_]]
+                cls._stats['learning'][class_]['num_fn']    += [model.info.num_fn[class_]]
+                cls._stats['learning'][class_]['precision'] += [model.info.precision[class_]]
+                cls._stats['learning'][class_]['recall']    += [model.info.recall[class_]]
+                cls._stats['learning'][class_]['f_measure'] += [model.info.f_measure[class_]]
+                cls._stats['learning'][class_]['mcc']       += [model.info.mcc[class_]]
+                cls._stats['learning'][class_]['auroc']     += [model.info.auroc[class_]]
+                cls._stats['learning'][class_]['auprc']     += [model.info.auprc[class_]]
+            else:
+                cls._stats['learning'][class_]['num_tp']    += [None]
+                cls._stats['learning'][class_]['num_fp']    += [None]
+                cls._stats['learning'][class_]['num_tn']    += [None]
+                cls._stats['learning'][class_]['num_fn']    += [None]
+                cls._stats['learning'][class_]['precision'] += [None]
+                cls._stats['learning'][class_]['recall']    += [None]
+                cls._stats['learning'][class_]['f_measure'] += [None]
+                cls._stats['learning'][class_]['mcc']       += [None]
+                cls._stats['learning'][class_]['auroc']     += [None]
+                cls._stats['learning'][class_]['auprc']     += [None]
     # End def add_iteration_statistics
 
     # ====== ( create the dict ) ===========================================================================================
@@ -124,15 +133,15 @@ class Stats:
         stats['context']                                = dict()
         stats['context']['scenario']                    = str()
         stats['context']['criterion']                   = dict()
+        stats['context']['mode']                        = str()
         stats['context']['criterion']['name']           = str()
         stats['context']['criterion']['kwargs']         = dict()
-        stats['context']["pid"]                         = str()
-        stats['context']["iteration_limit"]             = int()
-        stats['context']["iterations"]                  = int()
-        stats['context']["ml_algorithm"]                = str()
-        stats['context']["pp_strategy"]                 = str()
-        stats['context']["target_class"]                = target_class
-        stats['context']["other_class"]                 = other_class
+        stats['context']['iteration_limit']             = int()
+        stats['context']['iterations']                  = int()
+        stats['context']['algorithm']                   = str()
+        stats['context']['filter']                      = str()
+        stats['context']['target_class']                = target_class
+        stats['context']['other_class']                 = other_class
 
         # Information of the timing
         stats['timing']                                 = dict()
@@ -141,30 +150,31 @@ class Stats:
 
         # Information on the data
         stats['data']                                   = dict()
-        stats['data']['total_count']                    = list()
-        stats['data']['target_count']                   = list()
-        stats['data']['other_count']                    = list()
+        stats['data']['count']                          = dict()
+        stats['data']['count']['all']                   = list()
+        stats['data']['count'][target_class]            = list()
+        stats['data']['count'][other_class]             = list()
+
 
         # Information on the machine learning information
         stats['learning']                               = dict()
-        stats['learning']['context']                    = list()
         stats['learning']['accuracy']                   = list()
         stats['learning']['confidence']                 = list()
         stats['learning']['rules']                      = list()
+        stats['learning'][target_class]                 = dict()
+        stats['learning'][other_class]                  = dict()
 
-        stats['learning'].update({'cross-validation': dict(), 'evaluation': dict()})
-        for evl_method in ('cross-validation', 'evaluation'):
-            stats['learning'][evl_method].update({target_class: dict(), other_class: dict()})
-            for class_ in (target_class, other_class):
-                stats['learning'][evl_method][class_]["tp_rate"]      = list()
-                stats['learning'][evl_method][class_]["fp_rate"]      = list()
-                stats['learning'][evl_method][class_]["precision"]    = list()
-                stats['learning'][evl_method][class_]["recall"]       = list()
-                stats['learning'][evl_method][class_]["f_measure"]    = list()
-                stats['learning'][evl_method][class_]["mcc"]          = list()
-                stats['learning'][evl_method][class_]["roc"]          = list()
-                stats['learning'][evl_method][class_]["prc"]          = list()
-
+        for class_ in (target_class, other_class):
+            stats['learning'][class_]["num_tp"]         = list()
+            stats['learning'][class_]["num_fp"]         = list()
+            stats['learning'][class_]["num_tn"]         = list()
+            stats['learning'][class_]["num_fn"]         = list()
+            stats['learning'][class_]["precision"]      = list()
+            stats['learning'][class_]["recall"]         = list()
+            stats['learning'][class_]["f_measure"]      = list()
+            stats['learning'][class_]["mcc"]            = list()
+            stats['learning'][class_]["auroc"]          = list()
+            stats['learning'][class_]["auprc"]          = list()
         return stats
     # End def _create_stats_dict
 # End class Stats

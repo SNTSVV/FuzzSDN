@@ -3,12 +3,10 @@
 import logging
 import os
 import re
-import sys
 from copy import copy
-from typing import Optional
+from typing import Dict, NamedTuple, Optional, Tuple
 
 from weka.classifiers import Classifier, Evaluation, FilteredClassifier
-from weka.core import jvm, packages
 from weka.core.classes import Random
 from weka.core.converters import Loader
 from weka.core.dataset import Instances
@@ -16,6 +14,158 @@ from weka.filters import Filter, MultiFilter
 
 from rdfl_exp.experiment import Rule, RuleSet
 from rdfl_exp.utils import str_to_typed_value
+
+
+class ModelInfo(NamedTuple):
+    """
+    The metadata of a model.
+    """
+    # The classes used by the model
+    classes : Tuple[str, str]
+
+    # Evaluation method
+    evaluation_method : Optional[str]
+    instances         : int
+
+    # Accuracy, number of TP, FP, TN, FN
+    accuracy: float
+    num_tp  : Dict[str, int]
+    num_fp  : Dict[str, int]
+    num_tn  : Dict[str, int]
+    num_fn  : Dict[str, int]
+
+    # The Precision and Recall and F-Measure for each class
+    precision   : Dict[str, float]
+    recall      : Dict[str, float]
+    f_measure   : Dict[str, float]
+
+    # The mcc, auroc and auprc values
+    mcc     : Dict[str, float]
+    auroc   : Dict[str, float]
+    auprc   : Dict[str, float]
+# End class ModelInfo
+
+
+class Model:
+    """
+    Utility class that stores the results from a Learner
+    """
+
+    def __init__(
+            self,
+            classifier : Classifier,
+            evaluator : Evaluation,
+            class_label : Optional[Dict[int, str]] = None
+    ):
+        self._classifier = classifier
+
+        self._ruleset       : RuleSet
+        self._info          : ModelInfo
+
+        # 0. If no dictionary of class labels has been given, just craft one with basic names
+        if class_label is None:
+            class_label = {0: '0', 1: '1'}
+
+        # 1. Extract the rules from the classifier
+        self._ruleset = RuleSet()
+        lines = self._classifier.__str__().split("\n")
+        for line in lines:
+            # Check if the line match the structure of a rule
+            if re.match(r'(.*)=>(.*=.*\(.*/.*\))', line):
+                rule = Rule.from_string(line)
+                if rule is not None:
+                    self._ruleset.add_rule(rule)
+        self._ruleset.canonicalize()
+
+        # 3. Create the model info
+        self._info = ModelInfo(
+            classes=(class_label[0], class_label[1]),
+            evaluation_method="cross_validation",  # TODO: Determine the eval_method depending on the evaluator java class
+            instances=int(evaluator.num_instances),
+            accuracy=evaluator.percent_correct,
+            num_tp={
+                class_label[0]: int(evaluator.num_true_positives(0)),
+                class_label[1]: int(evaluator.num_true_positives(1))
+            },
+            num_fp={
+                class_label[0]: int(evaluator.num_false_positives(0)),
+                class_label[1]: int(evaluator.num_false_positives(1))
+            },
+            num_tn={
+                class_label[0]: int(evaluator.num_true_negatives(0)),
+                class_label[1]: int(evaluator.num_true_negatives(1))
+            },
+            num_fn={
+                class_label[0]: int(evaluator.num_false_negatives(0)),
+                class_label[1]: int(evaluator.num_false_negatives(1))
+            },
+            precision={
+                class_label[0]: evaluator.precision(0),
+                class_label[1]: evaluator.precision(1)
+            },
+            recall={
+                class_label[0]: evaluator.recall(0),
+                class_label[1]: evaluator.recall(1)
+            },
+            f_measure={
+                class_label[0]: evaluator.f_measure(0),
+                class_label[1]: evaluator.f_measure(1)
+            },
+            mcc={
+                class_label[0]: evaluator.matthews_correlation_coefficient(0),
+                class_label[1]: evaluator.matthews_correlation_coefficient(1)
+            },
+            auroc={
+                class_label[0]: evaluator.area_under_roc(0),
+                class_label[1]: evaluator.area_under_roc(1)
+            },
+            auprc={
+                class_label[0]: evaluator.area_under_prc(0),
+                class_label[1]: evaluator.area_under_prc(1)
+            },
+        )
+    # End def __init__
+
+    # ===== ( Getters ) ================================================================================================
+
+    @property
+    def classifier(self):
+        return self._classifier
+    # End def classifier
+
+    @property
+    def info(self):
+        return self._info
+    # End def classifier
+
+    @property
+    def ruleset(self):
+        return self._ruleset
+    # End def classifier
+
+    @property
+    def has_rules(self):
+        """
+        Returns True if there are rules in the ruleset else False
+        :return: bool
+        """
+        if self.ruleset is not None:
+            return self.ruleset.has_rules()
+        else:
+            return False
+    # End def classifier
+
+    # ===== ( Methods ) ================================================================================================
+
+    def save(self, file_path):
+        """
+        Serialize the classifier and save it under 'file_path' to be reused later.
+        :param file_path: the file to save the model to
+        :type: str
+        """
+        self._classifier.serialize(file_path, header=self._classifier.header)
+    # End def save
+# End class Model
 
 
 class Learner:
@@ -29,113 +179,108 @@ class Learner:
         self.log = logging.getLogger(__name__)
 
         # Classification
-        self.target_class   : str = "1"
-        self.other_class    : str = "2"
+        self.target_class: str = "1"
+        self.other_class: str = "2"
 
         # ML Algorithms
-        self.ml_alg         : Optional[str] = None
-        self.ml_hp          : Optional[dict] = None
+        self._ml_alg_full   : Optional[str] = None
+        self._ml_alg        : Optional[str] = None
+        self._ml_hp         : Optional[dict] = None
 
         # pp_strat
-        self.pp_strat       : Optional[str] = None
-        self.pp_hp          : Optional[dict] = None
+        self._filter_full   : Optional[str] = None
+        self._pp_strat      : Optional[str] = None
+        self._pp_hp         : Optional[dict] = None
 
         # Learning Parameters
-        self.seed: Optional[int] = None
-        self.cv_folds: int = 10
+        self._seed: Optional[int] = None
+        self._cv_folds: int = 10
 
         # Dataset
-        self.dataset        : Optional[Instances] = None
-
-        # result variables
-        self.context        : Optional[dict] = None
-        self.result         : Optional[dict] = None
-        self.ruleset        : Optional[RuleSet] = None
-        self.classifier     = None
-        self.evl_cv         = None
-        self.evl_bld        = None
+        self.dataset: Optional[Instances] = None
 
     # ===== ( Setters ) ================================================================================================
 
-    def set_classes(self, target_class : str, other_class : str):
-        self.target_class = target_class
-        self.other_class = other_class
-        self.log.debug("Target class set to \"{}\". Other class set to \"{}\".".format(target_class, other_class))
-    # End def set_classes
+    @property
+    def seed(self):
+        return self._seed
+    # End def seed
 
-    def set_seed(self, seed):
-        if seed is None:
-            self.seed = None
+    @property
+    def cv_folds(self):
+        return self._cv_folds
+    # End def cv_folds
+
+    @property
+    def algorithm(self):
+        return self._ml_alg_full
+    # End def machine_learning_algorithm
+
+    @property
+    def filter(self):
+        return self._pp_strat
+    # End def machine_learning_algorithm
+
+    # ===== ( Setters ) ================================================================================================
+
+    @seed.setter
+    def seed(self, value):
+        if value is None:
+            self._seed = None
             self.log.debug("seed set to clock time")
-        elif isinstance(seed, int):
-            self.seed = seed
-            self.log.debug("seed set to {}".format(seed))
+        elif isinstance(value, int) or isinstance(value, float):
+            self._seed = value
+            self.log.debug("seed set to {}".format(int(value)))
         else:
-            raise AttributeError("Attribute \"seed\" must be either None or an int (not: {})".format(type(seed)))
-    # End def set_seed
+            raise AttributeError("Attribute \"seed\" must be either None, int or float (not: {})".format(type(value)))
+    # End def seed
 
-    def set_learning_algorithm(self, alg : str):
+    @cv_folds.setter
+    def cv_folds(self, value):
+        # If cv_folds > 0, perform cross validation
+        if isinstance(value, (int, float)) and value > 1:
+            self._cv_folds = int(value)
+            self.log.debug("cross-validation folds number set to \"{}\"".format(self._cv_folds))
+        else:
+            ValueError("cv_folds folds must be an int >= 1 (got: \"{}\")".format(value))
+    # End def cv_folds.setter
 
+    @algorithm.setter
+    def algorithm(self, alg: str):
+        self._ml_alg_full = copy(alg)
         alg_split = alg.split(',')
 
-        self.ml_alg = alg_split[0].upper()
-        self.ml_hp = None
+        self._ml_alg = alg_split[0].upper()
+        self._ml_hp = None
         self.log.debug("machine learning algorithm set to \"{}\"".format(alg))
 
         # parse the hyper-parameters
         if len(alg_split) > 1:
-            self.ml_hp = dict()
+            self._ml_hp = dict()
             for param in alg_split[1:]:
                 key, value = param.split('=')
-                self.ml_hp[key.strip()] = str_to_typed_value(value.strip())
-    # End def set_learning_algorithm
+                self._ml_hp[key.strip()] = str_to_typed_value(value.strip())
+    # End def algorithm.setter
 
-    def set_preprocessing_strategy(self, pp_strat):
-        pp_split = pp_strat.split(',')
-        self.pp_hp = None
-        self.pp_strat = pp_split[0].upper()
-        self.log.debug("preprocess_strategy set to \"{}\"".format(pp_strat))
+    @filter.setter
+    def filter(self, filter_):
+        self._filter_full = copy(filter_)
+        pp_split = filter_.split(',')
+        self._pp_hp = None
+        self._pp_strat = pp_split[0].upper()
+        self.log.debug("preprocess_strategy set to \"{}\"".format(filter_))
 
         # parse the hyper-parameters
         if len(pp_split) > 1:
-            self.pp_hp = dict()
+            self._pp_hp = dict()
             for param in pp_split[1:]:
                 key, value = param.split('=')
-                self.pp_hp[key.strip()] = str_to_typed_value(value.strip())
-    # End def set_preprocess_strategy
-
-    def set_cross_validation_folds(self, cv_folds : int):
-        self.cv_folds = cv_folds
-        self.log.debug("cross-validation folds number set to \"{}\"".format(cv_folds))
-    # End def set_cross_validation_folds
+                self._pp_hp[key.strip()] = str_to_typed_value(value.strip())
+    # End def filter.setter
 
     # ===== ( Getters ) ================================================================================================
 
-    def get_rules(self) -> RuleSet:
-        return self.ruleset
-    # End def get_ruleset
-
-    def get_evaluators(self):
-        return self.evl_cv, self.evl_bld
-    # End def get_evaluators
-
-    def get_context(self) -> dict:
-        return self.context
-    # End def get_context
-
-    def get_results(self) -> dict:
-        return self.result
-    # End def get_results
-
-    def get_dataset_size(self) -> int:
-        if self.dataset is None:
-            self.log.error("Requesting dataset size, while no dataset was loaded")
-            raise RuntimeError("No dataset loaded.")
-
-        return len(self.dataset)
-    # End def dataset_size
-
-    def get_size_of_classes(self):
+    def get_instances_count(self) -> Dict[str, int]:
         if self.dataset is None:
             self.log.error("Requesting dataset size, while no dataset was loaded")
             raise RuntimeError("No dataset loaded.")
@@ -147,15 +292,12 @@ class Learner:
             else:
                 other_cnt += 1
 
-        return target_cnt, other_cnt
-    # End def get_number_of_instances
-
-    def has_rules(self):
-        if self.ruleset is not None:
-            return self.ruleset.has_rules()
-        else:
-            return False
-    # End def has_rules
+        return {
+                   'all': len(self.dataset),
+                   self.target_class: target_cnt,
+                   self.other_class: other_cnt
+        }
+    # End def get_instances_count
 
     # ===== ( Public function ) ========================================================================================
 
@@ -166,35 +308,31 @@ class Learner:
 
         self.dataset = loader.load_file(data_path)
         self.dataset.class_is_last()
+
     # End def load_data
 
     def learn(self):
         """
         """
-
         # Build the classifier
-        self.log.info("Building classifier using \"{}\" algorithm".format(self.ml_alg))
+        self.log.info("Learning from \"{}\" using \"{}\"".format(self.dataset.relationname, self._ml_alg))
 
         # Reset the results, context, classifier, evaluator, ...
-        self.context    = dict()
-        self.result     = dict()
-        self.ruleset    = None
-        self.classifier = None
-        self.evl_cv     = None
-        self.evl_bld    = None
+        classifier      : Classifier
+        evaluator       : Evaluation
 
         # Create the filter to balance the data
-        _fltr = None
-        if self.pp_strat is not None and self.pp_strat != '':
-            self.log.debug("Building the filter for the preprocessing strategy \"{}\"...".format(self.pp_strat))
+        filter_ = None
+        if self._pp_strat is not None and self._pp_strat != '':
+            self.log.debug("Building the filter for the preprocessing strategy \"{}\"...".format(self._pp_strat))
             try:
                 pp_fltr = self.__build_pp_filters()
                 if len(pp_fltr) > 1:  # Multiple filters
-                    _fltr = MultiFilter()
+                    filter_ = MultiFilter()
                     for f in pp_fltr:
-                        _fltr.append(f)
+                        filter_.append(f)
                 elif len(pp_fltr) == 1:  # One filter
-                    _fltr = pp_fltr[0]
+                    filter_ = pp_fltr[0]
                 else:
                     # If the implementation for __build_pp_filter is correct, we should never reach this point.
                     # If an empty filter is returned and it is not normal or it requires a warning, this should be done
@@ -202,96 +340,75 @@ class Learner:
                     pass
             except ValueError as e:
                 # A value error is risen only when the preprocess strategy is not known
-                self.log.error("Couldn't apply strategy {} with error \"{}\"".format(self.pp_strat, str(e)))
+                self.log.error("Couldn't apply strategy {} with error \"{}\"".format(self._pp_strat, str(e)))
                 self.log.warning("Machine learning will be performed without any data preprocessing.")
 
         # Create the classifier
         self.log.debug("Creating the classifier...")
-        _clf = None
-
-        if self.ml_alg == 'RIPPER':
-
-            self.context['algorithm'] = "RIPPER"
+        clf_ = None
+        if self._ml_alg == 'RIPPER':
             # NOTE: This is a simple solution for handling the hyper-parameters. a more complex solution might be needed
             #       in the future.
             options = None
-            if self.ml_hp:
+            if self._ml_hp:
                 options = list()
-                for key in self.ml_hp.keys():
+                for key in self._ml_hp.keys():
                     # Number of folds
                     if key == 'nof':
-                        options.extend(('-F', str(self.ml_hp[key])))
+                        options.extend(('-F', str(self._ml_hp[key])))
                     # Minimum total weight
                     if key == 'mtw':
-                        options.extend(('-N', str(self.ml_hp[key])))
+                        options.extend(('-N', str(self._ml_hp[key])))
                     # Number of optimization runs
                     if key == 'o':
-                        options.extend(('-O', str(self.ml_hp[key])))
+                        options.extend(('-O', str(self._ml_hp[key])))
                     # Check error rate
-                    if key == 'cer' and self.ml_hp[key] is False:
+                    if key == 'cer' and self._ml_hp[key] is False:
                         options.append('-E')
                     # Use Pruning
-                    if key == 'up' and self.ml_hp[key] is False:
+                    if key == 'up' and self._ml_hp[key] is False:
                         options.append('-P')
 
-            _clf = Classifier(classname="weka.classifiers.rules.JRip", options=options)
-
+            clf_ = Classifier(classname="weka.classifiers.rules.JRip", options=options)
         else:
-            raise ValueError("Classifying algorithm \"{}\" is not supported.".format(self.ml_alg))
+            raise ValueError("Classifying algorithm \"{}\" is not supported.".format(self._ml_alg))
 
         # Create the final classifier
-        if _fltr is None:
-            self.classifier = _clf
+        if filter_ is None:
+            classifier = clf_
         else:
-            self.classifier             = FilteredClassifier()
-            self.classifier.filter      = _fltr
-            self.classifier.classifier  = _clf
+            classifier              = FilteredClassifier()
+            classifier.filter       = filter_
+            classifier.classifier   = clf_
 
         # Perform cross validation on the dataset
         self.log.debug("Performing classifier evaluation...")
-        self.evl_cv = Evaluation(self.dataset)
-        # If cv_folds > 0, perform cross validation
-        if not isinstance(self.cv_folds, int) or self.cv_folds < 1:
-            ValueError("The number of cross-validation folds must be an integer >= 1 (got: \"{}\")".format(self.cv_folds))
+        evaluator = Evaluation(self.dataset)
 
         # Sets the seed for this learning iteration
-        seed = copy(self.seed) if self.seed is not None else int.from_bytes(os.urandom(7), 'big')
-        self.evl_cv.crossvalidate_model(self.classifier, self.dataset, self.cv_folds, Random(seed))
-        self.log.debug("Evaluator:\n{}\n{}".format(self.evl_cv.summary(),
-                                                   self.evl_cv.class_details("Statistics:")))
-
-        # Fill the context
-        self.context['cv_folds'] = self.cv_folds
-        self.context['seed'] = seed
+        self.log.debug("Building the classifier...")
+        seed = self._seed if self._seed is not None else int.from_bytes(os.urandom(7), 'big')
+        evaluator.crossvalidate_model(classifier, self.dataset, self._cv_folds, Random(seed))
+        self.log.trace("Done. Evaluator:\n{}\n{}".format(evaluator.summary(), evaluator.class_details("Statistics:")))
 
         # Build the classifier
         self.log.debug("Building the classifier...")
-        self.classifier.build_classifier(self.dataset)
-        self.evl_bld = Evaluation(self.dataset)
-        self.evl_bld.test_model(self.classifier, self.dataset)
-        self.log.debug("Classifier:\n{}".format(self.classifier))
+        classifier.build_classifier(self.dataset)
+        self.log.trace("Done. Classifier:\n{}".format(classifier))
 
-        # Extract the  rules from the classifier
-        self.log.debug("Extracting the rules...")
-        self.ruleset = RuleSet()
-        lines = self.classifier.__str__().split("\n")
-        for line in lines:
-            # Check if the line match the structure of a rule
-            if re.match(r'(.*)=>(.*=.*\(.*/.*\))', line):
-                rule = Rule.from_string(line)
-                if rule is not None:
-                    self.ruleset.add_rule(rule)
-        # Canonicalize the ruleset
-        self.ruleset.canonicalize()
-
-        self.log.debug("Extracting the results from the generated rules...")
-        self.result['cross-validation'] = _get_stats_from_evaluator(self.evl_cv,  (self.target_class, self.other_class))
-        self.result['evaluation']       = _get_stats_from_evaluator(self.evl_bld, (self.target_class, self.other_class))
+        # Create the model
+        return Model(
+            classifier=classifier,
+            evaluator=evaluator,
+            class_label={
+                0: self.dataset.attribute(self.dataset.class_index).value(0),
+                1: self.dataset.attribute(self.dataset.class_index).value(1)
+            }
+        )
     # End def learn
 
     # ===== ( Private Functions ) ======================================================================================
 
-    # def _preprocess_data(strategy: str, dataset: Union[Instances, list[Instances]]) -> Union[Instances, list[Instances]]:
     def __build_pp_filters(self):
         """
         Perform some preprocessing on the data depending on the strategy defined.
@@ -302,40 +419,36 @@ class Learner:
         """
 
         # Exit the function if there is no preprocessing strategy defined
-        if self.pp_strat is None:
+        if self._pp_strat is None:
             self.log.warning("function \"__build_pp_filters\" was called while there is no pp_strategy defined")
             return
 
         filters = []
-        self.context["pp_filter"] = dict()
         # Balancing the dataset using under sampling method
-        if self.pp_strat == 'UNDERSAMPLING':
-            self.log.info("Creating filter for \"{}\" strategy".format(self.pp_strat))
+        if self._pp_strat == 'UNDERSAMPLING':
+            self.log.info("Creating filter for \"{}\" strategy".format(self._pp_strat))
             filters.append(
                 Filter(classname="weka.filters.supervised.instance.SpreadSubsample", options=["-M", "1.0"])
             )
 
-            # Fill the last results info
-            self.context["pp_filter"]["strategy"] = "undersampling"
-            self.context["pp_filter"]["target_ratio"] = 0.5
-
         # Balancing the dataset using w
-        elif self.pp_strat == 'WEIGHT_BALANCING':
-            self.log.info("Using \"{}\" data preprocessing strategy".format(self.pp_strat))
+        elif self._pp_strat == 'WEIGHT_BALANCING':
+            self.log.info("Using \"{}\" data preprocessing strategy".format(self._pp_strat))
             filters.append(
                 Filter(classname="weka.filters.supervised.instance.ClassBalancer", options=["-num-intervals", "10"])
             )
 
-            # Fill the context if there is one
-            self.context["pp_filter"]["strategy"] = "weight_balancing"
-            self.context["pp_filter"]["num-intervals"] = 10
+        elif self._pp_strat.startswith("SMOTE"):
 
-        elif self.pp_strat.startswith("SMOTE"):
-            match = re.match(r'SMOTE-?(?P<n>\d*)?', self.pp_strat)
+            nn = 5
+            if self._pp_hp:
+                for key in self._pp_hp.keys():
+                    # Nearest neighbors
+                    if key == 'nn':
+                        nn = int(self._pp_hp[key])
 
             # get the number of neighbours to consider
-            n = int(match.group("n")) if match.group("n") != '' else 5
-            self.log.info("Using \"SMOTE-{}\" data preprocessing strategy".format(n))
+            self.log.info("Using \"SMOTE-{}\" data preprocessing strategy".format(nn))
 
             # compute the number of instances for each class and compute the smote factor
             index_list = (str(i + 1) for i in range(self.dataset.class_index))
@@ -348,28 +461,29 @@ class Learner:
             min_cls_cnt = min(class1_cnt, class2_cnt)
             max_cls_cnt = max(class1_cnt, class2_cnt)
             percentage = 100 * (max_cls_cnt - min_cls_cnt) / min_cls_cnt  # Default percentage
-            if self.ml_hp:
+            if self._ml_hp:
                 # Sets a target ratio below 0.5
-                if 'target-ratio' in self.ml_hp:
-                    target_ratio = max(0.0, min(0.5, float(self.ml_hp['target-ratio'])))
+                if 'target-ratio' in self._ml_hp:
+                    target_ratio = max(0.0, min(0.5, float(self._ml_hp['target-ratio'])))
                     if min_cls_cnt / (min_cls_cnt + max_cls_cnt) < target_ratio:
                         percentage *= (target_ratio / 0.5)  # Make the percentage to be close to the target ratio
                     else:
                         percentage = 0.0  # If within the target ratio range then nothing should be done
 
-                if 'threshold' in self.ml_hp:
-                    if min(class1_cnt, class2_cnt) / (class1_cnt + class2_cnt) > max(0.0, float(self.ml_hp['threshold'])):
+                if 'threshold' in self._ml_hp:
+                    if min(class1_cnt, class2_cnt) / (class1_cnt + class2_cnt) > max(0.0,
+                                                                                     float(self._ml_hp['threshold'])):
                         percentage = 0.0
 
-                if 'multiplier' in self.ml_hp:
-                    percentage *= max(0.0, float(self.ml_hp['multiplier']))
+                if 'multiplier' in self._ml_hp:
+                    percentage *= max(0.0, float(self._ml_hp['multiplier']))
 
             # Create the filters
             filters.append(
                 Filter(
                     classname="weka.filters.supervised.instance.SMOTE",
                     options=[
-                        '-K', str(n),
+                        '-K', str(nn),
                         '-P', str(percentage)
                     ]
                 )
@@ -385,46 +499,9 @@ class Learner:
                 )
             )
 
-            # Fill the information to the last result dictionary
-            self.context["pp_filter"]["strategy"] = "SMOTE"
-            self.context["pp_filter"]["neighbors"] = n
-            self.context["pp_filter"]["factor"] = percentage
-
         else:
-            raise ValueError("Unknown strategy: {}".format(self.pp_strat))
+            raise ValueError("Unknown strategy: {}".format(self._pp_strat))
 
         return filters
     # End def _build_pp_filters
-
 # End class Learner
-
-
-# ===== ( Module private functions ) ===================================================================================
-
-def _get_stats_from_evaluator(evl, classes):
-    evaluator_stats = dict()
-    summary = evl.summary().split("\n")
-    details = evl.class_details().split("\n")
-    for s in summary:
-        if "Correctly Classified Instances" in s:
-            evaluator_stats["correctly_classified"] = float(s.split()[3])
-        if "Incorrectly Classified Instances" in s:
-            evaluator_stats["incorrectly_classified"] = float(s.split()[3])
-        if "Total Number of Instance" in s:
-            evaluator_stats["total_num_instances"] = float(s.split()[-1])
-
-    for d in details:
-        d = d.split()
-        if len(d) > 0 and d[-1] in classes:
-            evaluator_stats[d[-1]] = dict()
-            evaluator_stats[d[-1]]["tp_rate"] = float(d[0]) if d[0] != "?" else 0
-            evaluator_stats[d[-1]]["fp_rate"] = float(d[1]) if d[1] != "?" else 0
-            evaluator_stats[d[-1]]["precision"] = float(d[2]) if d[2] != "?" else 0
-            evaluator_stats[d[-1]]["recall"] = float(d[3]) if d[3] != "?" else 0
-            evaluator_stats[d[-1]]["f_measure"] = float(d[4]) if d[4] != "?" else 0
-            evaluator_stats[d[-1]]["mcc"] = float(d[5]) if d[5] != "?" else 0
-            evaluator_stats[d[-1]]["roc"] = float(d[6]) if d[6] != "?" else 0
-            evaluator_stats[d[-1]]["prc"] = float(d[7]) if d[7] != "?" else 0
-
-    return evaluator_stats
-# End def extract_evaluator_stats

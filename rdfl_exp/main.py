@@ -12,12 +12,13 @@ import sys
 import time
 from importlib import resources
 from os.path import join
+from typing import Optional
 
 from weka.core import jvm, packages
 
 from rdfl_exp import setup
 from rdfl_exp.drivers import FuzzerDriver, OnosDriver, RyuDriver
-from rdfl_exp.experiment import Analyzer, Experimenter, FuzzMode, Learner, RuleSet
+from rdfl_exp.experiment import Analyzer, Experimenter, FuzzMode, Learner, Model, RuleSet
 from rdfl_exp.resources import scenarios
 from rdfl_exp.stats import Stats
 from rdfl_exp.utils import csv_ops, utils
@@ -83,7 +84,8 @@ def parse_arguments():
                         metavar='ERROR_TYPE',
                         type=str,
                         choices=error_types,
-                        help="Choose the error type to detect. Allowed values are: {}".format(', '.join("\'{}\'".format(e) for e in error_types)))
+                        help="Choose the error type to detect. "
+                             "Allowed values are: {}".format(', '.join("\'{}\'".format(e) for e in error_types)))
 
     # Positional argument to choose the machine learning algorithm
     with resources.path(scenarios, '') as p:
@@ -285,10 +287,14 @@ def run() -> None:
 
     # Setup the Learner
     learner = Learner()
-    learner.set_classes(target_class=_context['target_class'], other_class=_context['other_class'])
-    learner.set_learning_algorithm(_context['ml_algorithm'])
-    learner.set_preprocessing_strategy(_context['pp_strategy'])
-    learner.set_cross_validation_folds(_context['cv_folds'])
+    learner.target_class    = _context['target_class']
+    learner.other_class     = _context['other_class']
+    learner.algorithm       = _context['ml_algorithm']
+    learner.filter          = _context['pp_strategy']
+    learner.cv_folds        = _context['cv_folds']
+
+    # Setup the model to be used
+    ml_model : Optional[Model] = None
 
     while True:  # Infinite loop
 
@@ -303,14 +309,14 @@ def run() -> None:
 
         # 1. Generate new data from the rule set
 
-        if not learner.has_rules() or _context['mode'] == 'no_learning':
+        if ml_model is None or not ml_model.has_rules():
             _log.info("No rules in set of rule. Generating random samples")
-            experimenter.fuzz_mode  = FuzzMode.RANDOM
-            experimenter.ruleset    = None
+            experimenter.fuzz_mode = FuzzMode.RANDOM
+            experimenter.ruleset = None
         else:
-            experimenter.fuzz_mode  = FuzzMode.RULE
-            experimenter.ruleset    = learner.get_rules()
-            analyzer.set_ruleset_for_iteration(learner.get_rules())
+            experimenter.fuzz_mode = FuzzMode.RULE
+            experimenter.ruleset = ml_model.ruleset()
+            analyzer.set_ruleset_for_iteration(ml_model.ruleset())
 
         experimenter.run()
 
@@ -340,32 +346,35 @@ def run() -> None:
 
             learner.load_data(join(setup.exp_dir('data'), "it_{}.arff".format(it)))
             learner.learn()
+            ml_model = learner.learn()
 
             # Get recall and precision from the evaluator results
-            ml_results = learner.get_results()
-            recall    = ml_results['cross-validation'][_context['target_class']]['recall']
-            precision = ml_results['cross-validation'][_context['target_class']]['precision']
-
+            precision = ml_model.info.precision[_context['target_class']]
+            recall    = ml_model.info.recall[_context['target_class']]
             # Avoid cases where precision or recall are NaN values
             recall = 0.0 if math.isnan(recall) else recall
             precision = 0.0 if math.isnan(precision) else precision
 
             # Budget calculation
-            target_cnt, other_cnt = learner.get_size_of_classes()
-            class_ratio = target_cnt / (target_cnt + other_cnt)
-            s_target = min(0.5 * (learner.get_dataset_size() + _context['nb_of_samples']) - class_ratio * learner.get_dataset_size(),
-                           _context['nb_of_samples'])
-            s_other = max(_context['nb_of_samples'] - s_target, 0)
+            data_size   = learner.get_instances_count()
+            all_cnt     = data_size[_context['all']]
+            target_cnt  = data_size[_context['target_class']]
+            class_ratio = target_cnt / all_cnt
 
-            for i in range(len(learner.ruleset)):
-                if learner.ruleset[i].get_class() == _context['target_class']:
-                    learner.ruleset[i].set_budget(learner.ruleset.confidence(i, relative=True, relative_to_class=True) * s_target / _context['nb_of_samples'])
+            s_target    = min(0.5 * (all_cnt + _context['nb_of_samples']) - class_ratio * all_cnt, _context['nb_of_samples'])
+            s_other     = max(_context['nb_of_samples'] - s_target, 0)
+
+            for i in range(len(ml_model.ruleset)):
+                if ml_model.ruleset[i].get_class() == _context['target_class']:
+                    ml_model.ruleset[i].set_budget(ml_model.ruleset.confidence(i, relative=True, relative_to_class=True) * s_target / _context['nb_of_samples'])
                 else:  # other_class
-                    learner.ruleset[i].set_budget(learner.ruleset.confidence(i, relative=True, relative_to_class=True) * s_other / _context['nb_of_samples'])
-
+                    ml_model.ruleset[i].set_budget(ml_model.ruleset.confidence(i, relative=True, relative_to_class=True) * s_other / _context['nb_of_samples'])
         except Exception:
-            _log.exception("An exception occured while trying to create a models")
-            _log.warning("Continuing with previous model")
+            _log.exception("An exception occurred while trying to create a models")
+            _log.warning("Continuing with no model")
+            ml_model = None
+        else:
+            ml_model.save(file_path='it_{}.model'.format(it))
 
         # End of iteration total time
         end_of_ml = time.time()
@@ -375,9 +384,8 @@ def run() -> None:
         Stats.add_iteration_statistics(
             learning_time=end_of_ml - start_of_ml,
             iteration_time=end_of_it - start_of_it,
-            experimenter=experimenter,
-            analyzer=analyzer,
-            learner=learner
+            learner=learner,
+            model=ml_model
         )
         Stats.save(join(setup.exp_dir(), 'stats.json'), pretty=True)
 
