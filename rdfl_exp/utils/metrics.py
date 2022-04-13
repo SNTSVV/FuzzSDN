@@ -59,5 +59,4 @@ def imbalance_ratio(X, y):
         return 1 - 1 / ir
     else:  # if there is only one class then imbalance cannot be computed
         return None
-
 # End def imbalance_ratio

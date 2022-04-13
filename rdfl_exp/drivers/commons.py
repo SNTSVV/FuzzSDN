@@ -7,7 +7,7 @@ from typing import Iterable
 
 import pexpect
 
-from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
+from rdfl_exp import setup
 
 
 # TODO: Make logger specifically for this module
@@ -25,7 +25,7 @@ def sudo_expect(spawn: pexpect.spawn, pattern: Iterable = None, timeout: int = 1
 
     if i == 0:
         # Sudo asking for password
-        spawn.sendline(CONFIG.general.sudo_pwd)
+        spawn.sendline(setup.config().general.sudo_pwd)
         i = spawn.expect(pattern, timeout)
         return i
     else:

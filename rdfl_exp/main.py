@@ -16,7 +16,6 @@ from os.path import join
 from weka.core import jvm, packages
 
 from rdfl_exp import setup
-from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
 from rdfl_exp.drivers import FuzzerDriver, OnosDriver, RyuDriver
 from rdfl_exp.experiment import Analyzer, Experimenter, FuzzMode, Learner, RuleSet
 from rdfl_exp.resources import scenarios
@@ -317,20 +316,20 @@ def run() -> None:
 
         # 2. Create the datasets
         data = experimenter.analyzer.get_dataset()
-        data.to_csv(join(setup.EXP_PATH, "datasets", "it_{}_raw.csv".format(it)), index=False, encoding='utf-8')
+        data.to_csv(join(setup.exp_dir('data'), "it_{}_raw.csv".format(it)), index=False, encoding='utf-8')
 
         # Write the formatted data to the file
         data = experimenter.analyzer.get_dataset(error_class=_context['target_class'])
-        data.to_csv(join(setup.EXP_PATH, "datasets", "it_{}.csv".format(it)), index=False, encoding='utf-8')
+        data.to_csv(join(setup.exp_dir('data'), "it_{}.csv".format(it)), index=False, encoding='utf-8')
 
         # Write the debug dataset to the file
         data = experimenter.analyzer.get_dataset(error_class=_context['target_class'], debug=True)
-        data.to_csv(join(setup.EXP_PATH, "datasets", "it_{}_debug.csv".format(it)), index=False, encoding='utf-8')
+        data.to_csv(join(setup.exp_dir('data'), "it_{}_debug.csv".format(it)), index=False, encoding='utf-8')
 
         # Convert the set to an arff file
         csv_ops.to_arff(
-            csv_path=join(setup.EXP_PATH, "datasets", "it_{}.csv".format(it)),
-            arff_path=join(setup.EXP_PATH, "datasets", "it_{}.arff".format(it)),
+            csv_path=join(setup.exp_dir('data'), "it_{}.csv".format(it)),
+            arff_path=join(setup.exp_dir('data'), "it_{}.arff".format(it)),
             csv_sep=',',
             relation='dataset_iteration_{}'.format(it)
         )
@@ -339,7 +338,7 @@ def run() -> None:
         start_of_ml = time.time()
         try:
 
-            learner.load_data(join(setup.EXP_PATH, "datasets", "it_{}.arff".format(it)))
+            learner.load_data(join(setup.exp_dir('data'), "it_{}.arff".format(it)))
             learner.learn()
 
             # Get recall and precision from the evaluator results
@@ -380,7 +379,7 @@ def run() -> None:
             analyzer=analyzer,
             learner=learner
         )
-        Stats.save(join(setup.EXP_PATH, 'stats.json'))
+        Stats.save(join(setup.exp_dir(), 'stats.json'), pretty=True)
 
         # Increment the number of iterations
         it += 1
@@ -396,7 +395,7 @@ def cleanup(*args):
     """
     global _crashed
 
-    if CONFIG.general.cleanup is True:
+    if setup.config().general.cleanup is True:
         _log.info("Cleaning up rdfl_exp...")
 
         # Stop all the the drivers
@@ -415,9 +414,9 @@ def cleanup(*args):
         _log.debug("Restoring ownership permissions to user {}...".format(setup.get_user()))
         uid = pwd.getpwnam(setup.get_user()).pw_uid
         gid = grp.getgrnam(setup.get_user()).gr_gid
-        utils.recursive_chown(setup.APP_DIRS.user_cache_dir, uid, gid)
-        utils.recursive_chown(setup.APP_DIRS.user_log_dir, uid, gid)
-        utils.recursive_chown(setup.APP_DIRS.user_data_dir, uid, gid)
+        utils.recursive_chown(setup.app_dir().user_cache_dir, uid, gid)
+        utils.recursive_chown(setup.app_dir().user_log_dir, uid, gid)
+        utils.recursive_chown(setup.app_dir().user_data_dir, uid, gid)
         _log.debug("Permissions have been restored.")
 
         # Clean the temporary directory
@@ -428,7 +427,7 @@ def cleanup(*args):
         # Clean the pid file
         try:
             _log.debug("Cleaning up the PID file...")
-            os.remove(join(setup.APP_DIRS.user_cache_dir, "rdfl_exp.pid"))
+            os.remove(join(setup.APP_DIR.user_cache_dir, "rdfl_exp.pid"))
         except FileNotFoundError:
             pass  # if the file is not found then it's ok
         finally:
@@ -503,8 +502,8 @@ def main() -> None:
     except Exception as e:
         _log.exception("An uncaught exception happened while running rdfl_exp")
         print("An uncaught exception happened while running rdfl_exp: {}".format(e))
-        print("Check the logs at \"{}\" for more information.".format(os.path.join(setup.APP_DIRS.user_log_dir,
-                                                                                   CONFIG.logging.filename)))
+        print("Check the logs at \"{}\" for more information.".format(os.path.join(setup.app_dir().user_log_dir,
+                                                                                   setup.config().logging.filename)))
         _crashed = True
 
     finally:

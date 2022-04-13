@@ -5,7 +5,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
+from rdfl_exp import setup
 
 
 class RyuDriver:
@@ -16,7 +16,7 @@ class RyuDriver:
     __log = logging.getLogger(__name__)
     __handle        = None
     __ryu_proc      = None
-    __log_dir       = os.path.expanduser(CONFIG.ryu.log_dir)
+    __log_dir       = None
     __log_file      = None
     __save_log      = False
     __start_time    = None
@@ -32,6 +32,9 @@ class RyuDriver:
         :param save_log:
         :return:
         """
+
+        # Get log directory
+        cls.__log_dir = os.path.expanduser(setup.config().ryu.log_dir)
 
         if cls.__ryu_proc is not None:
             cls.__ryu_proc.terminate()
@@ -56,19 +59,19 @@ class RyuDriver:
             'ERROR'     : logging.ERROR,
             'CRITICAL'  : logging.CRITICAL
         }
-        default_log_level = int(level_d.get(CONFIG.ryu.log_level, logging.DEBUG))
+        default_log_level = int(level_d.get(setup.config().ryu.log_level, logging.DEBUG))
         # Launch Ryu
         if cls.__save_log:
             cmd = ('ryu-manager',
                    '--default-log-level={}'.format(default_log_level),
                    '--log-file={}'.format(cls.__log_file),
-                   '--ofp-tcp-listen-port={}'.format(CONFIG.ryu.port),
+                   '--ofp-tcp-listen-port={}'.format(setup.config().ryu.port),
                    '--verbose',
                    app_name)
         else:
             cmd = ('ryu-manager',
                    '--default-log-level={}'.format(default_log_level),
-                   '--ofp-tcp-listen-port={}'.format(CONFIG.ryu.port),
+                   '--ofp-tcp-listen-port={}'.format(setup.config().ryu.port),
                    '--verbose',
                    app_name)
 

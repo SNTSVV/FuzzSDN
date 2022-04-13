@@ -21,6 +21,8 @@ class FuzzMode(Enum):
     UNDEFINED   = 0,
     RANDOM      = 1,
     RULE        = 2,
+    BYTES       = 3,
+    PROTOCOL    = 4
 # End class FuzzMode
 
 
@@ -292,7 +294,7 @@ class Experimenter:
         # Create an instruction list of "count" instructions
         instructions = list()
 
-        # If we fuzz randomly, populate the instructions with a
+        # Perform a random mutation
         if self.fuzz_mode == FuzzMode.RANDOM:
             for i in range(count):
                 # Create the dictionary
@@ -303,6 +305,19 @@ class Experimenter:
                     "includeHeader": False
                 }]
                 instructions.append(json.dumps({"instructions": [json_dict]}))
+
+        # Perform a byte mutation
+        elif self.fuzz_mode == FuzzMode.BYTES:
+            for i in range(count):
+                # Create the dictionary
+                json_dict = dict()
+                json_dict.update(self.__criterion)
+                json_dict['actions'] = [{
+                    "intent": "mutate_bytes",
+                    "includeHeader": False
+                }]
+                instructions.append(json.dumps({"instructions": [json_dict]}))
+
         elif self.fuzz_mode == FuzzMode.RULE:
             # Get the budget
             budget_list = self.__get_budget_for_rules(sample_size=count)

@@ -31,8 +31,9 @@ setup(
     # Packages and Scripts
     packages=[
         'rdfl_exp',
+        'rdfl_exp/analytics',
+        'rdfl_exp/drivers',
         'rdfl_exp/experiment',
-        'rdfl_exp/machine_learning',
         'rdfl_exp/utils'
     ],
 

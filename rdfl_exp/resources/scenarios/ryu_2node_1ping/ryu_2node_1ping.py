@@ -8,7 +8,7 @@ import sys
 import time
 from datetime import datetime
 
-from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
+from rdfl_exp import setup
 from rdfl_exp.drivers import FuzzerDriver, MininetDriver, RyuDriver
 from rdfl_exp.utils.database import Database as SqlDb
 from rdfl_exp.utils.exit_codes import ExitCode
@@ -28,7 +28,9 @@ def initialize():
     database_is_init = False
     if not SqlDb.is_init():
         logger.info("Initializing the SQL database...")
-        SqlDb.init(CONFIG.mysql.host, CONFIG.mysql.user, CONFIG.mysql.password)
+        SqlDb.init(setup.config().mysql.host,
+                   setup.config().mysql.user,
+                   setup.config().mysql.password)
         logger.debug("The SQL database has been initialized successfully")
 
     try:
@@ -159,8 +161,8 @@ def run_fuzz_test():
     logger.info("Starting Mininet network")
 
     MininetDriver.start(
-        cmd='mn --controller=remote,ip={},port={},protocols=OpenFlow14 --topo=single,2'.format(CONFIG.onos.host,
-                                                                                               CONFIG.fuzzer.port)
+        cmd='mn --controller=remote,ip={},port={},protocols=OpenFlow14 --topo=single,2'.format(setup.config().onos.host,
+                                                                                               setup.config().fuzzer.port)
     )
 
     logger.info("Executing ping command: h1 -> h2")

@@ -9,10 +9,9 @@ from typing import Optional
 import pandas as pd
 from pypika import Column, JoinType, Query, Tables
 
+from rdfl_exp import setup
 from rdfl_exp.analytics.log import LogParser, OnosLogParser, RyuLogParser
-from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
 from rdfl_exp.experiment import RuleSet
-from rdfl_exp.setup import LOG_TRACE_DIR
 from rdfl_exp.utils.database import Database as SqlDb
 
 DB_NAME = "rdfl_exp"
@@ -42,9 +41,9 @@ class Analyzer:
             if not SqlDb.is_init():
                 self.__log.info("Initializing the SQL database...")
                 SqlDb.init(
-                    hostname=CONFIG.mysql.host,
-                    username=CONFIG.mysql.user,
-                    password=CONFIG.mysql.password)
+                    hostname=setup.config().mysql.host,
+                    username=setup.config().mysql.user,
+                    password=setup.config().mysql.password)
                 self.__log.debug("The SQL database has been initialized successfully")
         finally:
             if SqlDb.is_init() is False:
@@ -271,7 +270,7 @@ class Analyzer:
         log_parse_results = self.__log_parser.parse_log()
 
         # Save the log_trace:
-        with open(os.path.join(LOG_TRACE_DIR, 'log_trace_{}.log'.format(self.__sample_cnt)), 'w') as f:
+        with open(os.path.join(setup.exp_dir('logs'), 'it_{}.log'.format(self.__sample_cnt)), 'w') as f:
             f.write(log_parse_results[4])
 
         # Create the samples and log table if required
@@ -332,7 +331,7 @@ class Analyzer:
     @staticmethod
     def __read_fuzz_report():
 
-        report_path = os.path.expanduser(CONFIG.fuzzer.out_path)
+        report_path = os.path.expanduser(setup.config().fuzzer.out_path)
         with open(report_path, 'r') as f:
             data = json.load(f)
 

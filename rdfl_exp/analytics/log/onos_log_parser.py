@@ -3,7 +3,7 @@ import logging
 import os.path
 
 from rdfl_exp.analytics.log import LOG_RGX, LogParser
-from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
+from rdfl_exp import setup
 
 
 class OnosLogParser(LogParser):
@@ -14,7 +14,7 @@ class OnosLogParser(LogParser):
     def __init__(self):
         super().__init__()
         self.__log = logging.getLogger(__name__)
-        self.__log_path = os.path.join(os.path.expanduser(CONFIG.onos.root_dir), 'karaf', 'data', 'log', 'karaf.log')
+        self.__log_path = os.path.join(os.path.expanduser(setup.config().onos.root_dir), 'karaf', 'data', 'log', 'karaf.log')
     # End def __init__
 
     def parse_log(self, path=None):
