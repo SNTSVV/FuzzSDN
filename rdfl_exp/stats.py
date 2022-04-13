@@ -52,9 +52,6 @@ class Stats:
         cls._stats['data']['total_count']   += [sum(metrics['instances'].values())]
         cls._stats['data']['target_count']  += [metrics['instances'][target_class]]
         cls._stats['data']['other_count']   += [metrics['instances'][other_class]]
-        cls._stats['data']['ir_score']      += [metrics['ir_score']]
-        cls._stats['data']['gd_score']      += [metrics['gd_score']]
-        cls._stats['data']['n1_score']      += [metrics['n1_score']]
 
         # Add the learning context
         cls._stats['learning']['context'] += [learner.get_context()]
@@ -147,9 +144,6 @@ class Stats:
         stats['data']['total_count']                    = list()
         stats['data']['target_count']                   = list()
         stats['data']['other_count']                    = list()
-        stats['data']['ir_score']                       = list()
-        stats['data']['gd_score']                       = list()
-        stats['data']['n1_score']                       = list()
 
         # Information on the machine learning information
         stats['learning']                               = dict()
