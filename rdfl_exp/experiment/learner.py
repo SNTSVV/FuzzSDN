@@ -53,12 +53,11 @@ class Model:
 
     def __init__(
             self,
-            classifier : Classifier,
-            evaluator : Evaluation,
-            class_label : Optional[Dict[int, str]] = None
+            classifier      : Classifier,
+            evaluator       : Evaluation,
+            class_label     : Optional[Dict[int, str]] = None
     ):
-        self._classifier = classifier
-
+        self._classifier    = classifier
         self._ruleset       : RuleSet
         self._info          : ModelInfo
 
@@ -122,7 +121,7 @@ class Model:
             auprc={
                 class_label[0]: evaluator.area_under_prc(0),
                 class_label[1]: evaluator.area_under_prc(1)
-            },
+            }
         )
     # End def __init__
 
@@ -179,8 +178,8 @@ class Learner:
         self.log = logging.getLogger(__name__)
 
         # Classification
-        self.target_class: str = "1"
-        self.other_class: str = "2"
+        self.target_class   : str = "0"
+        self.other_class    : str = "1"
 
         # ML Algorithms
         self._ml_alg_full   : Optional[str] = None
@@ -189,15 +188,15 @@ class Learner:
 
         # pp_strat
         self._filter_full   : Optional[str] = None
-        self._pp_strat      : Optional[str] = None
-        self._pp_hp         : Optional[dict] = None
+        self._filter        : Optional[str] = None
+        self._filter_hp     : Optional[dict] = None
 
         # Learning Parameters
-        self._seed: Optional[int] = None
-        self._cv_folds: int = 10
+        self._seed          : Optional[int] = None
+        self._cv_folds      : int = 10
 
         # Dataset
-        self.dataset: Optional[Instances] = None
+        self.dataset        : Optional[Instances] = None
 
     # ===== ( Setters ) ================================================================================================
 
@@ -218,7 +217,7 @@ class Learner:
 
     @property
     def filter(self):
-        return self._pp_strat
+        return self._filter
     # End def machine_learning_algorithm
 
     # ===== ( Setters ) ================================================================================================
@@ -266,16 +265,16 @@ class Learner:
     def filter(self, filter_):
         self._filter_full = copy(filter_)
         pp_split = filter_.split(',')
-        self._pp_hp = None
-        self._pp_strat = pp_split[0].upper()
+        self._filter_hp = None
+        self._filter = pp_split[0].upper()
         self.log.debug("preprocess_strategy set to \"{}\"".format(filter_))
 
         # parse the hyper-parameters
         if len(pp_split) > 1:
-            self._pp_hp = dict()
+            self._filter_hp = dict()
             for param in pp_split[1:]:
                 key, value = param.split('=')
-                self._pp_hp[key.strip()] = str_to_typed_value(value.strip())
+                self._filter_hp[key.strip()] = str_to_typed_value(value.strip())
     # End def filter.setter
 
     # ===== ( Getters ) ================================================================================================
@@ -323,8 +322,8 @@ class Learner:
 
         # Create the filter to balance the data
         filter_ = None
-        if self._pp_strat is not None and self._pp_strat != '':
-            self.log.debug("Building the filter for the preprocessing strategy \"{}\"...".format(self._pp_strat))
+        if self._filter is not None and self._filter != '':
+            self.log.debug("Building the filter for the preprocessing strategy \"{}\"...".format(self._filter))
             try:
                 pp_fltr = self.__build_pp_filters()
                 if len(pp_fltr) > 1:  # Multiple filters
@@ -340,7 +339,7 @@ class Learner:
                     pass
             except ValueError as e:
                 # A value error is risen only when the preprocess strategy is not known
-                self.log.error("Couldn't apply strategy {} with error \"{}\"".format(self._pp_strat, str(e)))
+                self.log.error("Couldn't apply strategy {} with error \"{}\"".format(self._filter, str(e)))
                 self.log.warning("Machine learning will be performed without any data preprocessing.")
 
         # Create the classifier
@@ -419,33 +418,33 @@ class Learner:
         """
 
         # Exit the function if there is no preprocessing strategy defined
-        if self._pp_strat is None:
+        if self._filter is None:
             self.log.warning("function \"__build_pp_filters\" was called while there is no pp_strategy defined")
             return
 
         filters = []
         # Balancing the dataset using under sampling method
-        if self._pp_strat == 'UNDERSAMPLING':
-            self.log.info("Creating filter for \"{}\" strategy".format(self._pp_strat))
+        if self._filter == 'UNDERSAMPLING':
+            self.log.info("Creating filter for \"{}\" strategy".format(self._filter))
             filters.append(
                 Filter(classname="weka.filters.supervised.instance.SpreadSubsample", options=["-M", "1.0"])
             )
 
         # Balancing the dataset using w
-        elif self._pp_strat == 'WEIGHT_BALANCING':
-            self.log.info("Using \"{}\" data preprocessing strategy".format(self._pp_strat))
+        elif self._filter == 'WEIGHT_BALANCING':
+            self.log.info("Using \"{}\" data preprocessing strategy".format(self._filter))
             filters.append(
                 Filter(classname="weka.filters.supervised.instance.ClassBalancer", options=["-num-intervals", "10"])
             )
 
-        elif self._pp_strat.startswith("SMOTE"):
+        elif self._filter.startswith("SMOTE"):
 
             nn = 5
-            if self._pp_hp:
-                for key in self._pp_hp.keys():
+            if self._filter_hp:
+                for key in self._filter_hp.keys():
                     # Nearest neighbors
                     if key == 'nn':
-                        nn = int(self._pp_hp[key])
+                        nn = int(self._filter_hp[key])
 
             # get the number of neighbours to consider
             self.log.info("Using \"SMOTE-{}\" data preprocessing strategy".format(nn))
@@ -500,7 +499,7 @@ class Learner:
             )
 
         else:
-            raise ValueError("Unknown strategy: {}".format(self._pp_strat))
+            raise ValueError("Unknown strategy: {}".format(self._filter))
 
         return filters
     # End def _build_pp_filters

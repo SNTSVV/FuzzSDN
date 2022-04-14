@@ -47,8 +47,8 @@ _context = {
     "it_max"                : int(),
 
     # Machine Learning
-    "pp_strategy"           : str(),
-    "ml_algorithm"          : str(),
+    "filter"                : str(),
+    "algorithm"             : str(),
     "cv_folds"              : int(),
 
     # Rule Application
@@ -94,7 +94,8 @@ def parse_arguments():
                         metavar='SCENARIO',
                         type=str,
                         choices=available_scenarios,
-                        help="Name of the scenario to be run. Allowed scenarios are: {}".format(', '.join("\'{}\'".format(scn) for scn in available_scenarios)))
+                        help="Name of the scenario to be run. Allowed scenarios are: "
+                             "{}".format(', '.join("\'{}\'".format(scn) for scn in available_scenarios)))
 
     # Positional argument to choose the criterion
     # Break criterion positional argument in two names to circumvent the bug where a positional argument can't have several
@@ -129,21 +130,21 @@ def parse_arguments():
     # ===== ( Machine Learning args ) ==================================================================================
 
     # Argument to choose the machine learning algorithm
-    parser.add_argument('-M, --ml-algorithm',
+    parser.add_argument('-A, --algorithm',
                         type=str,
                         default='RIPPER',
-                        dest='ml_algorithm',
+                        dest='algorithm',
                         help="Select which machine algorithm to use. (default: \"%(default)s\")")
 
     # Argument to choose the preprocessing strategy
-    parser.add_argument('-P', '--preprocessing-strategy',
+    parser.add_argument('-F', '--filter',
                         type=str,
                         default=None,
-                        dest='pp_strategy',
+                        dest='filter',
                         help="Select which preprocessing strategy to use. (default: \"%(default)s\")")
 
     # Argument to choose the number of cross validation folds
-    parser.add_argument('--cross-validation-folds',
+    parser.add_argument('-c', '--cross-validation-folds',
                         type=int,
                         default=10,
                         dest='cv_folds',
@@ -224,8 +225,8 @@ def init() -> None:
         'nb_of_samples'     : args.samples,
 
         # Machine Learning
-        'ml_algorithm'      : args.ml_algorithm ,
-        'pp_strategy'       : args.pp_strategy,
+        'algorithm'         : args.algorithm ,
+        'filter'            : args.filter,
         'cv_folds'          : args.cv_folds,
 
         # Rule Application
@@ -267,8 +268,8 @@ def run() -> None:
     print(Style.BOLD, "*** Criterion: {}{}".format(_context['criterion']['name'], criterion_kwargs_str), Style.RESET)
     print(Style.BOLD, "*** Mode: {}".format(_context['mode']), Style.RESET)
     print(Style.BOLD, "*** Target class: {}".format(_context['target_class']), Style.RESET)
-    print(Style.BOLD, "*** Machine learning algorithm: {}".format(_context['ml_algorithm']), Style.RESET)
-    print(Style.BOLD, "*** Preprocessing strategy: {}".format(_context['pp_strategy']), Style.RESET)
+    print(Style.BOLD, "*** Machine Learning Algorithm: {}".format(_context['algorithm']), Style.RESET)
+    print(Style.BOLD, "*** Machine Learning Filter: {}".format(_context['filter']), Style.RESET)
     print(Style.BOLD, "*** Mutation: {}".format(_context['enable_mutation']), Style.RESET)
     if _context['enable_mutation'] is True:
         print(Style.BOLD, "*** Mutation Rate: {}".format(_context['mutation_rate']), Style.RESET)
@@ -289,8 +290,8 @@ def run() -> None:
     learner = Learner()
     learner.target_class    = _context['target_class']
     learner.other_class     = _context['other_class']
-    learner.algorithm       = _context['ml_algorithm']
-    learner.filter          = _context['pp_strategy']
+    learner.algorithm       = _context['algorithm']
+    learner.filter          = _context['filter']
     learner.cv_folds        = _context['cv_folds']
 
     # Setup the model to be used
@@ -345,7 +346,6 @@ def run() -> None:
         try:
 
             learner.load_data(join(setup.exp_dir('data'), "it_{}.arff".format(it)))
-            learner.learn()
             ml_model = learner.learn()
 
             # Get recall and precision from the evaluator results
@@ -365,16 +365,18 @@ def run() -> None:
             s_other     = max(_context['nb_of_samples'] - s_target, 0)
 
             for i in range(len(ml_model.ruleset)):
+                confidence = ml_model.ruleset.confidence(i, relative=True, relative_to_class=True)
                 if ml_model.ruleset[i].get_class() == _context['target_class']:
-                    ml_model.ruleset[i].set_budget(ml_model.ruleset.confidence(i, relative=True, relative_to_class=True) * s_target / _context['nb_of_samples'])
+                    ml_model.ruleset[i].set_budget(confidence * s_target / _context['nb_of_samples'])
                 else:  # other_class
-                    ml_model.ruleset[i].set_budget(ml_model.ruleset.confidence(i, relative=True, relative_to_class=True) * s_other / _context['nb_of_samples'])
+                    ml_model.ruleset[i].set_budget(confidence * s_other / _context['nb_of_samples'])
         except Exception:
             _log.exception("An exception occurred while trying to create a models")
             _log.warning("Continuing with no model")
             ml_model = None
-        else:
-            ml_model.save(file_path='it_{}.model'.format(it))
+
+        if ml_model is not None:
+            ml_model.save(file_path=join(setup.exp_dir('models'), 'it_{}.model'.format(it)))
 
         # End of iteration total time
         end_of_ml = time.time()
