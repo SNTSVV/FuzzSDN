@@ -14,8 +14,8 @@ from weka.core.dataset import Instances
 from weka.filters import Filter, MultiFilter
 
 from rdfl_exp.experiment import Rule, RuleSet
-from rdfl_exp.utils import str_to_typed_value
-from rdfl_exp.utils.log import add_logging_level
+from lib.utils import str_to_typed_value
+from lib.utils.log import add_logging_level
 
 
 class ModelInfo(NamedTuple):

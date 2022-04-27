@@ -7,7 +7,7 @@ from time import sleep
 from typing import Optional
 
 from rdfl_exp import setup
-from rdfl_exp.utils.log import LogPipe
+from lib.utils.log import LogPipe
 
 
 class FuzzerDriver:

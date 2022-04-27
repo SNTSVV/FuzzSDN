@@ -4,7 +4,7 @@ import os
 
 from rdfl_exp.analytics.log import LOG_RGX, LogParser
 from rdfl_exp import setup
-from rdfl_exp.utils.openflow.v0x05.error import ErrorType
+from lib.openflow.v0x05.error import ErrorType
 
 
 class RyuLogParser(LogParser):

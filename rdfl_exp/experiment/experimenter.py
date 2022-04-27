@@ -14,7 +14,7 @@ from iteround import saferound
 
 import rdfl_exp.resources.criteria
 from rdfl_exp.experiment import Analyzer, CTX_PKT_IN_tmp, RuleSet
-from rdfl_exp.utils.terminal import progress_bar
+from lib.utils.terminal import progress_bar
 
 
 class FuzzMode(Enum):

@@ -5,7 +5,7 @@ import os
 
 # Local dependencies
 from rdfl_exp import main
-from rdfl_exp.utils.terminal import Fore, Style
+from lib.utils.terminal import Fore, Style
 
 
 # ====== (Main Function) ===============================================================================================

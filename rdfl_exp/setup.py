@@ -11,9 +11,9 @@ from typing import Optional
 
 from appdirs import AppDirs
 
-from rdfl_exp.utils.log import add_logging_level
-from rdfl_exp.utils import check_and_rename, str_to_typed_value
-from rdfl_exp.utils.terminal import Fore, Style
+from lib.utils.log import add_logging_level
+from lib.utils import check_and_rename, str_to_typed_value
+from lib.utils.terminal import Fore, Style
 
 # ===== ( Globals definition ) ===========================================================================================
 
