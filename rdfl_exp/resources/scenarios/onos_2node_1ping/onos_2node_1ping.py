@@ -12,8 +12,8 @@ from rdfl_exp import setup
 from rdfl_exp.drivers import FuzzerDriver
 from rdfl_exp.drivers import MininetDriver
 from rdfl_exp.drivers import OnosDriver
-from lib.utils.database import Database as SqlDb
-from lib.utils.exit_codes import ExitCode
+from common.utils.database import Database as SqlDb
+from common.utils.exit_codes import ExitCode
 
 # ===== ( Parameters ) =================================================================================================
 

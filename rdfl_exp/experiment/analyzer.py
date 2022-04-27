@@ -12,7 +12,7 @@ from pypika import Column, JoinType, Query, Tables
 from rdfl_exp import setup
 from rdfl_exp.analytics.log import LogParser, OnosLogParser, RyuLogParser
 from rdfl_exp.experiment import RuleSet
-from lib.utils.database import Database as SqlDb
+from common.utils.database import Database as SqlDb
 
 DB_NAME = "rdfl_exp"
 

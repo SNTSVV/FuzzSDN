@@ -10,8 +10,8 @@ from datetime import datetime
 
 from rdfl_exp import setup
 from rdfl_exp.drivers import FuzzerDriver, MininetDriver, RyuDriver
-from lib.utils.database import Database as SqlDb
-from lib.utils.exit_codes import ExitCode
+from common.utils.database import Database as SqlDb
+from common.utils.exit_codes import ExitCode
 
 # ===== ( Parameters ) =================================================================================================
 

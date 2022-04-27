@@ -11,9 +11,9 @@ from typing import Optional
 
 from appdirs import AppDirs
 
-from lib.utils.log import add_logging_level
-from lib.utils import check_and_rename, str_to_typed_value
-from lib.utils.terminal import Fore, Style
+from common.utils.log import add_logging_level
+from common.utils import check_and_rename, str_to_typed_value
+from common.utils.terminal import Fore, Style
 
 # ===== ( Globals definition ) ===========================================================================================
 

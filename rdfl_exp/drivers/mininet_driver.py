@@ -8,7 +8,7 @@ import pexpect
 
 from rdfl_exp.analytics.ping_stats import PingStats
 from rdfl_exp.drivers.commons import sudo_expect
-from lib.utils.exit_codes import ExitCode
+from common.utils.exit_codes import ExitCode
 
 MININET_PROMPT = "mininet>"
 
