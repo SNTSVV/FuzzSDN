@@ -12,13 +12,14 @@ from typing import Optional
 from appdirs import AppDirs
 
 from rdfl_exp.utils.log import add_logging_level
-from rdfl_exp.utils import str_to_typed_value
+from rdfl_exp.utils import check_and_rename, str_to_typed_value
 from rdfl_exp.utils.terminal import Fore, Style
 
 # ===== ( Globals definition ) ===========================================================================================
 
 CONFIG          = None
 APP_DIR         : Optional[AppDirs] = None
+EXP_REF         = ""
 EXP_DIR         : Optional[str] = None
 EXP_DATA_DIR    : Optional[str] = None
 EXP_LOG_DIR     : Optional[str] = None
@@ -95,10 +96,11 @@ class Configuration:
 
 # ===== ( Init ) =======================================================================================================
 
-def init():
+def init(args=None):
 
     global APP_DIR
     global CONFIG
+    global EXP_REF
 
     # Load the application directories
     APP_DIR = AppDirs("rdfl_exp")
@@ -116,7 +118,10 @@ def init():
                 os.path.join(APP_DIR.user_config_dir, "rdfl_exp.cfg"),
                 os.path.join(APP_DIR.site_config_dir, "rdfl_exp.cfg")
             ))
-    print(CONFIG)
+
+    if args is not None and hasattr(args, 'reference'):
+        EXP_REF = str(args.reference).strip()
+
     _make_folder_struct()
     _configure_pid()
     _configure_logger()
@@ -210,13 +215,15 @@ def _make_folder_struct():
     Create the folder structure.
     """
     global EXP_DIR
+    global EXP_REF
     global EXP_DATA_DIR
     global EXP_MODELS_DIR
     global EXP_LOG_DIR
 
     # 1. Define the experiments dir, path, etc
     now             = datetime.now().strftime("%Y%m%d_%H%M%S")
-    EXP_DIR         = os.path.join(APP_DIR.user_data_dir, 'experiments', now)
+    EXP_DIR         = os.path.join(APP_DIR.user_data_dir, 'experiments', now if not EXP_REF else EXP_REF)
+    EXP_DIR         = check_and_rename(EXP_DIR)
     EXP_DATA_DIR    = os.path.join(EXP_DIR, 'data')
     EXP_MODELS_DIR  = os.path.join(EXP_DIR, 'models')
     EXP_LOG_DIR     = os.path.join(EXP_DIR, 'logs')
@@ -225,7 +232,7 @@ def _make_folder_struct():
     try:
         # Data path
         Path(APP_DIR.user_data_dir).mkdir(parents=True, exist_ok=True)
-        Path(EXP_DIR).mkdir(parents=True, exist_ok=True)
+        Path(EXP_DIR).mkdir(parents=True, exist_ok=False)
         Path(EXP_DATA_DIR).mkdir(parents=False, exist_ok=False)
         Path(EXP_MODELS_DIR).mkdir(parents=False, exist_ok=False)
         Path(EXP_LOG_DIR).mkdir(parents=False, exist_ok=False)
@@ -304,6 +311,8 @@ def _configure_pid():
 
 def _configure_logger():
 
+    global EXP_REF
+
     # Add the trace level
     add_logging_level(level_name='TRACE', level_num=logging.DEBUG-5)
 
@@ -316,8 +325,9 @@ def _configure_logger():
     with open(log_file, 'w') as f:
         header = "\n".join([
             "############################################################################################################",
-            "App Name   : {}".format("RDFL_EXP v0.2.0"),
+            "App Name   : {}".format("RDFL_EXP v0.3.0"),
             "PID        : {}".format(os.getpid()),
+            "Reference  : {}".format(datetime.now() if not EXP_REF else EXP_REF),
             "Start Date : {}".format(datetime.now()),
             "============================================================================================================\n"
         ])

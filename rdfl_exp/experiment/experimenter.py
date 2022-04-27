@@ -21,8 +21,8 @@ class FuzzMode(Enum):
     UNDEFINED   = 0,
     RANDOM      = 1,
     RULE        = 2,
-    BYTES       = 3,
-    PROTOCOL    = 4
+    DELTA       = 3,
+    BEADS       = 4
 # End class FuzzMode
 
 
@@ -307,7 +307,7 @@ class Experimenter:
                 instructions.append(json.dumps({"instructions": [json_dict]}))
 
         # Perform a byte mutation
-        elif self.fuzz_mode == FuzzMode.BYTES:
+        elif self.fuzz_mode == FuzzMode.DELTA:
             for i in range(count):
                 # Create the dictionary
                 json_dict = dict()

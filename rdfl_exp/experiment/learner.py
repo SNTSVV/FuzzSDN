@@ -7,6 +7,7 @@ from copy import copy
 from typing import Dict, NamedTuple, Optional, Tuple
 
 from weka.classifiers import Classifier, Evaluation, FilteredClassifier
+from weka.core import jvm
 from weka.core.classes import Random
 from weka.core.converters import Loader
 from weka.core.dataset import Instances
@@ -14,6 +15,7 @@ from weka.filters import Filter, MultiFilter
 
 from rdfl_exp.experiment import Rule, RuleSet
 from rdfl_exp.utils import str_to_typed_value
+from rdfl_exp.utils.log import add_logging_level
 
 
 class ModelInfo(NamedTuple):
@@ -135,12 +137,12 @@ class Model:
     @property
     def info(self):
         return self._info
-    # End def classifier
+    # End def info
 
     @property
     def ruleset(self):
         return self._ruleset
-    # End def classifier
+    # End def ruleset
 
     @property
     def has_rules(self):
@@ -152,7 +154,7 @@ class Model:
             return self.ruleset.has_rules()
         else:
             return False
-    # End def classifier
+    # End def has_rules
 
     # ===== ( Methods ) ================================================================================================
 
@@ -164,6 +166,74 @@ class Model:
         """
         self._classifier.serialize(file_path, header=self._classifier.header)
     # End def save
+
+    def reevaluate(self, data_path: str):
+        """
+
+        :param data_path:
+        :return:
+        """
+
+        loader = Loader("weka.core.converters.ArffLoader")
+        dataset = loader.load_file(data_path)
+        dataset.class_is_last()
+
+        class_label = {
+                0: dataset.attribute(dataset.class_index).value(0),
+                1: dataset.attribute(dataset.class_index).value(1)
+            }
+
+        evaluator = Evaluation(dataset)
+        evaluator.test_model(self.classifier, dataset)
+
+        return ModelInfo(
+            classes=(class_label[0], class_label[1]),
+            evaluation_method="test_data: {}".format(data_path),
+            instances=int(evaluator.num_instances),
+            accuracy=evaluator.percent_correct,
+            num_tp={
+                class_label[0]: int(evaluator.num_true_positives(0)),
+                class_label[1]: int(evaluator.num_true_positives(1))
+            },
+            num_fp={
+                class_label[0]: int(evaluator.num_false_positives(0)),
+                class_label[1]: int(evaluator.num_false_positives(1))
+            },
+            num_tn={
+                class_label[0]: int(evaluator.num_true_negatives(0)),
+                class_label[1]: int(evaluator.num_true_negatives(1))
+            },
+            num_fn={
+                class_label[0]: int(evaluator.num_false_negatives(0)),
+                class_label[1]: int(evaluator.num_false_negatives(1))
+            },
+            precision={
+                class_label[0]: evaluator.precision(0),
+                class_label[1]: evaluator.precision(1)
+            },
+            recall={
+                class_label[0]: evaluator.recall(0),
+                class_label[1]: evaluator.recall(1)
+            },
+            f_measure={
+                class_label[0]: evaluator.f_measure(0),
+                class_label[1]: evaluator.f_measure(1)
+            },
+            mcc={
+                class_label[0]: evaluator.matthews_correlation_coefficient(0),
+                class_label[1]: evaluator.matthews_correlation_coefficient(1)
+            },
+            auroc={
+                class_label[0]: evaluator.area_under_roc(0),
+                class_label[1]: evaluator.area_under_roc(1)
+            },
+            auprc={
+                class_label[0]: evaluator.area_under_prc(0),
+                class_label[1]: evaluator.area_under_prc(1)
+            }
+        )
+
+    # End def reevaluate
 # End class Model
 
 
@@ -504,3 +574,22 @@ class Learner:
         return filters
     # End def _build_pp_filters
 # End class Learner
+
+if __name__ == '__main__':
+
+    jvm.start(packages=True)
+    add_logging_level('TRACE', logging.DEBUG - 5)
+    try:
+        learner = Learner()
+        learner.target_class = 'unknown_reason'
+        learner.other_class = 'known_reason'
+        learner.algorithm = 'RIPPER'
+        learner.load_data('/Users/raphael.ollando/it_20_copy.arff')
+
+        model = learner.learn()
+        print(model.info)
+        model.save('/Users/raphael.ollando/serialized_model.model')
+
+
+    finally:
+        jvm.stop()

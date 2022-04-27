@@ -13,10 +13,11 @@ class Stats:
         cls._stats = cls._create_stats_dict(context["target_class"], context["other_class"])
         cls._stats['context']['scenario']               = context['scenario']
         cls._stats['context']['criterion']              = context['criterion']
-        cls._stats['context']['mode']                   = context['mode']
+        cls._stats['context']['fuzz_mode']              = context['fuzz_mode']
         cls._stats['context']['algorithm']              = context['algorithm']
         cls._stats['context']['filter']                 = context['filter']
-        cls._stats['context']['iteration_limit']        = context['it_max']
+        cls._stats['context']['it_limit']               = context['it_limit']
+        cls._stats['context']['time_limit']             = context['time_limit']
         cls._stats['context']['samples_per_iteration']  = context['nb_of_samples']
         cls._stats['context']['enable_mutation']        = context['enable_mutation']
         cls._stats['context']['mutation_rate']          = context['mutation_rate']
@@ -125,7 +126,7 @@ class Stats:
         Create the dictionary used by the stats class to generate
         :param target_class: The class that is the target of the prediction
         :param other_class:  The other class of the classifier
-        :return: An empty statistics dictionary
+        :return: An empty statistics dictionaryƒ
         """
         stats = dict()
 
@@ -133,10 +134,11 @@ class Stats:
         stats['context']                                = dict()
         stats['context']['scenario']                    = str()
         stats['context']['criterion']                   = dict()
-        stats['context']['mode']                        = str()
+        stats['context']['fuzz_mode']                   = str()
         stats['context']['criterion']['name']           = str()
         stats['context']['criterion']['kwargs']         = dict()
-        stats['context']['iteration_limit']             = int()
+        stats['context']['it_limit']                    = None
+        stats['context']['time_limit']                  = None
         stats['context']['iterations']                  = int()
         stats['context']['algorithm']                   = str()
         stats['context']['filter']                      = str()

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import argparse
+import datetime
 import grp
 import json
 import logging
@@ -21,7 +22,7 @@ from rdfl_exp.drivers import FuzzerDriver, OnosDriver, RyuDriver
 from rdfl_exp.experiment import Analyzer, Experimenter, FuzzMode, Learner, Model, RuleSet
 from rdfl_exp.resources import scenarios
 from rdfl_exp.stats import Stats
-from rdfl_exp.utils import csv_ops, utils
+from rdfl_exp.utils import csv_ops, time_parse, utils
 from rdfl_exp.utils.database import Database as SqlDb
 from rdfl_exp.utils.exit_codes import ExitCode
 from rdfl_exp.utils.terminal import Style
@@ -41,10 +42,12 @@ _context = {
     },
     "target_class"          : str(),
     "other_class"           : str(),
+    "fuzz_mode"             : str(),
 
     # Iterations
     "nb_of_samples"         : int(),
-    "it_max"                : int(),
+    "it_limit"              : None,
+    "time_limit"            : None,
 
     # Machine Learning
     "filter"                : str(),
@@ -72,97 +75,168 @@ def parse_arguments():
 
     # ===== ( Generic args ) ===========================================================================================
 
-    parser.add_argument('--no-clean',
-                        action='store_false',
-                        help="Do not perform cleaning actions on exit")
+    parser.add_argument(
+        '--no-clean',
+        action='store_false',
+        help="Do not perform cleaning actions on exit"
+    )
 
-    # ===== ( Experiment args ) ========================================================================================
+    # ===== ( Experiment Positional Args ) =============================================================================
 
     # Positional argument to choose the target
-    error_types = ('unknown_reason', 'known_reason', 'parsing_error', 'non_parsing_error', 'OFPBAC_BAD_OUT_PORT')
-    parser.add_argument('target_class',
-                        metavar='ERROR_TYPE',
-                        type=str,
-                        choices=error_types,
-                        help="Choose the error type to detect. "
-                             "Allowed values are: {}".format(', '.join("\'{}\'".format(e) for e in error_types)))
+    error_types = (
+        'unknown_reason',
+        'known_reason',
+        'parsing_error',
+        'non_parsing_error',
+        'OFPBAC_BAD_OUT_PORT'
+    )
+    parser.add_argument(
+        'target_class',
+        metavar='ERROR_TYPE',
+        type=str,
+        choices=error_types,
+        help="Choose the error type to detect. "
+             "Allowed values are: {}".format(', '.join("\'{}\'".format(e) for e in error_types))
+    )
 
     # Positional argument to choose the machine learning algorithm
     with resources.path(scenarios, '') as p:
         available_scenarios = list(sorted(f for f in os.listdir(p) if f not in ['__pycache__', '__init__.py']))
-    parser.add_argument('scenario',
-                        metavar='SCENARIO',
-                        type=str,
-                        choices=available_scenarios,
-                        help="Name of the scenario to be run. Allowed scenarios are: "
-                             "{}".format(', '.join("\'{}\'".format(scn) for scn in available_scenarios)))
+    parser.add_argument(
+        'scenario',
+        metavar='SCENARIO',
+        type=str,
+        choices=available_scenarios,
+        help="Name of the scenario to be run. Allowed scenarios are: "
+             "{}".format(', '.join("\'{}\'".format(scn) for scn in available_scenarios))
+    )
 
     # Positional argument to choose the criterion
-    # Break criterion positional argument in two names to circumvent the bug where a positional argument can't have several
-    # kwargs defines (python issue 14074: https://bugs.python.org/issue14074)
-    parser.add_argument('criterion_name',
-                        metavar='CRITERION',
-                        type=str,
-                        help="Name of the criterion to be run")
+    # Break criterion positional argument in two names to circumvent a bug where a positional argument can't have
+    # several kwargs defined (python issue 14074: https://bugs.python.org/issue14074)
+    parser.add_argument(
+        'criterion_name',
+        metavar='CRITERION',
+        type=str,
+        help="Name of the criterion to be run"
+    )
 
-    parser.add_argument('criterion_kwargs',
-                        metavar='kwargs',
-                        nargs='*',
-                        type=str,
-                        help="kwargs for the criterion (optional)")
+    parser.add_argument(
+        'criterion_kwargs',
+        metavar='kwargs',
+        nargs='*',
+        type=str,
+        help="kwargs for the criterion (optional)"
+    )
 
-    # Argument to choose the experiment mode
-    mode_choices = ('standard', 'no_learning')
-    parser.add_argument('-m', '--mode',
-                        type=str,
-                        choices=mode_choices,
-                        default='standard',
-                        dest='mode',
-                        help="Select the mode of operation. Allowed modes are: {}".format(', '.join("\'{}\'".format(mc) for mc in mode_choices)))
+    # ===== ( Experiment args ) ========================================================================================
+
+    # Argument to choose the reference name of the experiment
+    parser.add_argument(
+        '-R',
+        '--reference',
+        type=str,
+        default=None,
+        dest='reference',
+        help="Name of the experiment"
+    )
 
     # Argument to choose the number of sample to generate
-    parser.add_argument('-s', '--samples',
-                        type=int,
-                        default=300,
-                        dest='samples',
-                        help="Override the number of samples. (default: %(default)s)")
+    parser.add_argument(
+        '-s',
+        '--samples',
+        type=int,
+        default=300,
+        dest='samples',
+        help="Override the number of samples. (default: %(default)s)"
+    )
+
+    # Argument to choose the number of sample to generate
+    parser.add_argument(
+        '--it-limit',
+        type=int,
+        default=None,
+        dest='it_limit',
+        help="Stops the program after a given number of iterations. The current iteration will be finished however."
+    )
+
+    # Argument to choose the number of sample to generate
+    parser.add_argument(
+        '--time-limit',
+        type=str,
+        default=None,
+        dest='time_limit',
+        help="Stops the program after a given amount of time has elapsed. "
+             "The current iteration will be finished however."
+    )
 
     # ===== ( Machine Learning args ) ==================================================================================
 
     # Argument to choose the machine learning algorithm
-    parser.add_argument('-A, --algorithm',
-                        type=str,
-                        default='RIPPER',
-                        dest='algorithm',
-                        help="Select which machine algorithm to use. (default: \"%(default)s\")")
+    parser.add_argument(
+        '-A,',
+        '--algorithm',
+        type=str,
+        default='RIPPER',
+        dest='algorithm',
+        help="Select which machine algorithm to use. (default: \"%(default)s\")"
+    )
 
     # Argument to choose the preprocessing strategy
-    parser.add_argument('-F', '--filter',
-                        type=str,
-                        default=None,
-                        dest='filter',
-                        help="Select which preprocessing strategy to use. (default: \"%(default)s\")")
+    parser.add_argument(
+        '-F',
+        '--filter',
+        type=str,
+        default=None,
+        dest='filter',
+        help="Select which preprocessing strategy to use. (default: \"%(default)s\")"
+    )
 
     # Argument to choose the number of cross validation folds
-    parser.add_argument('-c', '--cross-validation-folds',
-                        type=int,
-                        default=10,
-                        dest='cv_folds',
-                        help="Define the number of folds to use during cross-validation. (default: %(default)s)")
+    parser.add_argument(
+        '-c',
+        '--cross-validation-folds',
+        type=int,
+        default=10,
+        dest='cv_folds',
+        help="Define the number of folds to use during cross-validation. (default: %(default)s)"
+    )
 
     # ===== ( Fuzzing args ) ===========================================================================================
+
+    # Argument to choose the experiment mode
+    mode_choices = (
+        'standard',
+        'DELTA',
+        'BEADS'
+    )
+    parser.add_argument(
+        '--fuzz-mode',
+        type=str,
+        choices=mode_choices,
+        default='fuzz_mode',
+        dest='fuzz_mode',
+        help="Select the mode of fuzzing. "
+             "Allowed modes are: {}".format(', '.join("\'{}\'".format(mc) for mc in mode_choices))
+    )
+
     # Argument to choose disable the mutation of additional fields
-    parser.add_argument('--disable-mutation',
-                        action='store_false',
-                        dest='enable_mutation',
-                        help="Disable the mutation of additional fields upon rule application.")
+    parser.add_argument(
+        '--disable-mutation',
+        action='store_false',
+        dest='enable_mutation',
+        help="Disable the mutation of additional fields upon rule application."
+    )
 
     # Argument to choose the mutation rate of additional fields
-    parser.add_argument('--mutation-rate',
-                        type=float,
-                        default=1.0,
-                        dest='mutation_rate',
-                        help="Sets the mutation rate of additional fields upon rule application. (default: %(default)s)")
+    parser.add_argument(
+        '--mutation-rate',
+        type=float,
+        default=1.0,
+        dest='mutation_rate',
+        help="Sets the mutation rate of additional fields upon rule application. (default: %(default)s)"
+    )
 
     # Parse the arguments
     args = parser.parse_args()
@@ -195,6 +269,10 @@ def parse_arguments():
     else:
         args.criterion_kwargs = dict()
 
+    # Format the date of time_limit
+    if args.time_limit:
+        args.time_limit = time_parse(args.time_limit)
+
     return args
 # End def parse_arguments
 
@@ -206,23 +284,27 @@ def init() -> None:
     _log.info("Parsing arguments...")
     args = parse_arguments()
 
+    # initialize the setup module
+    setup.init(args)
+
     _log.info("Loading experiment context...")
     # Fill the context dictionary
     _context = {
 
         # Experiment
         'scenario'          : args.scenario,
-        'criterion'          : {
-            'name'  : args.criterion_name,
-            'kwargs': args.criterion_kwargs
+        'criterion'         : {
+            'name'          : args.criterion_name,
+            'kwargs'        : args.criterion_kwargs
         },
-        'mode'              : args.mode,            # Experimentation mode
+        'fuzz_mode'         : args.fuzz_mode,       # Experimentation mode
         'target_class'      : args.target_class,    # Class to predict
         'other_class'       : args.other_class,     # Class to predict
 
         # Iterations
-        'it_max'            : 50,
         'nb_of_samples'     : args.samples,
+        'it_limit'          : args.it_limit,
+        'time_limit'        : args.time_limit,
 
         # Machine Learning
         'algorithm'         : args.algorithm ,
@@ -247,12 +329,12 @@ def run() -> None:
     global _context
 
     # Create variables used by the algorithm
-    precision = 0   # Algorithm precision
-    recall = 0      # Algorithm recall
-    it = 0  # iteration index
+    precision = 0  # Algorithm precision
+    recall    = 0  # Algorithm recall
+    it        = 0  # iteration index
 
     # Initialize the rule set
-    rule_set = RuleSet()
+    rule_set              = RuleSet()
     rule_set.target_class = _context['target_class']
     rule_set.other_class  = _context['other_class']
 
@@ -266,13 +348,17 @@ def run() -> None:
     # Display header:
     print(Style.BOLD, "*** Scenario: {}".format(_context['scenario']), Style.RESET)
     print(Style.BOLD, "*** Criterion: {}{}".format(_context['criterion']['name'], criterion_kwargs_str), Style.RESET)
-    print(Style.BOLD, "*** Mode: {}".format(_context['mode']), Style.RESET)
+    print(Style.BOLD, "*** Fuzzing Mode: {}".format(_context['fuzz_mode']), Style.RESET)
     print(Style.BOLD, "*** Target class: {}".format(_context['target_class']), Style.RESET)
     print(Style.BOLD, "*** Machine Learning Algorithm: {}".format(_context['algorithm']), Style.RESET)
     print(Style.BOLD, "*** Machine Learning Filter: {}".format(_context['filter']), Style.RESET)
     print(Style.BOLD, "*** Mutation: {}".format(_context['enable_mutation']), Style.RESET)
     if _context['enable_mutation'] is True:
         print(Style.BOLD, "*** Mutation Rate: {}".format(_context['mutation_rate']), Style.RESET)
+    if _context['time_limit'] is not None:
+        print(Style.BOLD, "*** Time Limit: {}".format(str(datetime.timedelta(seconds=_context['time_limit']))), Style.RESET)
+    if _context['it_limit'] is not None:
+        print(Style.BOLD, "*** Iteration Limit: {}".format(_context['it_limit']), Style.RESET)
 
     # Set up the experimenter
     analyzer = Analyzer()
@@ -297,7 +383,11 @@ def run() -> None:
     # Setup the model to be used
     ml_model : Optional[Model] = None
 
-    while True:  # Infinite loop
+    # Starts the main loop
+    start_timestamp = time.time()
+    keep_running = True
+
+    while keep_running:
 
         # Register timestamp at the beginning of the iteration and set a new iteration for the analyzer
         start_of_it = time.time()
@@ -308,17 +398,26 @@ def run() -> None:
         print(Style.BOLD, "*** Recall: {:.2f}".format(recall), Style.RESET)
         print(Style.BOLD, "*** Precision: {:.2f}".format(precision), Style.RESET)
 
-        # 1. Generate new data from the rule set
+        # 0. Configure the experiment depending on the ML model and Fuzz Mode
+        if _context['fuzz_mode'] == 'standard':
+            if ml_model is None or not ml_model.has_rules:
+                _log.info("No rules in set of rule. Generating random samples")
+                experimenter.fuzz_mode = FuzzMode.RANDOM
+                experimenter.ruleset = None
+            else:
+                experimenter.fuzz_mode = FuzzMode.RULE
+                experimenter.ruleset = ml_model.ruleset
+                analyzer.set_ruleset_for_iteration(ml_model.ruleset)
 
-        if ml_model is None or not ml_model.has_rules():
-            _log.info("No rules in set of rule. Generating random samples")
-            experimenter.fuzz_mode = FuzzMode.RANDOM
+        elif _context['fuzz_mode'] == 'DELTA':
+            experimenter.fuzz_mode = FuzzMode.DELTA
             experimenter.ruleset = None
-        else:
-            experimenter.fuzz_mode = FuzzMode.RULE
-            experimenter.ruleset = ml_model.ruleset()
-            analyzer.set_ruleset_for_iteration(ml_model.ruleset())
 
+        elif _context['fuzz_mode'] == 'BEADS':
+            experimenter.fuzz_mode = FuzzMode.BEADS
+            experimenter.ruleset = None
+
+        # 1. Run the experiment
         experimenter.run()
 
         # 2. Create the datasets
@@ -344,9 +443,21 @@ def run() -> None:
         # 3. Perform machine learning algorithms
         start_of_ml = time.time()
         try:
-
             learner.load_data(join(setup.exp_dir('data'), "it_{}.arff".format(it)))
             ml_model = learner.learn()
+        except Exception:
+            _log.exception("An exception occurred while trying to create a models")
+            _log.warning("Continuing with no model")
+            ml_model = None
+        finally:
+            end_of_ml = time.time()
+
+        if ml_model is not None:
+
+            # Save the model
+            model_path = join(setup.exp_dir('models'), 'it_{}.model'.format(it))
+            _log.debug('Saving model under {}'.format(model_path))
+            ml_model.save(file_path=model_path)
 
             # Get recall and precision from the evaluator results
             precision = ml_model.info.precision[_context['target_class']]
@@ -357,7 +468,7 @@ def run() -> None:
 
             # Budget calculation
             data_size   = learner.get_instances_count()
-            all_cnt     = data_size[_context['all']]
+            all_cnt     = data_size['all']
             target_cnt  = data_size[_context['target_class']]
             class_ratio = target_cnt / all_cnt
 
@@ -370,16 +481,12 @@ def run() -> None:
                     ml_model.ruleset[i].set_budget(confidence * s_target / _context['nb_of_samples'])
                 else:  # other_class
                     ml_model.ruleset[i].set_budget(confidence * s_other / _context['nb_of_samples'])
-        except Exception:
-            _log.exception("An exception occurred while trying to create a models")
-            _log.warning("Continuing with no model")
-            ml_model = None
 
-        if ml_model is not None:
-            ml_model.save(file_path=join(setup.exp_dir('models'), 'it_{}.model'.format(it)))
+        else:
+            precision = 0.0
+            recall = 0.0
 
         # End of iteration total time
-        end_of_ml = time.time()
         end_of_it = time.time()
 
         # Update the timing statistics and classifier statistics statistics and save the statistics
@@ -393,6 +500,14 @@ def run() -> None:
 
         # Increment the number of iterations
         it += 1
+
+        # Check if the stopping conditions are met
+        if _context['it_limit'] is not None:
+            if it >= _context['it_limit']:
+                keep_running = False
+        if _context['time_limit'] is not None:
+            if time.time() - start_timestamp >= _context['time_limit']:
+                keep_running = False
     # End of main loop
 # End def run
 
@@ -477,13 +592,10 @@ def main() -> None:
 
     try:
 
-        # Run the setup configuration
-        setup.init()
-
-        # Launch init function
+        # Initialize the tool
         init()
 
-        # Configure java-bridge logger
+        # Configure javabridge
         jvm.logger.setLevel(logging.INFO)
         jvm.start(packages=True)  # Start the JVM
 
