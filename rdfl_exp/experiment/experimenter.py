@@ -18,11 +18,10 @@ from common.utils.terminal import progress_bar
 
 
 class FuzzMode(Enum):
-    UNDEFINED   = 0,
-    RANDOM      = 1,
-    RULE        = 2,
-    DELTA       = 3,
-    BEADS       = 4
+    RANDOM      = 0,
+    RULE        = 1,
+    DELTA       = 2,
+    BEADS       = 3
 # End class FuzzMode
 
 
@@ -53,7 +52,7 @@ class Experimenter:
         self.__analyzer: Optional[Analyzer] = None
 
         # Fuzzing parameters
-        self.fuzz_mode                      = FuzzMode.UNDEFINED
+        self.fuzz_mode                      : FuzzMode = FuzzMode.RANDOM
         self.ruleset: Optional[RuleSet]     = None
         self.enable_mutation                = True
         self.mutation_rate                  = 1.0

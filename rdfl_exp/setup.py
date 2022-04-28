@@ -2,7 +2,6 @@
 import logging
 import os
 import pwd
-import tempfile
 from configparser import ConfigParser
 from datetime import datetime
 import getpass
@@ -11,19 +10,18 @@ from typing import Optional
 
 from appdirs import AppDirs
 
+from common import app_path
 from common.utils.log import add_logging_level
 from common.utils import check_and_rename, str_to_typed_value
 from common.utils.terminal import Fore, Style
 
 # ===== ( Globals definition ) ===========================================================================================
 
-CONFIG          = None
-APP_DIR         : Optional[AppDirs] = None
-EXP_REF         = ""
-EXP_DIR         : Optional[str] = None
-EXP_DATA_DIR    : Optional[str] = None
-EXP_LOG_DIR     : Optional[str] = None
-EXP_MODELS_DIR  : Optional[str] = None
+__FRAMEWORK_NAME__  = "rdfl_exp"
+__APP_NAME__        = "{}-app".format(__FRAMEWORK_NAME__)
+CONFIG              = None
+CONFIG_NAME         = "{}.cfg".format(__APP_NAME__)
+EXP_REF             = ""
 
 
 # ===== ( Config Section class ) =======================================================================================
@@ -105,64 +103,24 @@ def init(args=None):
     # Load the application directories
     APP_DIR = AppDirs("rdfl_exp")
 
-    # Load the configuration
-    if not os.path.exists(APP_DIR.user_config_dir):
-        os.mkdir(APP_DIR.user_config_dir)
-    if os.path.exists(os.path.join(APP_DIR.user_config_dir, "rdfl_exp.cfg")):
-        CONFIG = Configuration(os.path.join(APP_DIR.user_config_dir, "rdfl_exp.cfg"))
-    elif os.path.exists(os.path.join(APP_DIR.site_config_dir, "rdfl_exp.cfg")):
-        CONFIG = Configuration(os.path.join(APP_DIR.site_config_dir, "rdfl_exp.cfg"))
+    # Verify that there is a configuration file in the configuration directory
+    config_path = os.path.join(app_path.config_dir(), CONFIG_NAME)
+    if os.path.exists(config_path):
+        CONFIG = Configuration(config_path)
     else:
         raise FileNotFoundError(
-            "Couldn't find configuration file \"rdfl_exp.cfg\" neither under \"{}\" nor \"{}\"".format(
-                os.path.join(APP_DIR.user_config_dir, "rdfl_exp.cfg"),
-                os.path.join(APP_DIR.site_config_dir, "rdfl_exp.cfg")
-            ))
+            "Couldn't find configuration file \"{}\"  under \"{}\"".format(CONFIG_NAME, config_path))
 
+    # Parse the reference
     if args is not None and hasattr(args, 'reference'):
         EXP_REF = str(args.reference).strip()
+    else:
+        EXP_REF = datetime.now().strftime("%Y%d%m_%H%M%S")
+    app_path.set_experiment_reference(EXP_REF)
 
-    _make_folder_struct()
     _configure_pid()
     _configure_logger()
 # End def make_folder_struct
-
-
-# ===== ( Directories ) ================================================================================================
-
-def app_dir() -> Optional[AppDirs]:
-    return APP_DIR
-# End def app_dir
-
-
-def tmp_dir(get_obj=False):
-    """
-    Returns the path to the experiment temporary directory (or the object) when
-    called. The temporary directory is created on the first call
-
-    :param get_obj: if set to true, the tempfile object will be returned
-    :return: the tmp directory obj if get_obj is true, else, the path to the
-             tmp directory
-    """
-    if not hasattr(tmp_dir, "tmp_dir"):
-        tmp_dir.tmp_dir = tempfile.TemporaryDirectory()
-
-    return tmp_dir.tmp_dir if get_obj is True else tmp_dir.tmp_dir.name
-# end def tmp_dir
-
-
-def exp_dir(directory: Optional[str] = None) -> Optional[str]:
-    if directory is None or directory == '':
-        return EXP_DIR
-    elif directory.lower() == 'data':
-        return EXP_DATA_DIR
-    elif directory.lower() == 'models':
-        return EXP_MODELS_DIR
-    elif directory.lower() == 'logs':
-        return EXP_LOG_DIR
-    else:
-        raise exp_dir("Unknown exp_dir '{}'. Available exp_dir are: 'data', 'models', and 'logs'.")
-# End def get_config
 
 
 # ===== ( Functions ) ==================================================================================================
@@ -206,6 +164,12 @@ def get_user():
 
     return user
 # End def get_user
+
+
+def pid_path():
+    """Returns the path to the pid file."""
+    return os.path.join(app_path.run_dir(), "{}.pid".format(__APP_NAME__))
+# Emd def pid_path
 
 
 # ===== ( Private config functions ) ===========================================
@@ -272,11 +236,11 @@ def _configure_pid():
     running.
     """
 
-    pid_filepath = os.path.join(APP_DIR.user_cache_dir, "rdfl_exp.pid")
+    pid_file = os.path.join(app_path.run_dir(), "{}.pid".format(__APP_NAME__))
 
-    if os.path.isfile(pid_filepath):
+    if os.path.isfile(pid_file):
         # There is a PID
-        with open(pid_filepath, 'r') as pid_file:
+        with open(pid_file, 'r') as pid_file:
             pid = int(pid_file.readline().rstrip())
 
         # If the pid is different, we exit the system and notify the user
@@ -301,10 +265,10 @@ def _configure_pid():
                       + "process: {}.\n".format(pid)
                       + "Overwriting old pid_file.")
 
-                os.remove(pid_filepath)
+                os.remove(pid_file)
 
     # If there is no pid we create one for this program
-    with open(pid_filepath, 'w') as pid_file:
+    with open(pid_file, 'w') as pid_file:
         pid_file.write(str(os.getpid()))
 # End def +_setup_pid
 
@@ -321,13 +285,19 @@ def _configure_logger():
         logging.root.removeHandler(handler)
 
     # Write the header into the new log file
-    log_file = os.path.join(APP_DIR.user_log_dir, config().logging.filename)
+    try:
+        prefix = "{}-".format(config().logging.file_prefix)
+    except KeyError:
+        prefix = ''
+
+    log_file = os.path.join(app_path.log_dir(), "{}{}.log".format(prefix, EXP_REF))
+
     with open(log_file, 'w') as f:
         header = "\n".join([
             "############################################################################################################",
             "App Name   : {}".format("RDFL_EXP v0.3.0"),
             "PID        : {}".format(os.getpid()),
-            "Reference  : {}".format(datetime.now() if not EXP_REF else EXP_REF),
+            "Reference  : {}".format(EXP_REF),
             "Start Date : {}".format(datetime.now()),
             "============================================================================================================\n"
         ])

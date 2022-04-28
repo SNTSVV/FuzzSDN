@@ -2,17 +2,17 @@ import base64
 import json
 import logging
 import os
-from collections import Counter
 from copy import copy
 from typing import Optional
 
 import pandas as pd
 from pypika import Column, JoinType, Query, Tables
 
+from common import app_path
+from common.utils.database import Database as SqlDb
 from rdfl_exp import setup
 from rdfl_exp.analytics.log import LogParser, OnosLogParser, RyuLogParser
 from rdfl_exp.experiment import RuleSet
-from common.utils.database import Database as SqlDb
 
 DB_NAME = "rdfl_exp"
 
@@ -270,7 +270,7 @@ class Analyzer:
         log_parse_results = self.__log_parser.parse_log()
 
         # Save the log_trace:
-        with open(os.path.join(setup.exp_dir('logs'), 'it_{}.log'.format(self.__sample_cnt)), 'w') as f:
+        with open(os.path.join(app_path.exp_dir('logs'), 'it_{}.log'.format(self.__sample_cnt)), 'w') as f:
             f.write(log_parse_results[4])
 
         # Create the samples and log table if required

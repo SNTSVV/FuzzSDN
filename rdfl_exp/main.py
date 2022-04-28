@@ -11,12 +11,15 @@ import pwd
 import signal
 import sys
 import time
+import traceback
 from importlib import resources
 from os.path import join
 from typing import Optional
 
 from weka.core import jvm, packages
 
+import common.utils.exit_codes
+from common import app_path
 from rdfl_exp import setup
 from rdfl_exp.drivers import FuzzerDriver, OnosDriver, RyuDriver
 from rdfl_exp.experiment import Analyzer, Experimenter, FuzzMode, Learner, Model, RuleSet
@@ -422,20 +425,20 @@ def run() -> None:
 
         # 2. Create the datasets
         data = experimenter.analyzer.get_dataset()
-        data.to_csv(join(setup.exp_dir('data'), "it_{}_raw.csv".format(it)), index=False, encoding='utf-8')
+        data.to_csv(join(app_path.exp_dir('data'), "it_{}_raw.csv".format(it)), index=False, encoding='utf-8')
 
         # Write the formatted data to the file
         data = experimenter.analyzer.get_dataset(error_class=_context['target_class'])
-        data.to_csv(join(setup.exp_dir('data'), "it_{}.csv".format(it)), index=False, encoding='utf-8')
+        data.to_csv(join(app_path.exp_dir('data'), "it_{}.csv".format(it)), index=False, encoding='utf-8')
 
         # Write the debug dataset to the file
         data = experimenter.analyzer.get_dataset(error_class=_context['target_class'], debug=True)
-        data.to_csv(join(setup.exp_dir('data'), "it_{}_debug.csv".format(it)), index=False, encoding='utf-8')
+        data.to_csv(join(app_path.exp_dir('data'), "it_{}_debug.csv".format(it)), index=False, encoding='utf-8')
 
         # Convert the set to an arff file
         csv_ops.to_arff(
-            csv_path=join(setup.exp_dir('data'), "it_{}.csv".format(it)),
-            arff_path=join(setup.exp_dir('data'), "it_{}.arff".format(it)),
+            csv_path=join(app_path.exp_dir('data'), "it_{}.csv".format(it)),
+            arff_path=join(app_path.exp_dir('data'), "it_{}.arff".format(it)),
             csv_sep=',',
             relation='dataset_iteration_{}'.format(it)
         )
@@ -443,7 +446,7 @@ def run() -> None:
         # 3. Perform machine learning algorithms
         start_of_ml = time.time()
         try:
-            learner.load_data(join(setup.exp_dir('data'), "it_{}.arff".format(it)))
+            learner.load_data(join(app_path.exp_dir('data'), "it_{}.arff".format(it)))
             ml_model = learner.learn()
         except Exception:
             _log.exception("An exception occurred while trying to create a models")
@@ -455,7 +458,7 @@ def run() -> None:
         if ml_model is not None:
 
             # Save the model
-            model_path = join(setup.exp_dir('models'), 'it_{}.model'.format(it))
+            model_path = join(app_path.exp_dir('models'), 'it_{}.model'.format(it))
             _log.debug('Saving model under {}'.format(model_path))
             ml_model.save(file_path=model_path)
 
@@ -496,7 +499,7 @@ def run() -> None:
             learner=learner,
             model=ml_model
         )
-        Stats.save(join(setup.exp_dir(), 'stats.json'), pretty=True)
+        Stats.save(join(app_path.exp_dir(), 'stats.json'), pretty=True)
 
         # Increment the number of iterations
         it += 1
@@ -539,20 +542,20 @@ def cleanup(*args):
         _log.debug("Restoring ownership permissions to user {}...".format(setup.get_user()))
         uid = pwd.getpwnam(setup.get_user()).pw_uid
         gid = grp.getgrnam(setup.get_user()).gr_gid
-        utils.recursive_chown(setup.app_dir().user_cache_dir, uid, gid)
-        utils.recursive_chown(setup.app_dir().user_log_dir, uid, gid)
-        utils.recursive_chown(setup.app_dir().user_data_dir, uid, gid)
+        utils.recursive_chown(app_path.data_dir(), uid, gid)
+        utils.recursive_chown(app_path.log_dir(), uid, gid)
+        utils.recursive_chown(app_path.config_dir(), uid, gid)
         _log.debug("Permissions have been restored.")
 
         # Clean the temporary directory
-        _log.debug("Cleaning up the temporary directory at \"{}\"...".format(setup.tmp_dir()))
-        setup.tmp_dir(get_obj=True).cleanup()
+        _log.debug("Cleaning up the temporary directory at \"{}\"...".format(app_path.tmp_dir()))
+        app_path.tmp_dir(get_obj=True).cleanup()
         _log.debug("Temporary directory has been cleaned.")
 
         # Clean the pid file
         try:
-            _log.debug("Cleaning up the PID file...")
-            os.remove(join(setup.APP_DIR.user_cache_dir, "rdfl_exp.pid"))
+            _log.debug("Removing the PID file...")
+            os.remove(setup.pid_path())
         except FileNotFoundError:
             pass  # if the file is not found then it's ok
         finally:
@@ -590,12 +593,17 @@ def main() -> None:
     # Create configuration reload signal
     # signal.signal(signal.SIGHUP, None)
 
+    # Initialize the tool
+    try:
+        init()
+    except Exception as e:
+        print("Couldn't initialize the tool with reason: {}".format(e))
+        print(traceback.format_exc())
+        raise SystemExit(common.utils.exit_codes.ExitCode.EX_CONFIG)
+
     try:
 
-        # Initialize the tool
-        init()
-
-        # Configure javabridge
+        # Configure java-bridge
         jvm.logger.setLevel(logging.INFO)
         jvm.start(packages=True)  # Start the JVM
 
@@ -624,8 +632,7 @@ def main() -> None:
     except Exception as e:
         _log.exception("An uncaught exception happened while running rdfl_exp")
         print("An uncaught exception happened while running rdfl_exp: {}".format(e))
-        print("Check the logs at \"{}\" for more information.".format(os.path.join(setup.app_dir().user_log_dir,
-                                                                                   setup.config().logging.filename)))
+        print("Check the logs at \"{}\" for more information.".format(app_path.log_dir()))
         _crashed = True
 
     finally:
