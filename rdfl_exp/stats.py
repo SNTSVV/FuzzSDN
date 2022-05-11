@@ -10,7 +10,9 @@ class Stats:
     
     @classmethod
     def init(cls, context: dict):
-        cls._stats = cls._create_stats_dict(context["target_class"], context["other_class"])
+        cls._stats = cls._create_stats_dict(target_class=context["target_class"],
+                                            other_class=context["other_class"])
+
         cls._stats['context']['scenario']               = context['scenario']
         cls._stats['context']['criterion']              = context['criterion']
         cls._stats['context']['fuzz_mode']              = context['fuzz_mode']
@@ -65,9 +67,11 @@ class Stats:
 
         # Update the machine learning results
         if model is not None:
-            cls._stats['learning']["accuracy"]   += [model.info.accuracy]
+            cls._stats['learning']['scheme']    += [model.info.scheme]
+            cls._stats['learning']["accuracy"]  += [model.info.accuracy]
         else:
-            cls._stats['learning']["accuracy"] += [None]
+            cls._stats['learning']['scheme']    += [None]
+            cls._stats['learning']["accuracy"]  += [None]
 
         if model is not None and model.ruleset is not None:
             cls._stats['learning']['confidence'] += [model.ruleset.confidence()]
@@ -157,9 +161,9 @@ class Stats:
         stats['data']['count'][target_class]            = list()
         stats['data']['count'][other_class]             = list()
 
-
         # Information on the machine learning information
         stats['learning']                               = dict()
+        stats['learning']['scheme']                     = list()
         stats['learning']['accuracy']                   = list()
         stats['learning']['confidence']                 = list()
         stats['learning']['rules']                      = list()

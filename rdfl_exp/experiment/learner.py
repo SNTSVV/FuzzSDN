@@ -24,6 +24,7 @@ class ModelInfo(NamedTuple):
     """
     # The classes used by the model
     classes : Tuple[str, str]
+    scheme  : str
 
     # Evaluation method
     evaluation_method : Optional[str]
@@ -81,6 +82,7 @@ class Model:
         # 3. Create the model info
         self._info = ModelInfo(
             classes=(class_label[0], class_label[1]),
+            scheme="{} {}".format(self._classifier.classname, " ".join(self._classifier.options)),
             evaluation_method="cross_validation",  # TODO: Determine the eval_method depending on the evaluator java class
             instances=int(evaluator.num_instances),
             accuracy=evaluator.percent_correct,
@@ -574,22 +576,3 @@ class Learner:
         return filters
     # End def _build_pp_filters
 # End class Learner
-
-if __name__ == '__main__':
-
-    jvm.start(packages=True)
-    add_logging_level('TRACE', logging.DEBUG - 5)
-    try:
-        learner = Learner()
-        learner.target_class = 'unknown_reason'
-        learner.other_class = 'known_reason'
-        learner.algorithm = 'RIPPER'
-        learner.load_data('/Users/raphael.ollando/it_20_copy.arff')
-
-        model = learner.learn()
-        print(model.info)
-        model.save('/Users/raphael.ollando/serialized_model.model')
-
-
-    finally:
-        jvm.stop()
