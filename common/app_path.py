@@ -169,15 +169,3 @@ def log_dir():
         Path(path).mkdir(exist_ok=True, parents=True)
     return path
 # End def _log_dir
-
-
-# ===== (self test) ====
-
-if __name__ == '__main__':
-
-    set_experiment_reference("test_exp")
-
-    print(state_dir())
-    print(log_dir())
-    print(run_dir())
-

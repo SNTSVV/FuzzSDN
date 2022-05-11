@@ -96,12 +96,8 @@ class Configuration:
 
 def init(args=None):
 
-    global APP_DIR
     global CONFIG
     global EXP_REF
-
-    # Load the application directories
-    APP_DIR = AppDirs("rdfl_exp")
 
     # Verify that there is a configuration file in the configuration directory
     config_path = os.path.join(app_path.config_dir(), CONFIG_NAME)
@@ -112,7 +108,7 @@ def init(args=None):
             "Couldn't find configuration file \"{}\"  under \"{}\"".format(CONFIG_NAME, config_path))
 
     # Parse the reference
-    if args is not None and hasattr(args, 'reference'):
+    if args is not None and isinstance(args.reference, (str, int, float)):
         EXP_REF = str(args.reference).strip()
     else:
         EXP_REF = datetime.now().strftime("%Y%d%m_%H%M%S")
@@ -174,62 +170,6 @@ def pid_path():
 
 # ===== ( Private config functions ) ===========================================
 
-def _make_folder_struct():
-    """
-    Create the folder structure.
-    """
-    global EXP_DIR
-    global EXP_REF
-    global EXP_DATA_DIR
-    global EXP_MODELS_DIR
-    global EXP_LOG_DIR
-
-    # 1. Define the experiments dir, path, etc
-    now             = datetime.now().strftime("%Y%m%d_%H%M%S")
-    EXP_DIR         = os.path.join(APP_DIR.user_data_dir, 'experiments', now if not EXP_REF else EXP_REF)
-    EXP_DIR         = check_and_rename(EXP_DIR)
-    EXP_DATA_DIR    = os.path.join(EXP_DIR, 'data')
-    EXP_MODELS_DIR  = os.path.join(EXP_DIR, 'models')
-    EXP_LOG_DIR     = os.path.join(EXP_DIR, 'logs')
-
-    # 2. Create the user data dir and it's sub folders
-    try:
-        # Data path
-        Path(APP_DIR.user_data_dir).mkdir(parents=True, exist_ok=True)
-        Path(EXP_DIR).mkdir(parents=True, exist_ok=False)
-        Path(EXP_DATA_DIR).mkdir(parents=False, exist_ok=False)
-        Path(EXP_MODELS_DIR).mkdir(parents=False, exist_ok=False)
-        Path(EXP_LOG_DIR).mkdir(parents=False, exist_ok=False)
-    except Exception:
-        raise SystemExit(
-            Fore.RED + Style.BOLD + "Error" + Style.RESET
-            + ": Cannot create user data directory at \"{}\". ".format(APP_DIR.user_data_dir)
-        )
-
-    # 3. Create cache directory
-    try:
-        # cache directory
-        Path(APP_DIR.user_cache_dir).mkdir(parents=True, exist_ok=True)
-        # log directory
-        Path(APP_DIR.user_log_dir).mkdir(parents=True, exist_ok=True)
-    except Exception:
-        raise SystemExit(
-            Fore.RED + Style.BOLD + "Error" + Style.RESET
-            + ": Cannot create directories at \"{}\". ".format(APP_DIR.user_cache_dir)
-            + "Please verify the script got root permissions"
-        )
-
-    # 4. Create the log directory
-    try:
-        Path(APP_DIR.user_log_dir).mkdir(parents=True, exist_ok=True)
-    except Exception:
-        raise SystemExit(
-            Fore.RED + Style.BOLD + "Error" + Style.RESET
-            + ": Cannot create log directory at \"{}\". ".format(APP_DIR.user_log_dir)
-        )
-# End def _make_folder_struct
-
-
 def _configure_pid():
     """
     Check the presence of a pid file and verify if another experiment isn't
@@ -240,8 +180,8 @@ def _configure_pid():
 
     if os.path.isfile(pid_file):
         # There is a PID
-        with open(pid_file, 'r') as pid_file:
-            pid = int(pid_file.readline().rstrip())
+        with open(pid_file, 'r') as pf:
+            pid = int(pf.readline().rstrip())
 
         # If the pid is different, we exit the system and notify the user
         if pid != os.getpid():
@@ -268,8 +208,8 @@ def _configure_pid():
                 os.remove(pid_file)
 
     # If there is no pid we create one for this program
-    with open(pid_file, 'w') as pid_file:
-        pid_file.write(str(os.getpid()))
+    with open(pid_file, 'w') as pf:
+        pf.write(str(os.getpid()))
 # End def +_setup_pid
 
 
@@ -316,7 +256,7 @@ def _configure_logger():
         filename=log_file,
         filemode='a',  # Use append affix to not overwrite the header
         format='%(asctime)s,%(msecs)d | %(name)s | %(levelname)s | %(message)s',
-        datefmt='%H:%M:%S',
+        datefmt='%Y-%m-%d %H:%M:%S',
         level=level
     )
 # End def _setup_logger

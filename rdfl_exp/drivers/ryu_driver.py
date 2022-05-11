@@ -47,6 +47,8 @@ class RyuDriver:
                 Path(cls.__log_dir).mkdir(parents=True, exist_ok=True)
             if os.path.exists(cls.__log_file):
                 os.remove(cls.__log_file)
+                if os.path.exists(cls.__log_file):
+                    raise RuntimeError("Couldn't delete ryu log file \"{}\"".format(cls.__log_file))
         else:
             cls.__save_log  = False
 

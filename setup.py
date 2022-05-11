@@ -15,9 +15,10 @@ setup(
     # Metadata
     name='rdfl_exp',
     version='0.3.0',
-    description='Rule Detection with Feedback Loop Experiment',
+    description='A Failure-Inducing Model generation scheme for SDN based systems using Fuzzing and Machine Learning '
+                'Techniques',
     url='',
-    author='raphael.ollando',
+    author='Raphaël Ollando',
     author_email='raphael.ollando@uni.lu',
 
     # Install Instructions
@@ -34,12 +35,9 @@ setup(
         'rdfl_exp/analytics',
         'rdfl_exp/drivers',
         'rdfl_exp/experiment',
-        'rdfl_exp/utils'
     ],
 
     scripts=[
         'bin/rdfl_exp',
-        'bin/rdfl_exp-install'
     ],
 )
-

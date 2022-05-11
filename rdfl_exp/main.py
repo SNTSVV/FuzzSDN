@@ -218,7 +218,7 @@ def parse_arguments():
         '--fuzz-mode',
         type=str,
         choices=mode_choices,
-        default='fuzz_mode',
+        default='standard',
         dest='fuzz_mode',
         help="Select the mode of fuzzing. "
              "Allowed modes are: {}".format(', '.join("\'{}\'".format(mc) for mc in mode_choices))
