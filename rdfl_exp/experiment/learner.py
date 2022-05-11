@@ -530,22 +530,22 @@ class Learner:
             min_cls_cnt = min(class1_cnt, class2_cnt)
             max_cls_cnt = max(class1_cnt, class2_cnt)
             percentage = 100 * (max_cls_cnt - min_cls_cnt) / min_cls_cnt  # Default percentage
-            if self._ml_hp:
+            if self._filter_hp:
                 # Sets a target ratio below 0.5
-                if 'target-ratio' in self._ml_hp:
-                    target_ratio = max(0.0, min(0.5, float(self._ml_hp['target-ratio'])))
+                if 'target-ratio' in self._filter_hp:
+                    target_ratio = max(0.0, min(0.5, float(self._filter_hp['target-ratio'])))
                     if min_cls_cnt / (min_cls_cnt + max_cls_cnt) < target_ratio:
                         percentage *= (target_ratio / 0.5)  # Make the percentage to be close to the target ratio
                     else:
                         percentage = 0.0  # If within the target ratio range then nothing should be done
 
-                if 'threshold' in self._ml_hp:
+                if 'threshold' in self._filter_hp:
                     if min(class1_cnt, class2_cnt) / (class1_cnt + class2_cnt) > max(0.0,
-                                                                                     float(self._ml_hp['threshold'])):
+                                                                                     float(self._filter_hp['threshold'])):
                         percentage = 0.0
 
-                if 'multiplier' in self._ml_hp:
-                    percentage *= max(0.0, float(self._ml_hp['multiplier']))
+                if 'multiplier' in self._filter_hp:
+                    percentage *= max(0.0, float(self._filter_hp['multiplier']))
 
             # Create the filters
             filters.append(
