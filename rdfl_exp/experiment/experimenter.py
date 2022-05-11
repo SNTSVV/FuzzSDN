@@ -13,7 +13,7 @@ from typing import Optional, Union, Tuple
 from iteround import saferound
 
 import rdfl_exp.resources.criteria
-from rdfl_exp.experiment import Analyzer, CTX_PKT_IN_tmp, RuleSet
+from rdfl_exp.experiment import Analyzer, CTX_PKT_IN_tmp, RuleSet, strategy
 from common.utils.terminal import progress_bar
 
 
@@ -53,9 +53,9 @@ class Experimenter:
 
         # Fuzzing parameters
         self.fuzz_mode                      : FuzzMode = FuzzMode.RANDOM
-        self.ruleset: Optional[RuleSet]     = None
-        self.enable_mutation                = True
-        self.mutation_rate                  = 1.0
+        self.ruleset                        : Optional[RuleSet] = None
+        self.enable_mutation                : bool = True
+        self.mutation_rate                  : float = 1.0
     # End def __init__
 
     # ===== ( Properties ) =============================================================================================
@@ -235,7 +235,7 @@ class Experimenter:
             # Try to run the 'test' function
             try:
                 self.__log.debug("Running \"{}#test\"".format(self.__scenario.__name__))
-                self.__scenario.test(instruction=fuzz_instr[i], retries=5)
+                self.__scenario.test(instruction=fuzz_instr[i])
             except Exception as e:
                 self.__log.exception("An exception occurred while running \"{}#test\"".format(self.__scenario.__name__))
                 raise e
@@ -315,6 +315,15 @@ class Experimenter:
                     "intent": "mutate_bytes",
                     "includeHeader": False
                 }]
+                instructions.append(json.dumps({"instructions": [json_dict]}))
+
+        # Perform a byte mutation
+        elif self.fuzz_mode == FuzzMode.BEADS:
+            for i in range(count):
+                # Create the dictionary
+                json_dict = dict()
+                json_dict.update(self.__criterion)
+                json_dict['actions'] = strategy.beads_fuzzer_actions()
                 instructions.append(json.dumps({"instructions": [json_dict]}))
 
         elif self.fuzz_mode == FuzzMode.RULE:
