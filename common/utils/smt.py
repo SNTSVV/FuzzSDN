@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from random import choice
 
 from z3 import Z3Exception, Z3_UNINTERPRETED_SORT, is_array, z3

@@ -10,7 +10,7 @@ import threading
 class LogPipe(threading.Thread):
 
     def __init__(self, level, log_name=None):
-        """Setup the object with a logger and a loglevel and start the thread """
+        """Set up the object with a logger and a loglevel and start the thread """
         threading.Thread.__init__(self)
         self.daemon = False
 
@@ -20,7 +20,6 @@ class LogPipe(threading.Thread):
         self.pipeReader = os.fdopen(self.fdRead)
 
         self.start()
-
     # End def __init__
 
     def fileno(self):

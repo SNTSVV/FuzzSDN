@@ -1,10 +1,10 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import math
 import os
-
-# ==== (Define Styles)
 import sys
 
+
+# ==== ( Define Styles ) ===============================================================================================
 
 class Fore:
     GREY    = '\033[90m'
@@ -27,15 +27,15 @@ class Style:
     RESET           = '\033[0m'
 
 
-# === (banner)
+# === (banner) =========================================================================================================
 
 banner = r"""{}{}
-    ███████╗ ██████╗  ██████╗       ███████╗██████╗ ███╗   ██╗    
-    ██╔════╝██╔═══██╗██╔════╝       ██╔════╝██╔══██╗████╗  ██║    
-    █████╗  ██║   ██║██║  ███╗█████╗███████╗██║  ██║██╔██╗ ██║    
-    ██╔══╝  ██║   ██║██║   ██║╚════╝╚════██║██║  ██║██║╚██╗██║    
-    ██║     ╚██████╔╝╚██████╔╝      ███████║██████╔╝██║ ╚████║    
-    ╚═╝      ╚═════╝  ╚═════╝       ╚══════╝╚═════╝ ╚═╝  ╚═══╝{}{}                 
+          ███████╗██╗ ██████╗ ███████╗██████╗ ███╗   ██╗
+          ██╔════╝██║██╔════╝ ██╔════╝██╔══██╗████╗  ██║
+          █████╗  ██║██║  ███╗███████╗██║  ██║██╔██╗ ██║
+          ██╔══╝  ██║██║   ██║╚════██║██║  ██║██║╚██╗██║
+          ██║     ██║╚██████╔╝███████║██████╔╝██║ ╚████║
+          ╚═╝     ╚═╝ ╚═════╝ ╚══════╝╚═════╝ ╚═╝  ╚═══╝{}{}                 
         
         A Failure-Inducing Model generator for SDN systems{}{}        
 =================================================================={}""".format(
@@ -44,7 +44,8 @@ banner = r"""{}{}
     Style.RESET, Style.BOLD,
     Style.RESET)
 
-# ==== (Methods)
+
+# ==== ( Methods ) =====================================================================================================
 
 def clear():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -70,7 +71,7 @@ def query_yes_no(question, default="yes"):
     elif default == "no":
         prompt = " [y/N] "
     else:
-        raise ValueError("invalid default answer: '%s'" % default)
+        raise ValueError("invalid default answer: '{}'".format(default))
 
     while True:
         sys.stdout.write(question + prompt)
@@ -82,6 +83,7 @@ def query_yes_no(question, default="yes"):
         else:
             sys.stdout.write("Please respond with 'yes' or 'no' " "(or 'y' or 'n').\n")
 # End def query_yes_no
+
 
 def progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=100, fill='█', print_end="\r"):
     """
@@ -104,4 +106,41 @@ def progress_bar(iteration, total, prefix='', suffix='', decimals=1, length=100,
     if iteration == total:
         print()
 # End def progress_bar
+
+
+def print_list_columns(obj, cols=4, columnwise=True, gap=4):
+    """
+    Print the given list in evenly-spaced columns.
+    Adapted from @ozagon's answer at https://stackoverflow.com/questions/1524126/how-to-print-a-list-more-nicely
+
+    :param obj: The list to be printed.
+    :type obj: list
+    :param cols: The number of columns in which the list should be printed.
+    :type cols: int
+    :param columnwise: If True, the items in the list will be printed column-wise.
+                       If False the items in the list will be printed row-wise.
+    :type columnwise: bool (default=True)
+    :param gap: The number of spaces that should separate the longest column
+                item/s from the next column. This is the effective spacing
+                between columns based on the maximum len() of the list items.
+    :type gap: int
+    """
+
+    s_obj = [str(item) for item in obj]
+    if cols > len(s_obj):
+        cols = len(s_obj)
+    max_len = max([len(item) for item in s_obj])
+    if columnwise:
+        cols = int(math.ceil(float(len(s_obj)) / float(cols)))
+    plist = [s_obj[i: i + cols] for i in range(0, len(s_obj), cols)]
+    if columnwise:
+        if not len(plist[-1]) == cols:
+            plist[-1].extend([''] * (len(s_obj) - len(plist[-1])))
+        plist = zip(*plist)
+    printer = '\n'.join([
+        ''.join([c.ljust(max_len + gap) for c in p])
+        for p in plist])
+
+    print(printer)
+# End def print_list_columns
 

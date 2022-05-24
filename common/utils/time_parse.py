@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 """
@@ -114,6 +114,7 @@ def _interpret_as_minutes(sval, mdict):
         mdict.pop('secs')
         pass
     return mdict
+# End def _interpret_as_minutes
 
 
 def time_parse(sval, granularity='seconds'):
@@ -177,3 +178,4 @@ def time_parse(sval, granularity='seconds'):
                 # SECS is a float, we will return a float
                 return sign * sum([MULTIPLIERS[k] * float(v) for (k, v) in
                                    list(mdict.items()) if v is not None])
+# End def time_parse

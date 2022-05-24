@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
 import itertools
 import math
 from collections.abc import Iterable
@@ -154,6 +154,7 @@ class Interval:
         """
 
         return self.overlaps(other) or self.is_adjacent(other)
+# End def Interval
 
 
 class IntervalSet:
