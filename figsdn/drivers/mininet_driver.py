@@ -6,8 +6,8 @@ from typing import Optional, Tuple
 
 import pexpect
 
-from rdfl_exp.analytics.ping_stats import PingStats
-from rdfl_exp.drivers.commons import sudo_expect
+from figsdn.analytics.ping_stats import PingStats
+from figsdn.drivers.commons import sudo_expect
 from common.utils.exit_codes import ExitCode
 
 MININET_PROMPT = "mininet>"
@@ -59,7 +59,7 @@ class MininetDriver:
                                     timeout=timeout)
                 except KeyError:
                     cls.__log.error("Unable to start Mininet due to permission issues. Is sudo configured?")
-                    cls.__log.error("Add rdfl_exp to sudoers or configure sudo password in configuration file")
+                    cls.__log.error("Add figsdn to sudoers or configure sudo password in configuration file")
                     return False
 
                 if i == 0:
@@ -122,7 +122,7 @@ class MininetDriver:
                                         timeout=timeout)
                     except KeyError:
                         cls.__log.error("Unable to start Mininet due to permission issues. Is sudo configured?")
-                        cls.__log.error("Add rdfl_exp to sudoers or configure sudo password in configuration file")
+                        cls.__log.error("Add figsdn to sudoers or configure sudo password in configuration file")
                         return False
 
                     if i == 0:

@@ -10,11 +10,11 @@ from pypika import Column, JoinType, Query, Tables
 
 from common import app_path
 from common.utils.database import Database as SqlDb
-from rdfl_exp import setup
-from rdfl_exp.analytics.log import LogParser, OnosLogParser, RyuLogParser
-from rdfl_exp.experiment import RuleSet
+from figsdn import setup
+from figsdn.analytics.log import LogParser, OnosLogParser, RyuLogParser
+from figsdn.experiment import RuleSet
 
-DB_NAME = "rdfl_exp"
+DB_NAME = "figsdn"
 
 
 class Analyzer:

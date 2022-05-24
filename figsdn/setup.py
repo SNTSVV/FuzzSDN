@@ -1,26 +1,27 @@
-#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Module to setup figsdn application.
+"""
+import getpass
 import logging
 import os
 import pwd
 from configparser import ConfigParser
 from datetime import datetime
-import getpass
-from pathlib import Path
 from typing import Optional
 
-from appdirs import AppDirs
-
 from common import app_path
+from common.utils import str_to_typed_value
 from common.utils.log import add_logging_level
-from common.utils import check_and_rename, str_to_typed_value
 from common.utils.terminal import Fore, Style
 
 # ===== ( Globals definition ) ===========================================================================================
 
-__FRAMEWORK_NAME__  = "rdfl_exp"
-__APP_NAME__        = "{}-app".format(__FRAMEWORK_NAME__)
+__FRAMEWORK_NAME__  = "figsdn"
+__VERSION__         = "0.4.0"
+
 CONFIG              = None
-CONFIG_NAME         = "{}.cfg".format(__APP_NAME__)
+CONFIG_NAME         = "{}.cfg".format(__FRAMEWORK_NAME__)
 EXP_REF             = ""
 
 
@@ -164,7 +165,7 @@ def get_user():
 
 def pid_path():
     """Returns the path to the pid file."""
-    return os.path.join(app_path.run_dir(), "{}.pid".format(__APP_NAME__))
+    return os.path.join(app_path.run_dir(), "{}.pid".format(__FRAMEWORK_NAME__))
 # Emd def pid_path
 
 
@@ -176,7 +177,7 @@ def _configure_pid():
     running.
     """
 
-    pid_file = os.path.join(app_path.run_dir(), "{}.pid".format(__APP_NAME__))
+    pid_file = os.path.join(app_path.run_dir(), "{}.pid".format(__FRAMEWORK_NAME__))
 
     if os.path.isfile(pid_file):
         # There is a PID
@@ -234,12 +235,12 @@ def _configure_logger():
 
     with open(log_file, 'w') as f:
         header = "\n".join([
-            "############################################################################################################",
-            "App Name   : {}".format("RDFL_EXP v0.3.0"),
+            "#"*100,
+            "App Name   : {}".format("RDFL_EXP v{}").format(__VERSION__),
             "PID        : {}".format(os.getpid()),
             "Reference  : {}".format(EXP_REF),
             "Start Date : {}".format(datetime.now()),
-            "============================================================================================================\n"
+            "="*100
         ])
         f.writelines(header)
 

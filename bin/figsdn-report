@@ -21,7 +21,7 @@ from weka.core import jvm
 from weka.core.converters import Loader
 
 from common import utils
-from rdfl_exp.experiment import Model
+from figsdn.experiment import Model
 from common.utils.log import add_logging_level
 from common.metrics import density, geometric_diversity, imbalance_ratio, fraction_of_borderline_points, \
     standard_deviation
@@ -96,8 +96,8 @@ test_data = "/Users/raphael.ollando/OneDrive - University of Luxembourg/04 - pap
 # test_data = "/Users/raphael.ollando/OneDrive - University of Luxembourg/04 - papers/00 - paper-1/01 - resources/test_dataset/onos_unknown_reason_test_dataset.arff"
 # test_data = "/Users/raphael.ollando/OneDrive - University of Luxembourg/04 - papers/00 - paper-1/01 - resources/test_dataset/ryu_unknown_reason_test_dataset.arff"
 
-RDFL_REMOTE_EXP_DIR = "/home/{}/.local/share/rdfl_exp/experiments"
-RDFL_REPORT_DIR     = os.path.expanduser("~/.rdfl_exp/report")
+RDFL_REMOTE_EXP_DIR = "/home/{}/.local/share/figsdn/experiments"
+RDFL_REPORT_DIR     = os.path.expanduser("~/.figsdn/report")
 
 
 # ===== ( Helper functions ) ===========================================================================================
@@ -293,7 +293,7 @@ def _calculate_data_metrics(stats: dict, local_path, compute_n1=True, compute_ir
 def _create_folder_structure(exp):
     #
     # # Create root and report folder
-    # dirs = ["{}/.rdfl_exp/".format(os.path.expanduser("~")), report_dir]
+    # dirs = ["{}/.figsdn/".format(os.path.expanduser("~")), report_dir]
 
     root            = os.path.expanduser("~/dev/01 - PhD/FIGSDN/out")
     report_dir      = join(root, "report")
@@ -1049,7 +1049,7 @@ def reevaluate_against_test_data(stats: dict, test_data_path, local_path):
 
 if __name__ == '__main__':
 
-    # Mandatory to avoid issue when using modules from the rdfl_exp package
+    # Mandatory to avoid issue when using modules from the figsdn package
     add_logging_level('TRACE', logging.DEBUG - 5)
 
     # Starts the JVM

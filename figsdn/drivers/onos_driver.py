@@ -7,9 +7,9 @@ from time import sleep
 
 import pexpect
 
-import rdfl_exp.resources.tools.onos as onos_tools
-from rdfl_exp import setup
-from rdfl_exp.drivers.commons import sudo_expect
+import figsdn.resources.tools.onos as onos_tools
+from figsdn import setup
+from figsdn.drivers.commons import sudo_expect
 
 
 class OnosDriver:
@@ -45,7 +45,7 @@ class OnosDriver:
                                 timeout=180)
             except KeyError:
                 cls.__log.error("Unable to stop ONOS due to permission issues. Is sudo configured?")
-                cls.__log.error("Add rdfl_exp to sudoers or configure sudo password in configuration file")
+                cls.__log.error("Add figsdn to sudoers or configure sudo password in configuration file")
                 return False
 
             if i == 0:
@@ -110,7 +110,7 @@ class OnosDriver:
                             timeout=180)
         except KeyError:
             cls.__log.error("Unable to start ONOS due to permission issues. Is sudo configured?")
-            cls.__log.error("Add rdfl_exp to sudoers or configure sudo password in configuration file")
+            cls.__log.error("Add figsdn to sudoers or configure sudo password in configuration file")
             return False
 
         if i == 0:
@@ -181,7 +181,7 @@ class OnosDriver:
             i = sudo_expect(spawn=child, pattern=[pexpect.EOF], timeout=180)
         except KeyError:
             cls.__log.error("Unable to stop ONOS due to permission issues. Is sudo configured?")
-            cls.__log.error("Add rdfl_exp to sudoers or configure sudo password in configuration file")
+            cls.__log.error("Add figsdn to sudoers or configure sudo password in configuration file")
             return False
 
         if i == 0:
@@ -297,7 +297,7 @@ class OnosDriver:
                             sudo_expect(spawn=child, pattern=[pexpect.EOF], timeout=180)
                         except KeyError:
                             cls.__log.error("Unable to remove ONOS log file \"{}\". Is sudo configured?".format(path))
-                            cls.__log.error("Add rdfl_exp to sudoers or configure sudo password in configuration file")
+                            cls.__log.error("Add figsdn to sudoers or configure sudo password in configuration file")
                             return False
                     finally:
                         cls.__log.trace("Removed \"{}\"".format(path))

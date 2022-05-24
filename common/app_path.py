@@ -13,7 +13,7 @@ from appdirs import AppDirs
 
 # ===== ( Module Globals definition ) ==================================================================================
 
-__FRAMEWORK_NAME__ = "rdfl_exp"
+__FRAMEWORK_NAME__ = "figsdn"
 
 _EXP_REF : Optional[str] = None
 _APP_DIR = AppDirs(__FRAMEWORK_NAME__)
@@ -28,9 +28,9 @@ _SYSTEM = ''
 if sys.platform.startswith('java'):
     import platform
     os_name = platform.java_ver()[3][0]
-    if os_name.startswith('Windows'): # "Windows XP", "Windows 7", etc.
+    if os_name.startswith('Windows'):  # "Windows XP", "Windows 7", etc.
         _SYSTEM = 'win32'
-    elif os_name.startswith('Mac'): # "Mac OS X", etc.
+    elif os_name.startswith('Mac'):  # "Mac OS X", etc.
         _SYSTEM = 'darwin'
     else: # "Linux", "SunOS", "FreeBSD", etc.
         # Setting this to "linux2" is not ideal, but only Windows or Mac

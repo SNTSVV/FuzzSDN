@@ -1,7 +1,7 @@
 import json
 from typing import Optional
 
-from rdfl_exp.experiment import Learner, Model
+from figsdn.experiment import Learner, Model
 
 
 class Stats:

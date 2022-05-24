@@ -13,7 +13,7 @@ from weka.core.converters import Loader
 from weka.core.dataset import Instances
 from weka.filters import Filter, MultiFilter
 
-from rdfl_exp.experiment import Rule, RuleSet
+from figsdn.experiment import Rule, RuleSet
 from common.utils import str_to_typed_value
 from common.utils.log import add_logging_level
 

@@ -13,8 +13,8 @@ with open('requirements.txt', 'r') as f:
 # TODO: add non-python dependencies python-dev, libjpeg-dev, etc.
 setup(
     # Metadata
-    name='rdfl_exp',
-    version='0.3.0',
+    name='figsdn',
+    version='0.4.0',
     description='A Failure-Inducing Model generation scheme for SDN based systems using Fuzzing and Machine Learning '
                 'Techniques',
     url='',
@@ -31,13 +31,20 @@ setup(
 
     # Packages and Scripts
     packages=[
-        'rdfl_exp',
-        'rdfl_exp/analytics',
-        'rdfl_exp/drivers',
-        'rdfl_exp/experiment',
+        # Common packages
+        'common',
+        'common/metrics',
+        'common/openflow',
+        'common/utils',
+        # main app packages
+        'figsdn',
+        'figsdn/analytics',
+        'figsdn/drivers',
+        'figsdn/experiment',
     ],
 
     scripts=[
-        'bin/rdfl_exp',
+        'bin/figsdn',
+        'bin/figsdn-report'
     ],
 )

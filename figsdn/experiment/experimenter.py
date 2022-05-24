@@ -12,8 +12,8 @@ from typing import Optional, Union, Tuple
 
 from iteround import saferound
 
-import rdfl_exp.resources.criteria
-from rdfl_exp.experiment import Analyzer, CTX_PKT_IN_tmp, RuleSet, strategy
+import figsdn.resources.criteria
+from figsdn.experiment import Analyzer, CTX_PKT_IN_tmp, RuleSet, strategy
 from common.utils.terminal import progress_bar
 
 
@@ -96,7 +96,7 @@ class Experimenter:
         """
         # Check if the scenario exists
         # TODO properly check the resources folder instead of assuming a set format
-        scenario_pkg = "rdfl_exp.resources.scenarios.{0}.{0}".format(name)
+        scenario_pkg = "figsdn.resources.scenarios.{0}.{0}".format(name)
         try:
             self.__scenario = importlib.import_module(scenario_pkg)
             # Register the scenario context
@@ -157,7 +157,7 @@ class Experimenter:
 
         try:
             # Load the criteria
-            criterion = resources.read_text(rdfl_exp.resources.criteria, criterion_file_name)
+            criterion = resources.read_text(figsdn.resources.criteria, criterion_file_name)
 
             # Replace the variables by arguments
             pattern = re.compile(r'(?<=\")(\$\w+)(?=\")')

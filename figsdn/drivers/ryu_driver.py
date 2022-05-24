@@ -5,7 +5,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from rdfl_exp import setup
+from figsdn import setup
 
 
 class RyuDriver:

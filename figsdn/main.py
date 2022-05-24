@@ -20,17 +20,19 @@ from weka.core import jvm, packages
 
 import common.utils.exit_codes
 from common import app_path
-from rdfl_exp import setup
-from rdfl_exp.drivers import FuzzerDriver, OnosDriver, RyuDriver
-from rdfl_exp.experiment import Analyzer, Experimenter, FuzzMode, Learner, Model, RuleSet
-from rdfl_exp.resources import scenarios
-from rdfl_exp.stats import Stats
+from figsdn import setup
+from figsdn.drivers import FuzzerDriver, OnosDriver, RyuDriver
+from figsdn.experiment import Analyzer, Experimenter, FuzzMode, Learner, Model, RuleSet
+from figsdn.resources import scenarios
+from figsdn.stats import Stats
 from common.utils import csv_ops, time_parse, utils
 from common.utils.database import Database as SqlDb
 from common.utils.exit_codes import ExitCode
 from common.utils.terminal import Style
 
 # ===== ( locals ) =====================================================================================================
+
+__FRAMEWORK_NAME__ = "figsdn"
 
 _log = logging.getLogger(__name__)
 _is_init = False
@@ -524,7 +526,7 @@ def cleanup(*args):
     global _crashed
 
     if setup.config().general.cleanup is True:
-        _log.info("Cleaning up rdfl_exp...")
+        _log.info("Cleaning up figsdn...")
 
         # Stop all the the drivers
         _log.debug("Stopping all the drivers...")
@@ -571,7 +573,7 @@ def cleanup(*args):
             SqlDb.disconnect()
 
     # Exit with code 0
-    _log.info("Exiting rdfl_exp.")
+    _log.info("Exiting figsdn.")
     if _crashed is True:
         sys.exit(1)
     else:
@@ -617,7 +619,7 @@ def main() -> None:
             _log.info("done")
 
         if new_pkg_installed is True:
-            print("New WEKA packages have been installed. Please restart rdfl_exp to complete installation.")
+            print("New WEKA packages have been installed. Please restart figsdn to complete installation.")
             jvm.stop()
             sys.exit(0)
 
@@ -627,16 +629,16 @@ def main() -> None:
         run()
 
     except KeyboardInterrupt:
-        _log.info("rdfl_exp stopped by user.")
+        _log.info("figsdn stopped by user.")
 
     except Exception as e:
-        _log.exception("An uncaught exception happened while running rdfl_exp")
-        print("An uncaught exception happened while running rdfl_exp: {}".format(e))
+        _log.exception("An uncaught exception happened while running figsdn")
+        print("An uncaught exception happened while running figsdn: {}".format(e))
         print("Check the logs at \"{}\" for more information.".format(app_path.log_dir()))
         _crashed = True
 
     finally:
-        _log.info("Closing rdfl_exp.")
+        _log.info("Closing figsdn.")
         jvm.stop()  # Close the JVM
         cleanup()  # Clean up the program
 # End def main

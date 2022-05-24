@@ -13,7 +13,7 @@ fi
 cd "$(dirname "$0")" || exit 1
 
 [ "$SUDO_USER" ] && USER=$SUDO_USER || USER=$(whoami)
-CONFIG_DIR="$(getent passwd "$SUDO_USER" | cut -d: -f6)/.config/rdfl_exp"
+CONFIG_DIR="$(getent passwd "$SUDO_USER" | cut -d: -f6)/.config/figsdn"
 
 # Update package manager and upgrade most packages
 apt-get update --assume-yes
@@ -38,14 +38,14 @@ fi
 # Check mysql installation
 apt-get install libmysqlclient-dev -y
 apt-get install mysql-server -y
-mysql -e "CREATE DATABASE IF NOT EXISTS rdfl_exp /*\!40100 DEFAULT CHARACTER SET utf8 */;"
-mysql -e "CREATE USER IF NOT EXISTS rdfl_exp@localhost IDENTIFIED BY 'rdfl_exp';"
-mysql -e "GRANT ALL PRIVILEGES ON rdfl_exp.* TO 'rdfl_exp'@'localhost';"
+mysql -e "CREATE DATABASE IF NOT EXISTS figsdn /*\!40100 DEFAULT CHARACTER SET utf8 */;"
+mysql -e "CREATE USER IF NOT EXISTS figsdn@localhost IDENTIFIED BY 'figsdn';"
+mysql -e "GRANT ALL PRIVILEGES ON figsdn.* TO 'figsdn'@'localhost';"
 mysql -e "FLUSH PRIVILEGES;"
 
 # Create the main directory if it doesn't exist yet
 mkdir -p "$CONFIG_DIR"
-cp ../../etc/rdfl_exp.cfg "$CONFIG_DIR/rdfl_exp-app.cfg"  # Copy the configuration file from etc to the root directory
+cp ../../etc/figsdn.cfg "$CONFIG_DIR/figsdn-app.cfg"  # Copy the configuration file from etc to the root directory
 
 # Finally, set the permissions to the user
 chown -R "$USER":"$USER" "$CONFIG_DIR"

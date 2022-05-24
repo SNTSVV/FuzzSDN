@@ -7,7 +7,7 @@ from typing import Iterable
 
 import pexpect
 
-from rdfl_exp import setup
+from figsdn import setup
 
 
 # TODO: Make logger specifically for this module

@@ -4,7 +4,7 @@
 import os
 
 # Local dependencies
-from rdfl_exp import main
+from figsdn import main
 from common.utils.terminal import Fore, Style
 
 

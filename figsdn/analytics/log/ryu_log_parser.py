@@ -2,8 +2,8 @@
 import logging
 import os
 
-from rdfl_exp.analytics.log import LOG_RGX, LogParser
-from rdfl_exp import setup
+from figsdn.analytics.log import LOG_RGX, LogParser
+from figsdn import setup
 from common.openflow.v0x05.error import ErrorType
 
 

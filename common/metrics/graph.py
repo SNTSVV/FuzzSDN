@@ -61,7 +61,7 @@ if __name__ == '__main__':
     # X = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0], [10.0, 11.0, 12.0], [3.0, 2.0, 1.0]])
     # X = np.random.rand(15, 15)
     for i in range(100):
-        df = pd.read_csv('/Users/raphael.ollando/.rdfl_exp/report/exp-20220314_181444_from-10.240.5.104_at-20220323_105326/datasets/it_{}.csv'.format(i))
+        df = pd.read_csv('/Users/raphael.ollando/.figsdn/report/exp-20220314_181444_from-10.240.5.104_at-20220323_105326/datasets/it_{}.csv'.format(i))
         X = df.drop(columns=['class']).values
         y = df['class'].values
 
