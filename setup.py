@@ -14,10 +14,11 @@ with open('requirements.txt', 'r') as f:
 setup(
     # Metadata
     name='rdfl_exp',
-    version='0.2.0',
-    description='Rule Detection with Feedback Loop Experiment',
+    version='0.3.0',
+    description='A Failure-Inducing Model generation scheme for SDN based systems using Fuzzing and Machine Learning '
+                'Techniques',
     url='',
-    author='raphael.ollando',
+    author='Raphaël Ollando',
     author_email='raphael.ollando@uni.lu',
 
     # Install Instructions
@@ -31,14 +32,12 @@ setup(
     # Packages and Scripts
     packages=[
         'rdfl_exp',
+        'rdfl_exp/analytics',
+        'rdfl_exp/drivers',
         'rdfl_exp/experiment',
-        'rdfl_exp/machine_learning',
-        'rdfl_exp/utils'
     ],
 
     scripts=[
         'bin/rdfl_exp',
-        'bin/rdfl_exp-install'
     ],
 )
-

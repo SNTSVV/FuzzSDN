@@ -8,7 +8,7 @@ from time import sleep
 import pexpect
 
 import rdfl_exp.resources.tools.onos as onos_tools
-from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
+from rdfl_exp import setup
 from rdfl_exp.drivers.commons import sudo_expect
 
 
@@ -130,7 +130,7 @@ class OnosDriver:
 
             resp = session.expect(['Password:', pexpect.EOF, pexpect.TIMEOUT], timeout=cls.__timeout)
             if resp == 0:
-                session.sendline(CONFIG.onos.karaf_password)
+                session.sendline(setup.config().onos.karaf_password)
                 resp = session.expect([r'.*>.*',
                                        r'Connection\sclosed\sby',
                                        pexpect.EOF,
@@ -153,7 +153,7 @@ class OnosDriver:
             it = 0
             while app_manager is False and it < 30 :
 
-                cmd = "grep -E \"ApplicationManager .* Started\" {}".format(os.path.join(CONFIG.onos.root_dir, 'karaf', 'data', 'log', "karaf.log"))
+                cmd = "grep -E \"ApplicationManager .* Started\" {}".format(os.path.join(setup.config().onos.root_dir, 'karaf', 'data', 'log', "karaf.log"))
                 session = pexpect.spawn(cmd)
                 resp = session.expect(['Started', pexpect.EOF, pexpect.TIMEOUT], timeout=cls.__timeout)
                 if resp == 0:
@@ -221,7 +221,7 @@ class OnosDriver:
 
         activated = False
         attempt = 0
-        cmd = " ".join((os.path.join(CONFIG.onos.root_dir, 'bin', 'onos-app'), "localhost", "activate", app_name))
+        cmd = " ".join((os.path.join(setup.config().onos.root_dir, 'bin', 'onos-app'), "localhost", "activate", app_name))
         while activated is False and attempt < max_try:
             cls.__log.info("Activating ONOS app \"{}\"... Attempt {}/{}".format(app_name, attempt + 1, max_try))
             try:
@@ -262,7 +262,7 @@ class OnosDriver:
         :return: True (Always)
         """
         cls.__log.info("Deactivating ONOS app \"{}\"...".format(app_name))
-        subprocess.call([os.path.join(CONFIG.onos.root_dir, 'bin', 'onos-app'), "localhost", "deactivate", app_name],
+        subprocess.call([os.path.join(setup.config().onos.root_dir, 'bin', 'onos-app'), "localhost", "deactivate", app_name],
                         stderr=subprocess.DEVNULL,
                         stdout=subprocess.DEVNULL)
         cls.__log.info("ONOS app \"{}\" is deactivated.".format(app_name))
@@ -275,17 +275,17 @@ class OnosDriver:
         cls.__log.info("Flushing ONOS logs...")
 
         try:
-            dir_list = os.listdir(os.path.join(CONFIG.onos.root_dir, 'karaf', 'data', 'log'))
+            dir_list = os.listdir(os.path.join(setup.config().onos.root_dir, 'karaf', 'data', 'log'))
         except FileNotFoundError:
             # If there is no log directory, it may be because onos hasn't been started yet...
             # check if there is a root directory for onos
-            if not os.path.isdir(CONFIG.onos.root_dir) and not os.path.isdir(os.path.join(CONFIG.onos.root_dir, 'karaf')):
+            if not os.path.isdir(setup.config().onos.root_dir) and not os.path.isdir(os.path.join(setup.config().onos.root_dir, 'karaf')):
                 cls.__log.error("Couldn't flush ONOS' logs: ONOS or Karaf may not be installed.")
                 return False
         else:
             for item in dir_list:
                 if item.startswith("karaf") and item.endswith(".log"):
-                    path = os.path.join(CONFIG.onos.root_dir, 'karaf', 'data', 'log', item)
+                    path = os.path.join(setup.config().onos.root_dir, 'karaf', 'data', 'log', item)
                     cls.__log.debug("Flushing ONOS log at \"{}\"".format(path))
                     try:
                         os.remove(path)

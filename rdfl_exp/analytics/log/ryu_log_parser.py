@@ -3,8 +3,8 @@ import logging
 import os
 
 from rdfl_exp.analytics.log import LOG_RGX, LogParser
-from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
-from rdfl_exp.utils.openflow.v0x05.error import ErrorType
+from rdfl_exp import setup
+from common.openflow.v0x05.error import ErrorType
 
 
 class RyuLogParser(LogParser):
@@ -15,7 +15,7 @@ class RyuLogParser(LogParser):
     def __init__(self):
         super().__init__()
         self.__log = logging.getLogger(__name__)
-        self.__log_path = os.path.join(os.path.expanduser(CONFIG.ryu.log_dir), 'ryu.log')
+        self.__log_path = os.path.join(os.path.expanduser(setup.config().ryu.log_dir), 'ryu.log')
     # End def __init__
 
     def parse_log(self, path=None):

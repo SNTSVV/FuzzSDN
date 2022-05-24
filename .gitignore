@@ -1,3 +1,6 @@
+### Project related
+out/*
+
 ### OS X Related
 .DS_Store
 

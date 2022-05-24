@@ -89,6 +89,7 @@ def list_replace(obj: list, old, new) -> list:
 
 
 # ===== ( Files ) ======================================================================================================
+
 def recursive_chown(path, owner, group=None):
     """
     Recursively change the owner of all the files in a folder
@@ -101,3 +102,16 @@ def recursive_chown(path, owner, group=None):
         for filename in filenames:
             shutil.chown(os.path.join(dir_path, filename), owner, group=group)
 # End def recursive_chown
+
+
+def check_and_rename(file_path):
+    if os.path.exists(file_path):
+        num = 1
+        while True:
+            new_path = "{0}_{2}{1}".format(*os.path.splitext(file_path) + (num,))
+            if os.path.exists(new_path):
+                num += 1
+            else:
+                return new_path
+    return file_path
+# End def check_and_rename

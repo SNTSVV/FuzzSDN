@@ -13,14 +13,15 @@ from typing import Optional, Union, Tuple
 from iteround import saferound
 
 import rdfl_exp.resources.criteria
-from rdfl_exp.experiment import Analyzer, CTX_PKT_IN_tmp, RuleSet
-from rdfl_exp.utils.terminal import progress_bar
+from rdfl_exp.experiment import Analyzer, CTX_PKT_IN_tmp, RuleSet, strategy
+from common.utils.terminal import progress_bar
 
 
 class FuzzMode(Enum):
-    UNDEFINED   = 0,
-    RANDOM      = 1,
-    RULE        = 2,
+    RANDOM      = 0,
+    RULE        = 1,
+    DELTA       = 2,
+    BEADS       = 3
 # End class FuzzMode
 
 
@@ -51,10 +52,10 @@ class Experimenter:
         self.__analyzer: Optional[Analyzer] = None
 
         # Fuzzing parameters
-        self.fuzz_mode                      = FuzzMode.UNDEFINED
-        self.ruleset: Optional[RuleSet]     = None
-        self.enable_mutation                = True
-        self.mutation_rate                  = 1.0
+        self.fuzz_mode                      : FuzzMode = FuzzMode.RANDOM
+        self.ruleset                        : Optional[RuleSet] = None
+        self.enable_mutation                : bool = True
+        self.mutation_rate                  : float = 1.0
     # End def __init__
 
     # ===== ( Properties ) =============================================================================================
@@ -234,7 +235,7 @@ class Experimenter:
             # Try to run the 'test' function
             try:
                 self.__log.debug("Running \"{}#test\"".format(self.__scenario.__name__))
-                self.__scenario.test(instruction=fuzz_instr[i], retries=5)
+                self.__scenario.test(instruction=fuzz_instr[i])
             except Exception as e:
                 self.__log.exception("An exception occurred while running \"{}#test\"".format(self.__scenario.__name__))
                 raise e
@@ -292,7 +293,7 @@ class Experimenter:
         # Create an instruction list of "count" instructions
         instructions = list()
 
-        # If we fuzz randomly, populate the instructions with a
+        # Perform a random mutation
         if self.fuzz_mode == FuzzMode.RANDOM:
             for i in range(count):
                 # Create the dictionary
@@ -303,6 +304,28 @@ class Experimenter:
                     "includeHeader": False
                 }]
                 instructions.append(json.dumps({"instructions": [json_dict]}))
+
+        # Perform a byte mutation
+        elif self.fuzz_mode == FuzzMode.DELTA:
+            for i in range(count):
+                # Create the dictionary
+                json_dict = dict()
+                json_dict.update(self.__criterion)
+                json_dict['actions'] = [{
+                    "intent": "mutate_bytes",
+                    "includeHeader": False
+                }]
+                instructions.append(json.dumps({"instructions": [json_dict]}))
+
+        # Perform a byte mutation
+        elif self.fuzz_mode == FuzzMode.BEADS:
+            for i in range(count):
+                # Create the dictionary
+                json_dict = dict()
+                json_dict.update(self.__criterion)
+                json_dict['actions'] = strategy.beads_fuzzer_actions()
+                instructions.append(json.dumps({"instructions": [json_dict]}))
+
         elif self.fuzz_mode == FuzzMode.RULE:
             # Get the budget
             budget_list = self.__get_budget_for_rules(sample_size=count)

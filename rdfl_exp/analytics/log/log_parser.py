@@ -5,7 +5,7 @@ import re
 import shutil
 from typing import List
 
-import rdfl_exp.setup
+from common import app_path
 
 
 class LogParser:
@@ -14,7 +14,7 @@ class LogParser:
     """
 
     def __init__(self):
-        self._cached_log = os.path.join(rdfl_exp.setup.tmp_dir(), "{}_cached_log".format(id(self)))
+        self._cached_log = os.path.join(app_path.tmp_dir(), "{}_cached_log".format(id(self)))
         self._loaded = False
     # End def init
 

@@ -8,12 +8,12 @@ import sys
 import time
 from datetime import datetime
 
-from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
+from rdfl_exp import setup
 from rdfl_exp.drivers import FuzzerDriver
 from rdfl_exp.drivers import MininetDriver
 from rdfl_exp.drivers import OnosDriver
-from rdfl_exp.utils.database import Database as SqlDb
-from rdfl_exp.utils.exit_codes import ExitCode
+from common.utils.database import Database as SqlDb
+from common.utils.exit_codes import ExitCode
 
 # ===== ( Parameters ) =================================================================================================
 
@@ -35,31 +35,6 @@ def initialize():
     else:
         logger.debug("ONOS has been successfully installed.")
 
-    # Connect to the database
-    database_is_init = False
-    if not SqlDb.is_init():
-        logger.info("Initializing the SQL database...")
-        SqlDb.init(CONFIG.mysql.host, CONFIG.mysql.user, CONFIG.mysql.password)
-        logger.debug("The SQL database has been initialized successfully")
-
-    try:
-        if not SqlDb.is_connected():
-            logger.info("Connecting to the SQL database...")
-            SqlDb.connect("control_flow_fuzzer")
-            logger.debug("SQL database connected.")
-        logger.info("Clearing the SQL database...")
-        SqlDb.execute("TRUNCATE fuzzed_of_message")
-        SqlDb.execute("TRUNCATE log_error")
-        SqlDb.commit()
-        logger.debug("SQL database has been cleaned.")
-        database_is_init = True
-    finally:
-        SqlDb.disconnect()
-        if database_is_init is False:
-            logger.error("An issue happened while initializing the database.")
-            return False
-        else:
-            return True
 # End def initialize
 
 
@@ -113,7 +88,7 @@ def terminate():
 # ===== ( Main test function ) =========================================================================================
 
 
-def test(instruction=None, retries=1):
+def test(instruction=None):
     """
     Run the experiment
     :param instruction:
@@ -125,44 +100,9 @@ def test(instruction=None, retries=1):
     if instruction is not None:
         FuzzerDriver.set_instructions(instruction)
 
-    # Get the initial count of the database to be sure that a new data point is generated
-    initial_db_count = count_db_entries()
-    logger.debug("Initial database count = {}".format(initial_db_count))
-
-    # Run the actual test function
-    run_fuzz_test()
-
-    # Verify that a new datapoint has been added
-    # TODO: Remove check for log entries, it is not relevant anymore and the feature will be removed in the fuzzer.
-    db_count = count_db_entries()
-
-    logger.debug("Database count delta = {}".format(db_count - initial_db_count))
-    retry_cnt = 0
-    datapoint_missing = (db_count - initial_db_count) < 1
-    while datapoint_missing is True and retry_cnt < retries:
-        logger.warning("Missing log entry for the experiment. Retrying ({}/{})".format(retry_cnt+1, retries))
-        run_fuzz_test()
-
-        # Count the datapoints
-        db_count = count_db_entries()
-        datapoint_missing = (db_count - initial_db_count) < 1
-        # Increase the retry counter
-        retry_cnt += 1
-
-    if datapoint_missing:
-        logger.error("Couldn't acquire the missing datapoint")
-        return False
-    else:
-        return True
-# End def test
-
-
-# ===== ( Test sub-function ) ==========================================================================================
-
-def run_fuzz_test():
-    """Function that runs the actual test"""
-
     logger.info("Closing all previous instances on control flow fuzzer")
+
+    # TODO: Use the FuzzerDriver instead
     for pid in get_pid("PacketFuzzer.jar"):
         os.kill(pid, signal.SIGKILL)
 
@@ -172,36 +112,17 @@ def run_fuzz_test():
     logger.info("Starting Mininet network")
 
     MininetDriver.start(
-        cmd='mn --controller=remote,ip={},port={},protocols=OpenFlow14 --topo=single,2'.format(CONFIG.onos.host,
-                                                                                               CONFIG.fuzzer.port)
+        cmd='mn --controller=remote,ip={},port={},protocols=OpenFlow14 --topo=single,2'.format(setup.config().onos.host,
+                                                                                               setup.config().fuzzer.port)
     )
 
     logger.info("Executing ping command: h1 -> h2")
     stats = MininetDriver.ping_host(src='h1', dst='h2', count=1, wait_timeout=5)
     logger.trace("Ping results: {}".format(stats.as_dict() if stats is not None else stats))
+    # TODO: Synchronize with fuzzer instead
     time.sleep(5)
 
-    # Check if mininet crashed
-    alive, return_code = MininetDriver.is_alive()
-    if alive is not True and return_code not in (None, ExitCode.EX_OK):
-        logger.info("Mininet has crashed at {}".format(datetime.now()))
-        logger.info("Saving status to the log message database")
-        if not SqlDb.is_connected():
-            SqlDb.connect('control_flow_fuzzer')
-
-        try:
-            # Storing a new log message stating that onos crashed
-            level = "error"
-            message = "*** Mininet has crashed (exit code: {}) ***".format(return_code)
-            SqlDb.execute("INSERT INTO log_error (date, level, message) VALUES (NOW(6), %s, %s)", (level, message))
-            SqlDb.commit()
-
-        except Exception:
-            logger.exception("An exception happened while recording mininet crash:")
-
-        finally:
-            SqlDb.disconnect()
-# End def run_fuzz_test
+# End def test
 
 
 # ===== ( Utility Functions ) ==========================================================================================

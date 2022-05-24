@@ -6,8 +6,8 @@ import subprocess
 from time import sleep
 from typing import Optional
 
-from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
-from rdfl_exp.utils.log import LogPipe
+from rdfl_exp import setup
+from common.utils.log import LogPipe
 
 
 class FuzzerDriver:
@@ -21,7 +21,7 @@ class FuzzerDriver:
     @classmethod
     def set_instructions(cls, instructions: str):
         """Write the usr rules for the fuzzer."""
-        instr_path = os.path.expanduser(CONFIG.fuzzer.instr_path)
+        instr_path = os.path.expanduser(setup.config().fuzzer.instr_path)
 
         cls.__log.info("Writing fuzzer instructions to {}".format(instr_path))
         cls.__log.debug("Instruction to write: {}".format(json.dumps(instructions)))
@@ -40,7 +40,7 @@ class FuzzerDriver:
         cls.__stdout_pipe = LogPipe(logging.DEBUG, __name__ + "PacketFuzzer.jar")
         # noinspection PyTypeChecker
         cls.__handle = subprocess.Popen(
-            ["java", "-jar", os.path.expanduser(CONFIG.fuzzer.jar_path)],
+            ["java", "-jar", os.path.expanduser(setup.config().fuzzer.jar_path)],
             stderr=cls.__stderr_pipe,
             stdout=cls.__stdout_pipe
         )

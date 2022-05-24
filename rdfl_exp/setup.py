@@ -1,67 +1,129 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Configuration module for rdfl_exp
-"""
-
-import getpass
 import logging
 import os
 import pwd
-import tempfile
+from configparser import ConfigParser
 from datetime import datetime
-from os.path import join
+import getpass
 from pathlib import Path
+from typing import Optional
 
 from appdirs import AppDirs
 
-from rdfl_exp.config import DEFAULT_CONFIG as CONFIG
-from rdfl_exp.utils.terminal import Fore, Style
+from common import app_path
+from common.utils.log import add_logging_level
+from common.utils import check_and_rename, str_to_typed_value
+from common.utils.terminal import Fore, Style
 
-# ===== ( Globals ) ============================================================
+# ===== ( Globals definition ) ===========================================================================================
 
-# Load the application directories
-APP_DIRS = AppDirs("rdfl_exp")
-
-# Directories
-OUT_DIR   = os.path.join(APP_DIRS.user_data_dir, "out")    # Path to the output directory
-LOG_TRACE_DIR = join(APP_DIRS.user_data_dir, 'log_trace', datetime.now().strftime("%Y%m%d_%H%M%S"))
-EXP_PATH  = str()                                         # Path to the experiment folder. Defined when running config.init
-
-
-# ===== ( Init ) ===============================================================
-
-def init(force=False):
-    if not hasattr(init, "done"):
-        init.done = False
-
-    if init.done is True and force is True:
-        raise RuntimeError("The configuration initialization should be run only"
-                           "once. Set \"force=True\" should be set to bypass"
-                           "this error")
-
-    _setup_dir_structure()
-    _setup_pid()
-    _setup_logger()
-# End def init
+__FRAMEWORK_NAME__  = "rdfl_exp"
+__APP_NAME__        = "{}-app".format(__FRAMEWORK_NAME__)
+CONFIG              = None
+CONFIG_NAME         = "{}.cfg".format(__APP_NAME__)
+EXP_REF             = ""
 
 
-# ===== ( Functions ) ==========================================================
+# ===== ( Config Section class ) =======================================================================================
 
-def tmp_dir(get_obj=False):
+class ConfigurationSection(object):
+
+    def __init__(self, name, parser):
+        self.__name = name
+        self.__parser = parser
+        self.__cache = dict()
+    # End def __init__
+
+    def __getattr__(self, option):
+        if self.__parser.has_option(self.__name, option):
+            if option not in self.__cache:
+                self.__cache[option] = str_to_typed_value(self.__parser.get(self.__name, option))
+            return self.__cache[option]
+        else:
+            raise KeyError("No option \"{}\" in section: \"{}\"".format(option, self.__name))
+    # End def __getattr__
+
+    def __getitem__(self, option):
+        return self.__getattr__(option)
+    # End def __getitem__
+
+    def __dir__(self):
+        return self.__parser.options(self.__name)
+
+    # End def __getattr__
+# End class ConfigurationSection
+
+
+class Configuration:
     """
-    Returns the path to the experiment temporary directory (or the object) when
-    called. The temporary directory is created on the first call
-
-    :param get_obj: if set to true, the tempfile object will be returned
-    :return: the tmp directory obj if get_obj is true, else, the path to the
-             tmp directory
+    Configuration class that read a configuration file
     """
-    if not hasattr(tmp_dir, "tmp_dir"):
-        tmp_dir.tmp_dir = tempfile.TemporaryDirectory()
 
-    return tmp_dir.tmp_dir if get_obj is True else tmp_dir.tmp_dir.name
-# end def tmp_dir
+    def __init__(self, file_name):
+        self.__file_name = file_name
+        self.__parser = ConfigParser()
+        self.__cache = dict()
+
+        # Read the configuration file
+        self.__parser.read(file_name)
+    # End def init
+
+    def __getattr__(self, section):
+        if self.__parser.has_section(section):
+            if section not in self.__cache:
+                self.__cache[section] = ConfigurationSection(section, self.__parser)
+            return self.__cache[section]
+        else:
+            raise KeyError("No section \"{}\" in config".format(section, self))
+    # End def __getattr__
+
+    def __getitem__(self, key):
+        return self.__getattr__(key)
+    # End def __getitem__
+
+    def __dir__(self):
+        return [k for k in self.__parser.keys() if k != 'DEFAULT']
+
+    def save(self):
+        with open(self.file_name, 'w') as f:
+            self.__parser.write(f)
+        f.close()
+    # End def save
+# End class Config
+
+
+# ===== ( Init ) =======================================================================================================
+
+def init(args=None):
+
+    global CONFIG
+    global EXP_REF
+
+    # Verify that there is a configuration file in the configuration directory
+    config_path = os.path.join(app_path.config_dir(), CONFIG_NAME)
+    if os.path.exists(config_path):
+        CONFIG = Configuration(config_path)
+    else:
+        raise FileNotFoundError(
+            "Couldn't find configuration file \"{}\"  under \"{}\"".format(CONFIG_NAME, config_path))
+
+    # Parse the reference
+    if args is not None and isinstance(args.reference, (str, int, float)):
+        EXP_REF = str(args.reference).strip()
+    else:
+        EXP_REF = datetime.now().strftime("%Y%d%m_%H%M%S")
+    app_path.set_experiment_reference(EXP_REF)
+
+    _configure_pid()
+    _configure_logger()
+# End def make_folder_struct
+
+
+# ===== ( Functions ) ==================================================================================================
+
+def config() -> Optional[Configuration]:
+    return CONFIG
+# End def config
 
 
 def get_user():
@@ -99,91 +161,27 @@ def get_user():
     return user
 # End def get_user
 
+
+def pid_path():
+    """Returns the path to the pid file."""
+    return os.path.join(app_path.run_dir(), "{}.pid".format(__APP_NAME__))
+# Emd def pid_path
+
+
 # ===== ( Private config functions ) ===========================================
 
-
-def _setup_dir_structure():
-    """
-    Check the availability of the run folder.
-    """
-    global OUT_DIR
-    global EXP_PATH
-
-    # Check if the user data directory exists
-    if not os.path.exists(APP_DIRS.user_data_dir):
-        try:
-            # Data path
-            Path(APP_DIRS.user_data_dir).mkdir(parents=True, exist_ok=True)
-            # output directory
-            Path(OUT_DIR).mkdir(parents=True, exist_ok=True)
-        except Exception:
-            raise SystemExit(
-                Fore.RED + Style.BOLD + "Error" + Style.RESET
-                + ": Cannot create user data directory at \"{}\". ".format(APP_DIRS.user_data_dir)
-            )
-
-    # TODO: refactor this whole module
-    Path(LOG_TRACE_DIR).mkdir(parents=True, exist_ok=True)
-
-    # Check if the user cache directory exits and if the run directory exists as well
-    if not os.path.exists(APP_DIRS.user_cache_dir):
-        try:
-            # cache directory
-            Path(APP_DIRS.user_cache_dir).mkdir(parents=True, exist_ok=True)
-            # log directory
-            Path(APP_DIRS.user_log_dir).mkdir(parents=True, exist_ok=True)
-        except Exception:
-            raise SystemExit(
-                Fore.RED + Style.BOLD + "Error" + Style.RESET
-                + ": Cannot create directories at \"{}\". ".format(APP_DIRS.user_cache_dir)
-                + "Please verify the script got root permissions"
-            )
-
-    # Then check if the out folder exists
-    if not os.path.exists(OUT_DIR):
-        try:
-            Path(OUT_DIR).mkdir(parents=True, exist_ok=True)
-        except Exception:
-            raise SystemExit(
-                Fore.RED + Style.BOLD + "Error" + Style.RESET
-                + ": Cannot create output directory at \"{}\". ".format(OUT_DIR)
-            )
-
-    # Then check if the log folder exists
-    if not os.path.exists(APP_DIRS.user_log_dir):
-        try:
-            Path(APP_DIRS.user_log_dir).mkdir(parents=True, exist_ok=True)
-        except Exception:
-            raise SystemExit(
-                Fore.RED + Style.BOLD + "Error" + Style.RESET
-                + ": Cannot create log directory at \"{}\". ".format(APP_DIRS.user_log_dir)
-            )
-
-    # Create the folder for the current experiment
-    EXP_PATH = join(OUT_DIR, datetime.now().strftime("%Y%m%d_%H%M%S"))
-    if not os.path.exists(EXP_PATH):
-        try:
-            Path(join(EXP_PATH, "datasets")).mkdir(parents=True, exist_ok=True)
-        except Exception:
-            raise SystemExit(
-                Fore.RED + Style.BOLD + "Error" + Style.RESET
-                + ": Cannot create experience directory under {}.".format(EXP_PATH)
-            )
-# End def setup_directories
-
-
-def _setup_pid():
+def _configure_pid():
     """
     Check the presence of a pid file and verify if another experiment isn't
     running.
     """
 
-    pid_filepath = os.path.join(APP_DIRS.user_cache_dir, "rdfl_exp.pid")
+    pid_file = os.path.join(app_path.run_dir(), "{}.pid".format(__APP_NAME__))
 
-    if os.path.isfile(pid_filepath):
+    if os.path.isfile(pid_file):
         # There is a PID
-        with open(pid_filepath, 'r') as pid_file:
-            pid = int(pid_file.readline().rstrip())
+        with open(pid_file, 'r') as pf:
+            pid = int(pf.readline().rstrip())
 
         # If the pid is different, we exit the system and notify the user
         if pid != os.getpid():
@@ -207,26 +205,39 @@ def _setup_pid():
                       + "process: {}.\n".format(pid)
                       + "Overwriting old pid_file.")
 
-                os.remove(pid_filepath)
+                os.remove(pid_file)
 
     # If there is no pid we create one for this program
-    with open(pid_filepath, 'w') as pid_file:
-        pid_file.write(str(os.getpid()))
+    with open(pid_file, 'w') as pf:
+        pf.write(str(os.getpid()))
 # End def +_setup_pid
 
 
-def _setup_logger():
+def _configure_logger():
+
+    global EXP_REF
+
+    # Add the trace level
+    add_logging_level(level_name='TRACE', level_num=logging.DEBUG-5)
+
     # Remove all handlers associated with the root logger object.
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
 
     # Write the header into the new log file
-    log_file = os.path.join(APP_DIRS.user_log_dir, CONFIG.logging.filename)
+    try:
+        prefix = "{}-".format(config().logging.file_prefix)
+    except KeyError:
+        prefix = ''
+
+    log_file = os.path.join(app_path.log_dir(), "{}{}.log".format(prefix, EXP_REF))
+
     with open(log_file, 'w') as f:
         header = "\n".join([
             "############################################################################################################",
-            "App Name   : {}".format("RDFL_EXP v0.2.0"),
+            "App Name   : {}".format("RDFL_EXP v0.3.0"),
             "PID        : {}".format(os.getpid()),
+            "Reference  : {}".format(EXP_REF),
             "Start Date : {}".format(datetime.now()),
             "============================================================================================================\n"
         ])
@@ -240,12 +251,12 @@ def _setup_logger():
         'WARN'  : logging.WARNING,
         'ERROR' : logging.ERROR
     }
-    level = level_d.get(CONFIG.logging.level, logging.INFO)
+    level = level_d.get(config().logging.level, logging.INFO)
     logging.basicConfig(
         filename=log_file,
         filemode='a',  # Use append affix to not overwrite the header
         format='%(asctime)s,%(msecs)d | %(name)s | %(levelname)s | %(message)s',
-        datefmt='%H:%M:%S',
+        datefmt='%Y-%m-%d %H:%M:%S',
         level=level
     )
 # End def _setup_logger

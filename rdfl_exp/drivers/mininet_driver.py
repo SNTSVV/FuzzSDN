@@ -8,7 +8,7 @@ import pexpect
 
 from rdfl_exp.analytics.ping_stats import PingStats
 from rdfl_exp.drivers.commons import sudo_expect
-from rdfl_exp.utils.exit_codes import ExitCode
+from common.utils.exit_codes import ExitCode
 
 MININET_PROMPT = "mininet>"
 
@@ -136,20 +136,20 @@ class MininetDriver:
 
                     elif i == 2:
                         cls.__log.error("No such file or directory.")
-                        cls.__log.debug(child.before + child.after)
+                        cls.__log.debug("Before: \"{}\" - After: \"{}\"".format(child.before, child.after))
                         return False
 
                     elif i == 3:
                         cls.__log.error("Connection timeout")
-                        cls.__log.debug(child.before + child.after)
+                        cls.__log.debug("Before: \"{}\" - After: \"{}\"".format(child.before, child.after))
                         return False
 
                     elif i == 4:  # timeout
                         cls.__log.error("Something took too long... ")
-                        cls.__log.debug(child.before + child.after)
+                        cls.__log.debug("Before: \"{}\" - After: \"{}\"".format(child.before, child.after))
                         return False
             else:
-                cls.__log.warning("Trying to connect to Miniet while it's already connected")
+                cls.__log.warning("Trying to connect to Mininet while it's already connected")
                 return True
         except pexpect.TIMEOUT:
             cls.__log.exception("TIMEOUT exception found while starting Mininet")
