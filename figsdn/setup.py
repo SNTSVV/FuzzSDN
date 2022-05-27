@@ -236,9 +236,9 @@ def _configure_logger():
     with open(log_file, 'w') as f:
         header = "\n".join([
             "#"*100,
-            "App Name   : {}".format("RDFL_EXP v{}").format(__VERSION__),
+            "App Name   : {}".format("{} v{}").format(__FRAMEWORK_NAME__.upper(), __VERSION__),
             "PID        : {}".format(os.getpid()),
-            "Reference  : {}".format(EXP_REF),
+            "Exp Ref    : {}".format(EXP_REF),
             "Start Date : {}".format(datetime.now()),
             "="*100
         ])

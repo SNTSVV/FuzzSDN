@@ -144,6 +144,8 @@ def exp_dir(sub: Optional[str] = None) -> Optional[str]:
 
 
 def state_dir():
+    """Path file to the local state directory."""
+
     if _SYSTEM in ('win32', 'darwin'):
         path = _APP_DIR.user_data_dir
     else:
@@ -158,6 +160,7 @@ def state_dir():
 
 
 def log_dir():
+    """Path file to the local log directory."""
 
     # MAC OSX
     if _SYSTEM in ("darwin", "win32"):
@@ -168,4 +171,15 @@ def log_dir():
     if not os.path.exists(path):
         Path(path).mkdir(exist_ok=True, parents=True)
     return path
-# End def _log_dir
+# End def log_dir
+
+
+def report_dir(sub: Optional[str] = None) -> Optional[str]:
+    """Path file to the local report directory."""
+
+    root = os.path.join(data_dir(), 'report')
+    if not os.path.exists(root):
+        Path(root).mkdir(exist_ok=True, parents=True)
+
+    return root
+# End def report_dir
