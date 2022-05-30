@@ -99,8 +99,8 @@ class Stats:
 
         for class_ in (target_class, other_class):
             if model is not None and class_ in model.info.classes:
-                cls._stats['learning'][class_]['num_tp']    += [model.info.num_fp[class_]]
-                cls._stats['learning'][class_]['num_fp']    += [model.info.num_tp[class_]]
+                cls._stats['learning'][class_]['num_tp']    += [model.info.num_tp[class_]]
+                cls._stats['learning'][class_]['num_fp']    += [model.info.num_fp[class_]]
                 cls._stats['learning'][class_]['num_tn']    += [model.info.num_tn[class_]]
                 cls._stats['learning'][class_]['num_fn']    += [model.info.num_fn[class_]]
                 cls._stats['learning'][class_]['precision'] += [model.info.precision[class_]]
