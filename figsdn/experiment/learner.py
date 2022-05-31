@@ -335,18 +335,23 @@ class Learner:
 
     @filter.setter
     def filter(self, filter_):
-        self._filter_full = copy(filter_)
-        pp_split = filter_.split(',')
-        self._filter_hp = None
-        self._filter = pp_split[0].upper()
-        self.log.debug("preprocess_strategy set to \"{}\"".format(filter_))
+        if filter_ is not None:
+            self._filter_full = copy(filter_)
+            pp_split = filter_.split(',')
+            self._filter_hp = None
+            self._filter = pp_split[0].upper()
+            self.log.debug("preprocess_strategy set to \"{}\"".format(filter_))
 
-        # parse the hyper-parameters
-        if len(pp_split) > 1:
-            self._filter_hp = dict()
-            for param in pp_split[1:]:
-                key, value = param.split('=')
-                self._filter_hp[key.strip()] = str_to_typed_value(value.strip())
+            # parse the hyper-parameters
+            if len(pp_split) > 1:
+                self._filter_hp = dict()
+                for param in pp_split[1:]:
+                    key, value = param.split('=')
+                    self._filter_hp[key.strip()] = str_to_typed_value(value.strip())
+        else:
+            self._filter        = None
+            self._filter_hp     = None
+            self._filter_full   = None
     # End def filter.setter
 
     # ===== ( Getters ) ================================================================================================

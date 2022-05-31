@@ -15,13 +15,12 @@ from common.utils import str_to_typed_value
 from common.utils.log import add_logging_level
 from common.utils.terminal import Fore, Style
 
+from figsdn import __version__, __framework__
+
 # ===== ( Globals definition ) ===========================================================================================
 
-__FRAMEWORK_NAME__  = "figsdn"
-__VERSION__         = "0.4.0"
-
 CONFIG              = None
-CONFIG_NAME         = "{}.cfg".format(__FRAMEWORK_NAME__)
+CONFIG_NAME         = "{}.cfg".format(__framework__)
 EXP_REF             = ""
 
 
@@ -165,7 +164,7 @@ def get_user():
 
 def pid_path():
     """Returns the path to the pid file."""
-    return os.path.join(app_path.run_dir(), "{}.pid".format(__FRAMEWORK_NAME__))
+    return os.path.join(app_path.run_dir(), "{}.pid".format(__framework__))
 # Emd def pid_path
 
 
@@ -177,7 +176,7 @@ def _configure_pid():
     running.
     """
 
-    pid_file = os.path.join(app_path.run_dir(), "{}.pid".format(__FRAMEWORK_NAME__))
+    pid_file = os.path.join(app_path.run_dir(), "{}.pid".format(__framework__))
 
     if os.path.isfile(pid_file):
         # There is a PID
@@ -236,7 +235,7 @@ def _configure_logger():
     with open(log_file, 'w') as f:
         header = "\n".join([
             "#"*100,
-            "App Name   : {}".format("{} v{}").format(__FRAMEWORK_NAME__.upper(), __VERSION__),
+            "App Name   : {}".format("{} v{}").format(__framework__.upper(), __version__),
             "PID        : {}".format(os.getpid()),
             "Exp Ref    : {}".format(EXP_REF),
             "Start Date : {}".format(datetime.now()),

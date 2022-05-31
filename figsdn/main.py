@@ -32,8 +32,6 @@ from common.utils.terminal import Style
 
 # ===== ( locals ) =====================================================================================================
 
-__FRAMEWORK_NAME__ = "figsdn"
-
 _log = logging.getLogger(__name__)
 _is_init = False
 _crashed = False
