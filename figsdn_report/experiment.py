@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from os import listdir
 from os.path import isfile, join
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -248,7 +249,7 @@ def _create_folder_structure(exp):
 
     # Create the file dictionary:
     paths = {
-        'root'      : app_path.report_dir(),
+        'root'      : exp_root_dir,
         'data'      : exp_data_dir,
         'models'    : exp_model_dir,
         'graphs'    : exp_graph_dir,
@@ -275,24 +276,44 @@ def _generate_confusion_matrices(stats: dict, local_path):
     # TODO: Parallelize the process
     target_class = stats["context"]["target_class"]
     other_class = stats["context"]["other_class"]
-
+    params_map = []
     for i in range(stats["context"]["iterations"]):
+        params_map.append({
+            'it': i,
+            'data': 'learning',
+            'target': target_class,
+            'other': other_class,
+            'title': "Confusion Matrix - Iteration {}".format(i),
+            'path': os.path.join(local_path['cms'], 'cm_it_{}.png'.format(i))
+        })
 
-        plt.clf()
+        if 'test_evl' in stats:
+            params_map.append({
+                'it': i,
+                'data': 'test_evl',
+                'target': target_class,
+                'other': other_class,
+                'title': "Confusion Matrix - Re-evaluation - Iteration {}".format(i),
+                'path': os.path.join(local_path['cms'], 'cm_it_{}_reeval.png'.format(i))
+            })
+
+    def plot_cms(args):
+
+        fig, ax = plt.subplots(1, 1, figsize=(10, 9), dpi=96)
+        args = SimpleNamespace(**args)
 
         # Generate the heat map arrays
-
-        tp = stats['learning'][target_class]["num_tp"][i]
-        fp = stats['learning'][target_class]["num_fp"][i]
-        tn = stats['learning'][target_class]["num_tn"][i]
-        fn = stats['learning'][target_class]["num_fn"][i]
+        tp = stats[args.data][args.target]["num_tp"][args.it]
+        fp = stats[args.data][args.target]["num_fp"][args.it]
+        tn = stats[args.data][args.target]["num_tn"][args.it]
+        fn = stats[args.data][args.target]["num_fn"][args.it]
         tp = 0 if tp is None else tp
         fp = 0 if fp is None else fp
         tn = 0 if tn is None else tn
         fn = 0 if fn is None else fn
 
         array = [[tp, fp],
-                 [tn, fn]]
+                 [fn, tn]]
 
         df_cm = pd.DataFrame(array, range(2), range(2))
 
@@ -301,18 +322,39 @@ def _generate_confusion_matrices(stats: dict, local_path):
         svm = sn.heatmap(
             df_cm,
             annot=True,
+            fmt='d',
             annot_kws={"size": 16},
-            xticklabels=[target_class, other_class],
-            yticklabels=[target_class, other_class]
+            xticklabels=[args.target, args.other],
+            yticklabels=[args.target, args.other]
         )
 
-        plt.title("confusion matrix iteration {}".format(i))
-        plt.xlabel("predicted")
-        plt.ylabel("actual")
+        ax.set_title(args.title)
+        ax.set_xlabel("True Class")
+        ax.set_ylabel("Predicted Class")
 
         # Save the figure
-        fig = svm.get_figure()
-        fig.savefig(os.path.join(local_path['cms'], 'cm_it_{}.png'.format(i)))
+        fig.savefig(args.path)
+        plt.close(fig)
+    # End def plot_cms
+
+    # Perform the plotting
+    count = 0
+    progress_bar(
+        iteration=count,
+        total=len(params_map),
+        prefix='Progress',
+        suffix='Complete {}/{}'.format(count, len(params_map))
+    )
+    for p in params_map:
+        plot_cms(p)
+        count += 1
+        progress_bar(
+            iteration=count,
+            total=len(params_map),
+            prefix='\rProgress',
+            suffix='Complete {}/{}'.format(count, len(params_map)),
+            print_end=""
+        )
 # End def _generate_confusion_matrices
 
 
@@ -357,6 +399,7 @@ def _generate_graphics(stats: dict, local_path, show: bool = False):
     if show is True:
         plt.show()
     fig.savefig(os.path.join(local_path['graphs'], 'nb_rules_graph.png'))
+    plt.close(fig)
 
     # ===== 2nd Graph: Accuracy ========================================================================================
 
@@ -378,6 +421,7 @@ def _generate_graphics(stats: dict, local_path, show: bool = False):
     if show is True:
         plt.show()
     fig.savefig(os.path.join(local_path['graphs'], 'accuracy_graph.png'))
+    plt.close(fig)
 
     # ===== 3rd Graph TP/FP rate for target_class, TP/FP rate for other class ==========================================
 
@@ -421,6 +465,7 @@ def _generate_graphics(stats: dict, local_path, show: bool = False):
     if show is True:
         plt.show()
     fig.savefig(os.path.join(local_path['graphs'], 'tp_fp_rate_graph.png'))
+    plt.close(fig)
 
     # ===== 4th graph: Precision =======================================================================================
 
@@ -453,6 +498,7 @@ def _generate_graphics(stats: dict, local_path, show: bool = False):
     if show is True:
         plt.show()
     fig.savefig(os.path.join(local_path['graphs'], 'precision_graph.png'))
+    plt.close(fig)
 
     # ===== 5th graph: Recall ==========================================================================================
 
@@ -484,6 +530,7 @@ def _generate_graphics(stats: dict, local_path, show: bool = False):
     if show is True:
         plt.show()
     fig.savefig(os.path.join(local_path['graphs'], 'recall_graph.png'))
+    plt.close(fig)
 
     # ===== 6th graph: F1-Score ========================================================================================
 
@@ -512,6 +559,7 @@ def _generate_graphics(stats: dict, local_path, show: bool = False):
     if show is True:
         plt.show()
     fig.savefig(os.path.join(local_path['graphs'], 'f1_graph.png'))
+    plt.close(fig)
 
     # ===== 7th graph: Area under ROC ==================================================================================
 
@@ -532,6 +580,7 @@ def _generate_graphics(stats: dict, local_path, show: bool = False):
     if show is True:
         plt.show()
     fig.savefig(os.path.join(local_path['graphs'], 'auc_roc_graph.png'))
+    plt.close(fig)
 
     # ===== 8th graph: Area under PRC ==================================================================================
 
@@ -556,6 +605,7 @@ def _generate_graphics(stats: dict, local_path, show: bool = False):
     if show is True:
         plt.show()
     fig.savefig(os.path.join(local_path['graphs'], 'auc_prc_graph.png'))
+    plt.close(fig)
 
     # ===== 9th graph: MCC =============================================================================================
 
@@ -580,6 +630,7 @@ def _generate_graphics(stats: dict, local_path, show: bool = False):
     if show is True:
         plt.show()
     fig.savefig(os.path.join(local_path['graphs'], 'mcc_graph.png'))
+    plt.close(fig)
 
     # ===== 10th graph: ratio of class and other class instances =======================================================
 
@@ -602,6 +653,7 @@ def _generate_graphics(stats: dict, local_path, show: bool = False):
         if show is True:
             plt.show()
         fig.savefig(os.path.join(local_path['graphs'], 'imbalance_graph.png'))
+        plt.close(fig)
 
     # ===== 11th graph: Geometric Diversity ==================================================================
 
@@ -623,6 +675,7 @@ def _generate_graphics(stats: dict, local_path, show: bool = False):
         if show is True:
             plt.show()
         fig.savefig(os.path.join(local_path['graphs'], 'gd_score_graph.png'))
+        plt.close(fig)
 
     # ===== 12th graph: N1 Score ==================================================================
 
@@ -644,6 +697,7 @@ def _generate_graphics(stats: dict, local_path, show: bool = False):
         if show is True:
             plt.show()
         fig.savefig(os.path.join(local_path['graphs'], 'n1_score_graph.png'))
+        plt.close(fig)
 
     # ===== 13th graph: Standard Deviation =============================================================================
 
@@ -665,6 +719,7 @@ def _generate_graphics(stats: dict, local_path, show: bool = False):
         if show is True:
             plt.show()
         fig.savefig(os.path.join(local_path['graphs'], 'std_graph.png'))
+        plt.close(fig)
 # End def _generate_graphics
 
 
