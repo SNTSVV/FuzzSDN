@@ -3,7 +3,6 @@
 """
 Main script for figsdn-report
 """
-
 import logging
 import os
 import sys
@@ -11,6 +10,7 @@ import traceback
 from typing import Iterable, Optional
 
 from tabulate import tabulate
+from weka.core import jvm
 
 from common import app_path
 from common.utils import terminal
@@ -189,14 +189,74 @@ def main(args: Optional[Iterable] = None):
 
         # Fetch the experiment
         print("Fetching experiment \"{}\" at {}@{}:{}".format(expt_to_fetch, user, hostname, port))
-        experiment.fetch(
+
+        paths = experiment.create_folder_structure(expt_to_fetch)
+
+        # Fetch the experiment files
+        experiment.fetch_files(
             hostname=hostname,
             port=port,
             username=user,
             password=password,
-            expt=expt_to_fetch,
-            debug=True
+            experiment=expt_to_fetch,
+            ignore_existing=args.ignore_existing,
+            quiet=False
         )
+
+        if args.test_on_data is not None:
+            try:
+                jvm.start(packages=True)
+                experiment.reevaluate_against_test_data(expt_to_fetch, args.test_on_data)
+            finally:
+                jvm.stop()
+
+        # Calculate the prediction accuracy of the rules
+        experiment.calculate_generation_accuracy_per_rule(expt_to_fetch)
+
+        # Calculate the metrics on data for the experiments
+        experiment.calculate_metrics(
+            expt_to_fetch,
+            compute_n1=False,
+            compute_ir=True,
+            compute_density=False,
+            compute_gd=True,
+            compute_std=True
+        )
+
+        # Create the report
+        print("Generating the report")
+        experiment.generate_report(expt_to_fetch)
+
+        # Create the graph
+        print("Generating the graphs")
+        experiment.generate_graphics(expt_to_fetch)
+
+        # Create the confusion matrices
+        print("Generating the confusion matrices")
+        experiment.generate_confusion_matrices(expt_to_fetch)
+
+        # Print the information about the last experiment
+        expt_info = experiment.get_info(expt_to_fetch)
+        target_class = expt_info["context"]["target_class"]
+
+        print("Results at last iteration for {}:".format(target_class))
+        print(
+            "\t Precision: {}{}".format(
+                expt_info['learning'][target_class]['precision'][-1],
+                ' ({})'.format(expt_info['test_evl'][target_class]['precision'][-1] if 'test_evl' in expt_info else '')
+            )
+        )
+        print(
+            "\t Recall: {}{}".format(
+                expt_info['learning'][target_class]['recall'][-1],
+                ' ({})'.format(expt_info['test_evl'][target_class]['recall'][-1] if 'test_evl' in expt_info else '')
+            )
+        )
+
+        print("\t Geometric diversity: {}".format(expt_info['data']['geometric_diversity'][-1]))
+        print("\t Imbalance Ratio: {}".format(expt_info['data']['imbalance'][-1]))
+
+        print("Done")
 
 # End def main
 

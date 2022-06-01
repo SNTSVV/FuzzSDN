@@ -1,9 +1,13 @@
 # -*- coding: utf-8 -*-
 """
+Module used to parse the arguments of figsdn-report
 """
+
 import argparse
 from typing import Iterable, Optional
 
+from figsdn import __version__ as __figsdn_version__, __app_name__ as __figsdn_name__
+from figsdn_report import __version__, __app_name__
 from common.utils.str_enum import StrEnum
 
 
@@ -40,14 +44,20 @@ def parse(args: Optional[Iterable]):
         action='store_true',
     )
 
+    parser.add_argument(
+        '--version',
+        action='version',
+        version='{} {} (from {} {})'.format(__app_name__, __version__, __figsdn_name__, __figsdn_version__)
+    )
+
     # ===== ( Positional arguments ) =========
 
     command_parser = parser.add_subparsers(
         title='command',
         dest='command',
+        required=True,
         metavar='COMMAND',
-        help="Command to be executed. "
-             "Available commands are: {}".format(', '.join("\'{}\'".format(e) for e in Command.all()))
+        help="Command to be executed."
     )
 
     # ==== ( Args for command LIST_NODES ) =========
@@ -61,7 +71,7 @@ def parse(args: Optional[Iterable]):
         '--show-pass',
         action='store_true',
         dest='show_pass',
-        help="If arg '--list-known-node' is used, display the passwords in the console.",
+        help="Display the passwords of the saved nodes in the console.",
         required=False
     )
 
@@ -69,42 +79,47 @@ def parse(args: Optional[Iterable]):
 
     list_expt_cmd = command_parser.add_parser(
         name=Command.LIST_EXPT,
-        help='List all the expt in a file'
+        help='List all the experiments in on a node.'
     )
 
     # Fetch the results from a remote node
     list_expt_cmd.add_argument(
         'node',
         nargs='?',
-        help="Fetch the experiment information from a remote node.",
+        help="Node to fetch the experiment from. Optional, default to local.",
         type=str,
     )
 
     list_expt_cmd.add_argument(
         '-s',
         '--ssh-port',
+        metavar='port',
         action='store',
         default=22,  # Default ssh port on most machines
         dest="rport",
         type=int,
-        required=False
+        required=False,
+        help="Port used for SSH operations."
     )
 
     # User
     list_expt_cmd.add_argument(
         '-u',
         '--user',
+        metavar='user',
         action='store',
         default=None,
         dest="ruser",
         type=str,
-        required=False
+        required=False,
+        help="User for SSH operations."
     )
 
     # Password
     list_expt_cmd.add_argument(
         '-p',
         '--password',
+        metavar="pwd",
         type=str,
         default=None,
         dest='rpwd',
@@ -156,8 +171,7 @@ def parse(args: Optional[Iterable]):
         '--overwrite',
         action='store_true',
         dest='overwrite',
-        help="If used with command '{}', overwrites the "
-             "information of a previous node if it exists.".format(Command.ADD_NODE)
+        help="Overwrites the information of a previous node if it exists."
     )
 
     # ==== ( Args for command RMV_NODE ) =========
@@ -170,7 +184,7 @@ def parse(args: Optional[Iterable]):
     # Fetch the results from a remote node
     rmv_node_cmd.add_argument(
         'node',
-        help="Either the name of the node, hostname or 'all'. all argument remove all the nodes",
+        help="Saved node to remove. Accepted values are either the name of the node, its hostname or 'all'.",
         type=str,
     )
 
@@ -193,6 +207,22 @@ def parse(args: Optional[Iterable]):
         'expt',
         help="Name of the experiment to fetch",
         type=str,
+    )
+
+    # Force to tool fetch again the already downloaded experiments
+    get_expt_cmd.add_argument(
+        '--ignore-existing',
+        action='store_true',
+        dest='ignore_existing',
+        help="Skip updating the datasets and models files that have already been downloaded beforehand."
+    )
+
+    get_expt_cmd.add_argument(
+        '-t',
+        '--test-on-data',
+        dest='test_on_data',
+        default=None,
+        help="If a test to perform is added to the list,"
     )
 
     get_expt_cmd.add_argument(

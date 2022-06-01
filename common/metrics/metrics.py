@@ -5,7 +5,7 @@ Module used to calculate various metrics.
 
 from collections import Counter
 from copy import copy
-from typing import Optional
+from typing import Iterable, Optional
 
 import gower
 import numpy as np
@@ -15,7 +15,7 @@ from common.metrics import graph
 from common.metrics.mst import mst
 
 
-def fraction_of_borderline_points(X : np.ndarray, y : np.ndarray, cat_features : Optional[list[bool]] = None) -> float:
+def fraction_of_borderline_points(X : np.ndarray, y : np.ndarray, cat_features : Optional[Iterable[bool]] = None) -> float:
     """
     Calculate Fraction of Borderline Points (N1) score of a dataset.
 
