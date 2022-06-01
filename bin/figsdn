@@ -4,7 +4,7 @@
 import os
 
 # Local dependencies
-from figsdn import main
+from figsdn import app
 from common.utils.terminal import Fore, Style
 
 
@@ -17,4 +17,4 @@ if __name__ == '__main__':
         raise SystemExit(Fore.RED + Style.BOLD + "Error" + Style.RESET
                          + ": This program must not be run with root permissions."
                          + " Try again without using \"sudo\".")
-    main.main()
+    app.main()
