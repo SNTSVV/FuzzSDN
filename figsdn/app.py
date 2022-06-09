@@ -16,19 +16,20 @@ from importlib import resources
 from os.path import join
 from typing import Optional
 
+from scipy.stats import rankdata
 from weka.core import jvm, packages
 
 import common.utils.exit_codes
 from common import app_path
+from common.utils import csv_ops, time_parse, utils
+from common.utils.database import Database as SqlDb
+from common.utils.exit_codes import ExitCode
+from common.utils.terminal import Style
 from figsdn import setup
 from figsdn.drivers import FuzzerDriver, OnosDriver, RyuDriver
 from figsdn.experiment import Analyzer, Experimenter, FuzzMode, Learner, Model, RuleSet
 from figsdn.resources import scenarios
 from figsdn.stats import Stats
-from common.utils import csv_ops, time_parse, utils
-from common.utils.database import Database as SqlDb
-from common.utils.exit_codes import ExitCode
-from common.utils.terminal import Style
 
 # ===== ( locals ) =====================================================================================================
 
@@ -469,21 +470,17 @@ def run() -> None:
             recall = 0.0 if math.isnan(recall) else recall
             precision = 0.0 if math.isnan(precision) else precision
 
-            # Budget calculation
+            # budget calculation
             data_size   = learner.get_instances_count()
-            all_cnt     = data_size['all']
-            target_cnt  = data_size[_context['target_class']]
-            class_ratio = target_cnt / all_cnt
 
-            s_target    = min(0.5 * (all_cnt + _context['nb_of_samples']) - class_ratio * all_cnt, _context['nb_of_samples'])
-            s_other     = max(_context['nb_of_samples'] - s_target, 0)
-
-            for i in range(len(ml_model.ruleset)):
-                confidence = ml_model.ruleset.confidence(i, relative=True, relative_to_class=True)
-                if ml_model.ruleset[i].get_class() == _context['target_class']:
-                    ml_model.ruleset[i].set_budget(confidence * s_target / _context['nb_of_samples'])
-                else:  # other_class
-                    ml_model.ruleset[i].set_budget(confidence * s_other / _context['nb_of_samples'])
+            calculate_budget(
+                data_size=data_size['all'],
+                samples=_context['nb_of_samples'],
+                target=_context['target_class'],
+                target_count=data_size[_context['target_class']],
+                ruleset=ml_model.ruleset,
+                method='rank'  # TODO: add argument to change method
+            )
 
         else:
             precision = 0.0
@@ -492,7 +489,7 @@ def run() -> None:
         # End of iteration total time
         end_of_it = time.time()
 
-        # Update the timing statistics and classifier statistics statistics and save the statistics
+        # Update the timing statistics and classifier statistics and save them to a file
         Stats.add_iteration_statistics(
             learning_time=end_of_ml - start_of_ml,
             iteration_time=end_of_it - start_of_it,
@@ -515,7 +512,76 @@ def run() -> None:
 # End def run
 
 
-# ===== ( Cleanup function ) ===============================================================================================
+def calculate_budget(data_size, samples, target, target_count, ruleset, method='rank'):
+    """"""
+    # TODO: Move this calculation to the experimenter
+    if method not in ('rank', 'relative'):
+        raise ValueError("Unknown method '{}'".format(method))
+
+    # Calculate the constants used in all methods
+    class_ratio = target_count / data_size if target_count <= (data_size / 2) else (data_size - target_count)/data_size
+    s_min = min(0.5 * (data_size + samples) - class_ratio * data_size, samples)
+    s_maj = max(samples - s_min, 0)
+
+    if method == 'rank':
+        rule_cnt = len(ruleset)
+        rule_info = list()
+        budgets = list()
+
+        for i in range(rule_cnt):
+            rule_info.append({
+                "num"   : i,
+                "cls"   : ruleset.rules[i].class_,
+                "conf"  : ruleset.confidence(i, relative=True, relative_to_class=True),
+                "sup"   : ruleset.support(i)
+            })
+
+        # Separate the two class in two different groups
+        tgt_rules = [r for r in rule_info if r['cls'] == target]
+        oth_rules = [r for r in rule_info if r['cls'] != target]
+
+        # Perform the budget calculation on both the rules for the target class and the other classes
+        for rules in (tgt_rules, oth_rules):
+            # Rank the rules based on their support
+            ranks = list(rankdata([r['sup'] for r in rules], method='max'))
+            rank_sum = sum(ranks)
+
+            # Calculate the budget according to the rank and the relative confidence
+            bgts = [(ranks[i] / rank_sum) * rules[i]['conf'] for i in range(len(rules))]
+            # Normalize the budget so their sum is equal to 1
+            bgts = [b / sum(bgts) for b in bgts]
+            # Multiply the budgets by either
+            for i in range(len(rules)):
+                if rules[i]['cls'] == target:
+                    if target_count <= (data_size / 2):
+                        b = bgts[i] * s_min
+                    else:
+                        b = bgts[i] * s_maj
+                else:
+                    if target_count <= (data_size / 2):
+                        b = bgts[i] * s_maj
+                    else:
+                        b = bgts[i] * s_min
+                # Add the budgets to the list
+                budgets.append((rules[i]['num'], b))
+
+        # Assign the budgets to the corresponding rules
+        for i, budget in budgets:
+            ruleset[i].set_budget(budget)
+
+    if method == 'relative':
+
+        for i in range(len(ruleset)):
+            confidence = ruleset.confidence(i, relative=True, relative_to_class=True)
+            if ruleset[i].get_class() == _context['target_class']:
+                ruleset[i].set_budget(confidence * s_min / samples)
+
+            else:  # other_class
+                ruleset[i].set_budget(confidence * s_maj / samples)
+# End def calculate_budget
+
+
+# ===== ( Cleanup function ) ===========================================================================================
 
 def cleanup(*args):
     """

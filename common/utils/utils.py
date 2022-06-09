@@ -61,8 +61,6 @@ def dict_replace(obj: dict, old, new) -> dict:
             v = new
         x[k] = v
     return x
-
-
 # End def dict_replace
 
 
@@ -87,6 +85,14 @@ def list_replace(obj: list, old, new) -> list:
     return x
 # End def list_replace
 
+
+def normalize(arr):
+    """Normalize an iterable"""
+
+    xmin = min(arr)
+    xmax = max(arr)
+    return [(x - xmin)/(xmax - xmin) for x in arr]
+# End def normalize
 
 # ===== ( Files ) ======================================================================================================
 

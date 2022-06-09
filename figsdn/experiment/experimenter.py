@@ -5,7 +5,7 @@ import importlib.util
 import json
 import logging
 import re
-from enum import Enum
+from enum import Enum, auto
 from importlib import resources
 from timeit import default_timer as timer
 from typing import Optional, Union, Tuple
@@ -17,11 +17,12 @@ from figsdn.experiment import Analyzer, CTX_PKT_IN_tmp, RuleSet, strategy
 from common.utils.terminal import progress_bar
 
 
+# noinspection PyArgumentList
 class FuzzMode(Enum):
-    RANDOM      = 0,
-    RULE        = 1,
-    DELTA       = 2,
-    BEADS       = 3
+    RANDOM      = auto(),
+    RULE        = auto(),
+    DELTA       = auto(),
+    BEADS       = auto()
 # End class FuzzMode
 
 
@@ -328,7 +329,7 @@ class Experimenter:
 
         elif self.fuzz_mode == FuzzMode.RULE:
             # Get the budget
-            budget_list = self.__get_budget_for_rules(sample_size=count)
+            budget_list = self.__get_budget_for_rules()
 
             for i in range(len(budget_list)):
                 # Create the action for the rule i
@@ -354,8 +355,8 @@ class Experimenter:
         return instructions
     # End def __build_fuzzer_action
 
-    def __get_budget_for_rules(self, sample_size):
-        budget_list = [self.ruleset[i].get_budget() * sample_size for i in range(len(self.ruleset))]
+    def __get_budget_for_rules(self):
+        budget_list = [self.ruleset[i].get_budget() for i in range(len(self.ruleset))]
         rounded_budget = [int(x) for x in saferound(budget_list, places=0)]
         self.__log.trace("Calculated budget for {} rules: {}".format(len(self.ruleset), rounded_budget))
         return rounded_budget
