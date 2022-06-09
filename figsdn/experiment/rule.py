@@ -450,7 +450,6 @@ class Rule(object):
     def convert_to_fuzzer_actions(self,
                                   n: int = 1,
                                   include_header: bool = False,
-                                  enable_mutation: bool = True,
                                   mutation_rate: float = 1.0,
                                   ctx: dict = None):
         """
@@ -458,9 +457,7 @@ class Rule(object):
 
         :param n:               The number of fuzzer actions to generate.
         :param include_header:  Whether or not to include the header in the fuzz actions (default to False).
-        :param enable_mutation: Whether or not mutations should be enabled (default to True).
-        :param mutation_rate:   The mutation rate (default to 1.0). This information is used only if enable_mutation is
-                                set to True
+        :param mutation_rate:   The mutation rate (default to 1.0).
         :param ctx:             A context. optional.
 
         :returns: A list of n fuzzer actions.
@@ -477,14 +474,14 @@ class Rule(object):
             "intent": "MUTATE_PACKET_RULE",
             "target": "OF_PACKET",
             "includeHeader": include_header,
-            "enableMutation": enable_mutation,
+            "enableMutation": mutation_rate > 0.0,
             "rule": {
                 "id": self.id,
                 "clauses": list()
             }
         }
 
-        if enable_mutation:
+        if mutation_rate > 0.0:
             single_action['mutationRateMultiplier'] = mutation_rate
 
         # get the Models

@@ -18,12 +18,12 @@ from common.utils.terminal import progress_bar
 
 
 # noinspection PyArgumentList
-class FuzzMode(Enum):
+class Method(Enum):
     RANDOM      = auto(),
     RULE        = auto(),
     DELTA       = auto(),
     BEADS       = auto()
-# End class FuzzMode
+# End class Method
 
 
 # noinspection PyUnresolvedReferences
@@ -47,16 +47,15 @@ class Experimenter:
             'has_after'     : bool(),
             'has_term'      : bool()
         }
-        self.__criterion = dict()
-        self.__criterion_name = None
+        self.__criterion        = dict()
+        self.__criterion_name   = None
 
-        self.__analyzer: Optional[Analyzer] = None
+        self.__analyzer         : Optional[Analyzer] = None
 
         # Fuzzing parameters
-        self.fuzz_mode                      : FuzzMode = FuzzMode.RANDOM
-        self.ruleset                        : Optional[RuleSet] = None
-        self.enable_mutation                : bool = True
-        self.mutation_rate                  : float = 1.0
+        self.method             : Method = Method.RANDOM
+        self.ruleset            : Optional[RuleSet] = None
+        self.mutation_rate      : float = 1.0
     # End def __init__
 
     # ===== ( Properties ) =============================================================================================
@@ -295,7 +294,7 @@ class Experimenter:
         instructions = list()
 
         # Perform a random mutation
-        if self.fuzz_mode == FuzzMode.RANDOM:
+        if self.method == Method.RANDOM:
             for i in range(count):
                 # Create the dictionary
                 json_dict = dict()
@@ -307,7 +306,7 @@ class Experimenter:
                 instructions.append(json.dumps({"instructions": [json_dict]}))
 
         # Perform a byte mutation
-        elif self.fuzz_mode == FuzzMode.DELTA:
+        elif self.method == Method.DELTA:
             for i in range(count):
                 # Create the dictionary
                 json_dict = dict()
@@ -319,7 +318,7 @@ class Experimenter:
                 instructions.append(json.dumps({"instructions": [json_dict]}))
 
         # Perform a byte mutation
-        elif self.fuzz_mode == FuzzMode.BEADS:
+        elif self.method == Method.BEADS:
             for i in range(count):
                 # Create the dictionary
                 json_dict = dict()
@@ -327,7 +326,7 @@ class Experimenter:
                 json_dict['actions'] = strategy.beads_fuzzer_actions()
                 instructions.append(json.dumps({"instructions": [json_dict]}))
 
-        elif self.fuzz_mode == FuzzMode.RULE:
+        elif self.method == Method.RULE:
             # Get the budget
             budget_list = self.__get_budget_for_rules()
 
@@ -338,8 +337,7 @@ class Experimenter:
                     actions = self.ruleset[i].convert_to_fuzzer_actions(
                         n=budget_list[i],
                         include_header=False,
-                        enable_mutation=self.enable_mutation,
-                        mutation_rate=self.mutation_rate if self.enable_mutation is True else 0.0,
+                        mutation_rate=self.mutation_rate,
                         ctx=CTX_PKT_IN_tmp
                     )
                     self.__log.trace("Number of actions generated for rule {}: {}".format(i, len(actions)))
@@ -349,7 +347,7 @@ class Experimenter:
                         json_dict['actions'] = [action]
                         instructions.append(json.dumps({"instructions": [json_dict]}))  # add it to the instruction
         else:
-            raise RuntimeError("Cannot build instructions for {}".format(self.fuzz_mode))
+            raise RuntimeError("Cannot build instructions for {}".format(self.method))
 
         self.__log.trace("Number of instructions generated : {}".format(len(instructions)))
         return instructions

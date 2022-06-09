@@ -15,13 +15,12 @@ class Stats:
 
         cls._stats['context']['scenario']               = context['scenario']
         cls._stats['context']['criterion']              = context['criterion']
-        cls._stats['context']['fuzz_mode']              = context['fuzz_mode']
+        cls._stats['context']['method']                 = context['method']
         cls._stats['context']['algorithm']              = context['algorithm']
         cls._stats['context']['filter']                 = context['filter']
         cls._stats['context']['it_limit']               = context['it_limit']
         cls._stats['context']['time_limit']             = context['time_limit']
         cls._stats['context']['samples_per_iteration']  = context['nb_of_samples']
-        cls._stats['context']['enable_mutation']        = context['enable_mutation']
         cls._stats['context']['mutation_rate']          = context['mutation_rate']
     # End def __init__
 
@@ -138,7 +137,7 @@ class Stats:
         stats['context']                                = dict()
         stats['context']['scenario']                    = str()
         stats['context']['criterion']                   = dict()
-        stats['context']['fuzz_mode']                   = str()
+        stats['context']['method']                      = str()
         stats['context']['criterion']['name']           = str()
         stats['context']['criterion']['kwargs']         = dict()
         stats['context']['it_limit']                    = None

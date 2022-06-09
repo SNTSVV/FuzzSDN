@@ -938,14 +938,16 @@ def generate_report(experiment : str):
         criterion_kwargs = ''
 
     lines = [
-        "======== Context ========\n\n",
+        "======== Context ========\n",
+        "\n",
         "Scenario: {}\n".format(expt_info['context']['scenario']),
         "Criterion: {} {}\n".format(expt_info['context']['criterion']['name'], criterion_kwargs),
-        "Target class: \"{}\" (other class: \"{}\")\n".format(expt_info['context']['target_class'], expt_info['context']['other_class']),
+        "Error Type: \"{}\"\n".format(expt_info['context']['target_class']),
+        "Method: \"{}\"\n".format(expt_info['context']['method'] if 'method' in 'context' else '?'),
         "Samples per iteration: {}\n".format(expt_info['context']['samples_per_iteration']),
-        "Mutation enabled: {}\n".format(expt_info['context']['enable_mutation']),
-        "Mutation rate: {}\n".format(expt_info['context']['mutation_rate'] if expt_info['context']['enable_mutation'] is True else "N/A"),
-        "\n======== Iteration Summary ========\n\n"
+        "Mutation rate: {}\n".format(expt_info['context']['mutation_rate']),
+        "\n",
+        "======== Iteration Summary ========\n\n"
     ]
 
     for i in range(expt_info["context"]["iterations"]):
