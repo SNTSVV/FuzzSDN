@@ -18,6 +18,7 @@ from figsdn.resources import scenarios, criteria
 # ===== ( Enums ) ======================================================================================================
 
 class Command(StrEnum):
+    """Enum for the possible commands of figsdn."""
 
     # Values
     RUN         = 'run',
@@ -30,6 +31,7 @@ class Command(StrEnum):
 
 
 class ErrorType(StrEnum):
+    """Enum for the possible error type of figsdn."""
     # Positional argument to choose the target
     UNKNOWN_REASON      = 'unknown_reason',
     KNOWN_REASON        = 'known_reason',
@@ -41,15 +43,14 @@ class ErrorType(StrEnum):
     def values():
         """Returns a list of all the possible commands"""
         return list(map(lambda c: c.value, ErrorType))
-
 # End class ErrorType
 
 
 class Method(StrEnum):
-
+    """Enum for the possible fuzzing methods of figsdn."""
     DEFAULT = 'default',
     DELTA   = 'DELTA',
-    BEADS   = 'BEADS'
+    BEADS   = 'BEADS',
 
     @staticmethod
     def values():
@@ -58,7 +59,21 @@ class Method(StrEnum):
 # End class Mode
 
 
+class Budget(StrEnum):
+    """Enum for the methods of budget calculation"""
+
+    CONFIDENCE              = 'confidence',
+    CONFIDENCE_AND_RANK     = 'rank-confidence',
+
+    @staticmethod
+    def values():
+        """Returns a list of all the possible mode"""
+        return list(map(lambda c: c.value, Budget))
+# End class Mode
+
+
 class Limit(StrEnum):
+    """Enum for the possible limits to a run of figsdn."""
 
     TIME        = 'time',
     ITERATION   = 'iteration',
@@ -156,8 +171,8 @@ def parse(args: Optional[Iterable] = None):
         metavar='SCENARIO',
         type=str,
         choices=SCENARIOS,
-        help="Name of the scenario to be run. Allowed scenarios are: "
-             "{}".format(', '.join("\'{}\'".format(scn) for scn in SCENARIOS))
+        help="Name of the scenario to be run. "
+             "Allowed values are: {}".format(', '.join("\'{}\'".format(scn) for scn in SCENARIOS))
     )
 
     # Positional argument to choose the criterion
@@ -168,8 +183,8 @@ def parse(args: Optional[Iterable] = None):
         metavar='CRITERION',
         type=str,
         choices=CRITERIA,
-        help="Name of the criterion to be run. Allowed criteria are:"
-             "{}".format(', '.join("\'{}\'".format(crit) for crit in CRITERIA))
+        help="Name of the criterion to be run. "
+             "Allowed values are: {}".format(', '.join("\'{}\'".format(crit) for crit in CRITERIA))
     )
 
     run_cmd.add_argument(
@@ -180,10 +195,94 @@ def parse(args: Optional[Iterable] = None):
         help="kwargs for the criterion (optional)"
     )
 
+    # ==== ( Run Command Optionals ) ===================================================================================
+
+    # Argument to choose the machine learning algorithm
+    run_cmd.add_argument(
+        '-A,',
+        '--algorithm',
+        metavar='',
+        type=str,
+        default='RIPPER',
+        dest='algorithm',
+        help="Select which Machine Learning algorithm to use. (default: \"%(default)s\")"
+    )
+
+    # Argument to choose the machine learning algorithm
+    run_cmd.add_argument(
+        '-b,',
+        '--budget',
+        metavar='',
+        type=str,
+        default=Budget.CONFIDENCE_AND_RANK.value,
+        choices=Budget.values(),
+        dest='budget',
+        help="Select which Machine Learning algorithm to use. (default: \"%(default)s\"). "
+             "Allowed values are: {}".format(', '.join("\'{}\'".format(bgt) for bgt in Budget.values()))
+    )
+
+    # Argument to choose the number of cross validation folds
+    run_cmd.add_argument(
+        '--cv-folds',
+        metavar='',
+        type=int,
+        default=10,
+        choices=ArgRange(2, math.inf),
+        dest='cv_folds',
+        help="Define the number of folds to use during cross-validation. (default: %(default)s)"
+    )
+
+    # Argument to limit the number of iterations
+    run_cmd.add_argument(
+        '-l',
+        '--limit',
+        metavar='',
+        type=str,
+        default=None,
+        nargs=2,
+        dest='limit',
+        help="Stops the {} after a given number of iterations. The current iteration will be finished however."
+    )
+
+    # Argument to choose the preprocessing strategy
+    run_cmd.add_argument(
+        '-F',
+        '--filter',
+        metavar='',
+        type=str,
+        default=None,
+        dest='filter',
+        help="Select which preprocessing strategy to use. (default: \"%(default)s\")"
+    )
+
+    # Argument to choose the experiment mode
+    run_cmd.add_argument(
+        '--method',
+        metavar='',
+        type=str,
+        choices=Method.values(),
+        default=Method.DEFAULT.value,
+        dest='method',
+        help="Select the method of fuzzing. "
+             "Allowed modes are: {}".format(', '.join("\'{}\'".format(m) for m in Method.values()))
+    )
+
+    # Argument to choose the mutation rate of additional fields
+    run_cmd.add_argument(
+        '--mutation-rate',
+        metavar='',
+        type=float,
+        default=1.0,
+        choices=ArgRange(0.0, math.inf),
+        dest='mutation_rate',
+        help="Sets the mutation rate of additional fields upon rule application. (default: %(default)s)"
+    )
+
     # Argument to choose the reference name of the experiment
     run_cmd.add_argument(
         '-R',
         '--reference',
+        metavar='',
         type=str,
         default=None,
         dest='reference',
@@ -194,83 +293,21 @@ def parse(args: Optional[Iterable] = None):
     run_cmd.add_argument(
         '-s',
         '--samples',
+        metavar='',
         type=int,
         default=200,
         dest='samples',
         help="Override the number of samples. (default: %(default)s)"
     )
 
-    # Argument to limit the number of iterations
-    run_cmd.add_argument(
-        '-l',
-        '--limit',
-        type=str,
-        metavar=('CONDITION', 'VALUE'),
-        default=None,
-        nargs=2,
-        dest='limit',
-        help="Stops the {} after a given number of iterations. The current iteration will be finished however."
-    )
-
-    # Argument to choose the machine learning algorithm
-    run_cmd.add_argument(
-        '-A,',
-        '--algorithm',
-        type=str,
-        default='RIPPER',
-        dest='algorithm',
-        help="Select which Machine Learning algorithm to use. (default: \"%(default)s\")"
-    )
-
-    # Argument to choose the preprocessing strategy
-    run_cmd.add_argument(
-        '-F',
-        '--filter',
-        type=str,
-        default=None,
-        dest='filter',
-        help="Select which preprocessing strategy to use. (default: \"%(default)s\")"
-    )
-
-    # Argument to choose the number of cross validation folds
-    run_cmd.add_argument(
-        '--cv-folds',
-        type=int,
-        default=10,
-        choices=ArgRange(2, math.inf),
-        dest='cv_folds',
-        help="Define the number of folds to use during cross-validation. (default: %(default)s)"
-    )
-
-    # Argument to choose the experiment mode
-    run_cmd.add_argument(
-        '-m',
-        '--method',
-        type=str,
-        choices=Method.values(),
-        default=Method.DEFAULT,
-        dest='method',
-        help="Select the method of fuzzing. "
-             "Allowed modes are: {}".format(', '.join("\'{}\'".format(m) for m in Method.values()))
-    )
-
-    # Argument to choose the mutation rate of additional fields
-    run_cmd.add_argument(
-        '-M',
-        '--mutation-rate',
-        type=float,
-        default=1.0,
-        choices=ArgRange(0.0, math.inf),
-        dest='mutation_rate',
-        help="Sets the mutation rate of additional fields upon rule application. (default: %(default)s)"
-    )
-
     args = parser.parse_args(sys.argv[1:] if args is None else args)
-    return format_args(parser, args)
+    return _format_args(parser, args)
 # End def parse
 
 
-def format_args(parser : argparse.ArgumentParser, args : argparse.Namespace):
+# ===== ( Module Private Functions ) ===================================================================================
+
+def _format_args(parser : argparse.ArgumentParser, args : argparse.Namespace):
     """ Perform some operations on the arguments."""
 
     # TODO: All this sections should be removed and integrated within the experimenter
@@ -279,16 +316,16 @@ def format_args(parser : argparse.ArgumentParser, args : argparse.Namespace):
     setattr(args, 'other_class', None)
 
     if args.target_class == ErrorType.KNOWN_REASON:
-        args.other_class = str(ErrorType.UNKNOWN_REASON)
+        args.other_class = ErrorType.UNKNOWN_REASON.value
 
     elif args.target_class == ErrorType.UNKNOWN_REASON:
-        args.other_class = str(ErrorType.KNOWN_REASON)
+        args.other_class = ErrorType.KNOWN_REASON.value
 
     elif args.target_class == ErrorType.PARSING_ERROR:
-        args.other_class = str(ErrorType.NON_PARSING_ERROR)
+        args.other_class = ErrorType.NON_PARSING_ERROR.value
 
     elif args.target_class == ErrorType.NON_PARSING_ERROR:
-        args.other_class = str(ErrorType.PARSING_ERROR)
+        args.other_class = ErrorType.PARSING_ERROR.value
 
     elif args.target_class == ErrorType.OFP_BAD_OUT_PORT:
         args.other_class = "OTHER_REASON"
@@ -313,14 +350,4 @@ def format_args(parser : argparse.ArgumentParser, args : argparse.Namespace):
                 args.limit[1] = tmp
 
     return args
-
-if __name__ == '__main__':
-
-    print(parse([
-        'run',
-        '--limit', 'time', '3h45m5s',
-        'unknown_reason',
-        'onos_2node_1ping',
-        'first_arp_message',
-        'args1=1', 'args2=2', 'args3=3'
-    ]))
+# End def _format_args

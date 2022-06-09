@@ -19,7 +19,7 @@ from weka.core import jvm, packages
 
 import common.utils.exit_codes
 from common import app_path
-from common.utils import csv_ops, time_parse, utils
+from common.utils import csv_ops, utils
 from common.utils.database import Database as SqlDb
 from common.utils.exit_codes import ExitCode
 from common.utils.terminal import Style
@@ -44,7 +44,8 @@ _context = {
     },
     "target_class"          : str(),
     "other_class"           : str(),
-    "method"             : str(),
+    "method"                : str(),
+    "budget"                : str(),
 
     # Iterations
     "nb_of_samples"         : int(),
@@ -88,7 +89,8 @@ def init() -> None:
             'name'          : args.criterion_name,
             'kwargs'        : args.criterion_kwargs
         },
-        'method'         : args.method,          # Experimentation mode
+        'method'            : args.method,          # Fuzzing method
+        'budget'            : args.budget,          # Budget calculation method
         'target_class'      : args.target_class,    # Class to predict
         'other_class'       : args.other_class,     # Class to predict
 
@@ -140,6 +142,7 @@ def run() -> None:
     print(Style.BOLD, "*** Scenario: {}".format(_context['scenario']), Style.RESET)
     print(Style.BOLD, "*** Criterion: {}{}".format(_context['criterion']['name'], criterion_kwargs_str), Style.RESET)
     print(Style.BOLD, "*** Fuzzing Method: {}".format(_context['method']), Style.RESET)
+    print(Style.BOLD, "*** Budget Calculation Method: {}".format(_context['budget']), Style.RESET)
     print(Style.BOLD, "*** Target class: {}".format(_context['target_class']), Style.RESET)
     print(Style.BOLD, "*** Machine Learning Algorithm: {}".format(_context['algorithm']), Style.RESET)
     print(Style.BOLD, "*** Machine Learning Filter: {}".format(_context['filter']), Style.RESET)
@@ -256,14 +259,13 @@ def run() -> None:
 
             # budget calculation
             data_size   = learner.get_instances_count()
-
             calculate_budget(
                 data_size=data_size['all'],
                 samples=_context['nb_of_samples'],
                 target=_context['target_class'],
                 target_count=data_size[_context['target_class']],
                 ruleset=ml_model.ruleset,
-                method='rank'  # TODO: add argument to change method
+                method=_context['budget']
             )
 
         else:
@@ -296,10 +298,10 @@ def run() -> None:
 # End def run
 
 
-def calculate_budget(data_size, samples, target, target_count, ruleset, method='rank'):
+def calculate_budget(data_size, samples, target, target_count, ruleset, method=arguments.Budget.CONFIDENCE_AND_RANK):
     """"""
     # TODO: Move this calculation to the experimenter
-    if method not in ('rank', 'relative'):
+    if method not in arguments.Budget.values():
         raise ValueError("Unknown method '{}'".format(method))
 
     # Calculate the constants used in all methods
@@ -307,7 +309,7 @@ def calculate_budget(data_size, samples, target, target_count, ruleset, method='
     s_min = min(0.5 * (data_size + samples) - class_ratio * data_size, samples)
     s_maj = max(samples - s_min, 0)
 
-    if method == 'rank':
+    if method == arguments.Budget.CONFIDENCE_AND_RANK:
         rule_cnt = len(ruleset)
         rule_info = list()
         budgets = list()
@@ -353,7 +355,7 @@ def calculate_budget(data_size, samples, target, target_count, ruleset, method='
         for i, budget in budgets:
             ruleset[i].set_budget(budget)
 
-    if method == 'relative':
+    if method == arguments.Budget.CONFIDENCE:
 
         for i in range(len(ruleset)):
             confidence = ruleset.confidence(i, relative=True, relative_to_class=True)
