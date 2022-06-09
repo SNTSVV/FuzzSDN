@@ -223,16 +223,20 @@ def main(args: Optional[Iterable] = None):
             compute_std=True
         )
 
+        # Save the results
+        print("Exporting the results as a CSV file...")
+        experiment.generate_result_csv(expt_to_fetch)
+
         # Create the report
-        print("Generating the report")
+        print("Generating the report...")
         experiment.generate_report(expt_to_fetch)
 
         # Create the graph
-        print("Generating the graphs")
+        print("Generating the graphs...")
         experiment.generate_graphics(expt_to_fetch)
 
         # Create the confusion matrices
-        print("Generating the confusion matrices")
+        print("Generating the confusion matrices...")
         experiment.generate_confusion_matrices(expt_to_fetch)
 
         # Print the information about the last experiment

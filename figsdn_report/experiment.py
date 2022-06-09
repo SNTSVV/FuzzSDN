@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import paramiko
 import seaborn as sn
-from matplotlib import pyplot as plt
+from matplotlib import pyplot as plt, ticker
 from weka.classifiers import Classifier, Evaluation
 from weka.core.converters import Loader
 
@@ -550,7 +550,7 @@ def generate_graphics(experiment, display: bool = False):
             ls='--',
             color='orange')
     ax.locator_params(axis="x", integer=True, tight=True)
-    ax.legend(loc="lower right", fontsize=10)
+    ax.legend(loc="best", fontsize=10)
     ax.set_title("Number of rules per iteration")
     plt.tight_layout()
     plt.plot()
@@ -577,9 +577,8 @@ def generate_graphics(experiment, display: bool = False):
                     tot_use += rule['count_use']
             if tot_use > 0:
                 avg_gen_acc.append(float(tot_gen) / float(tot_use))
-
-        # The last iteration is not used for generation yet, therefore it is not used for calculation
-        avg_gen_acc.append(None)
+            else:
+                avg_gen_acc.append(0)
 
         fig, ax = plt.subplots(1, 1, figsize=(10, 7), dpi=96)
         ax.plot(it_ax, avg_gen_acc, ls='-', marker='x', color='blue')
@@ -604,9 +603,10 @@ def generate_graphics(experiment, display: bool = False):
             marker='x',
             color='blue',
             label="accuracy_score")
-    ax.set_ylim([0, 1])
+    ax.set_ylim([0, 100])
+    ax.yaxis.set_major_formatter(ticker.PercentFormatter())
     ax.locator_params(axis="x", integer=True, tight=True)
-    ax.legend(loc="lower right", fontsize=10)
+    ax.legend(fontsize=10)
     ax.set_title('Classifier Accuracy per iteration')
 
     plt.tight_layout()
@@ -633,7 +633,7 @@ def generate_graphics(experiment, display: bool = False):
                 color='red',
                 label="FP Rate")
     axs[0].locator_params(axis="x", integer=True, tight=True)
-    axs[0].legend(loc="lower right", fontsize=10)
+    axs[0].legend(loc="best", fontsize=10)
     axs[0].set_title('TP/FP Rate for {} per iteration'.format(target_class))
 
     ### Draw the TP/FP graph for the other class
@@ -650,7 +650,7 @@ def generate_graphics(experiment, display: bool = False):
                 color='red',
                 label="FP Rate")
     axs[1].locator_params(axis="x", integer=True, tight=True)
-    axs[1].legend(loc="lower right", fontsize=10)
+    axs[1].legend(loc="best", fontsize=10)
     axs[1].set_title('TP/FP Rate for {}'.format(other_class))
 
     plt.tight_layout()
@@ -683,7 +683,7 @@ def generate_graphics(experiment, display: bool = False):
     ax.xaxis.label.set_color('dimgrey')
     ax.yaxis.label.set_color('dimgrey')
     ax.locator_params(axis="x", integer=True, tight=True)
-    ax.legend(loc="lower right", fontsize=10)
+    ax.legend(loc="best", fontsize=10)
     ax.set_title('Precision per iteration')
 
     plt.tight_layout()
@@ -715,7 +715,7 @@ def generate_graphics(experiment, display: bool = False):
     ax.xaxis.label.set_color('dimgrey')
     ax.yaxis.label.set_color('dimgrey')
     ax.locator_params(axis="x", integer=True, tight=True)
-    ax.legend(loc="lower right", fontsize=10)
+    ax.legend(loc="best", fontsize=10)
     ax.set_title('Recall per iteration')
 
     plt.tight_layout()
@@ -744,7 +744,7 @@ def generate_graphics(experiment, display: bool = False):
                 label=other_class)
     ax.set_ylim([0, 1])
     ax.locator_params(axis="x", integer=True, tight=True)
-    ax.legend(loc="lower right", fontsize=10)
+    ax.legend(loc="best", fontsize=10)
     ax.set_title('F1-Score per iteration')
 
     plt.tight_layout()
@@ -765,7 +765,7 @@ def generate_graphics(experiment, display: bool = False):
             color='blue')
     ax.set_ylim([0, 1])
     ax.locator_params(axis="x", integer=True, tight=True)
-    ax.legend(loc="lower right", fontsize=10)
+    ax.legend(loc="best", fontsize=10)
     ax.set_title('Area under ROC per iteration')
 
     plt.tight_layout()
@@ -790,7 +790,7 @@ def generate_graphics(experiment, display: bool = False):
     ax.xaxis.label.set_color('dimgrey')
     ax.yaxis.label.set_color('dimgrey')
     ax.locator_params(axis="x", integer=True, tight=True)
-    ax.legend(loc="lower right", fontsize=10)
+    ax.legend(loc="best", fontsize=10)
     ax.set_title('Area under PRC per iteration')
 
     plt.tight_layout()
@@ -803,8 +803,17 @@ def generate_graphics(experiment, display: bool = False):
     # ===== 9th graph: MCC =============================================================================================
 
     fig, ax = plt.subplots(1, 1, figsize=(10, 7), dpi=96)
-    min_mcc = min(0 if v is None else v for v in expt_info['learning'][target_class]["mcc"])
-    max_mcc = max(0 if v is None else v for v in expt_info['learning'][target_class]["mcc"])
+    min_mcc = math.inf
+    max_mcc = -math.inf
+    for v in expt_info['learning'][target_class]["mcc"]:
+        if v is None:  # Important to test before math.isnan
+            min_mcc = min(min_mcc, 0)
+            max_mcc = max(max_mcc, 0)
+        elif math.isnan(v):
+            continue
+        else:
+            min_mcc = min(min_mcc, v)
+            max_mcc = max(max_mcc, v)
     min_ax = 0 if min_mcc > 0 else min_mcc - 0.25
     max_ax = 1 if max_mcc > 0.5 else max_mcc + 0.25
     ax.plot(it_ax,
@@ -815,7 +824,7 @@ def generate_graphics(experiment, display: bool = False):
             label=target_class)
     ax.set_ylim([min_ax, max_ax])
     ax.locator_params(axis="x", integer=True, tight=True)
-    ax.legend(loc="lower right", fontsize=10)
+    ax.legend(loc="best", fontsize=10)
     ax.set_title('MCC score per iteration')
 
     plt.tight_layout()
@@ -838,7 +847,7 @@ def generate_graphics(experiment, display: bool = False):
                 color='blue',
                 label=target_class)
         ax.locator_params(axis="x", integer=True, tight=True)
-        ax.legend(loc="upper right", fontsize=10)
+        ax.legend(loc="best", fontsize=10)
         ax.set_title("Imbalance per iteration")
 
         plt.tight_layout()
@@ -860,7 +869,7 @@ def generate_graphics(experiment, display: bool = False):
                 color='blue',
                 label=target_class)
         ax.locator_params(axis="x", integer=True, tight=True)
-        ax.legend(loc="upper left", fontsize=10)
+        ax.legend(loc="best", fontsize=10)
         ax.set_title("Geometric Diversity")
 
         plt.tight_layout()
@@ -882,7 +891,7 @@ def generate_graphics(experiment, display: bool = False):
                 color='blue',
                 label=target_class)
         ax.locator_params(axis="x", integer=True, tight=True)
-        ax.legend(loc="upper left", fontsize=10)
+        ax.legend(loc="best", fontsize=10)
         ax.set_title("N1 Score")
 
         plt.tight_layout()
@@ -904,7 +913,7 @@ def generate_graphics(experiment, display: bool = False):
                 color='blue',
                 label=target_class)
         ax.locator_params(axis="x", integer=True, tight=True)
-        ax.legend(loc="upper left", fontsize=10)
+        ax.legend(loc="best", fontsize=10)
         ax.set_title("Standard Deviation per Iteration")
 
         plt.tight_layout()
@@ -1013,6 +1022,46 @@ def generate_report(experiment : str):
     with open(os.path.join(paths.root, "report.txt"), 'w') as f:
         f.writelines(lines)
 # End def _generate_report
+
+
+def generate_result_csv(experiment : str):
+    """Generate a csv file that list all the metrics."""
+    # Get the paths and experiment information
+    paths = get_paths(experiment)
+    expt_info = get_info(experiment)
+
+    it_cnt = expt_info['context']['iterations']
+    tgt_cls = expt_info['context']['target_class']
+
+    df = pd.DataFrame()
+
+    # Add the columns to the dataframe:
+    df['learning_accuracy']     = expt_info['learning']["accuracy"]
+    df['learning_precision']    = expt_info['learning'][tgt_cls]["precision"]
+    df['learning_recall']       = expt_info['learning'][tgt_cls]["recall"]
+    df['learning_mcc']          = expt_info['learning'][tgt_cls]["mcc"]
+    df['learning_auroc']        = expt_info['learning'][tgt_cls]["auroc"]
+    df['learning_auprc']        = expt_info['learning'][tgt_cls]["auprc"]
+
+    # Add the data for the tests
+    if 'test_evl' in expt_info:
+        df['test_accuracy']     = expt_info['test_evl']["accuracy"]
+        df['test_precision']    = expt_info['test_evl'][tgt_cls]["precision"]
+        df['test_recall']       = expt_info['test_evl'][tgt_cls]["recall"]
+        df['test_mcc']          = expt_info['test_evl'][tgt_cls]["mcc"]
+        df['test_auroc']        = expt_info['test_evl'][tgt_cls]["auroc"]
+        df['test_auprc']        = expt_info['test_evl'][tgt_cls]["auprc"]
+
+    df['data_imbalance']        = expt_info['data']["imbalance"]
+    df['data_geom_div']         = expt_info['data']["geometric_diversity"]
+
+    # Save the CSV file
+    df.to_csv(
+        path_or_buf=os.path.join(paths.root, "results.csv"),
+        index=True,
+        index_label="iteration",
+        sep=",",
+    )
 
 
 def get_info(expt):
