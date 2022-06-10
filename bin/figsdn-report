@@ -2,9 +2,9 @@
 # -*- coding: utf-8 -*-
 
 # Local dependencies
-from figsdn_report import app
+from figsdn.report import main
 
 # ====== (Main Function) ===============================================================================================
 
 if __name__ == '__main__':
-    app.main()
+    main.main()

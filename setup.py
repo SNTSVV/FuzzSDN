@@ -31,17 +31,22 @@ setup(
 
     # Packages and Scripts
     packages=[
-        # Common packages
-        'common',
-        'common/metrics',
-        'common/openflow',
-        'common/utils',
-        # main app packages
         'figsdn',
+        # Main Application
         'figsdn/app',
         'figsdn/app/analytics',
         'figsdn/app/drivers',
         'figsdn/app/experiment',
+        # Commons
+        'figsdn/common',
+        'figsdn/common/metrics',
+        'figsdn/common/openflow',
+        'figsdn/common/openflow/v0x05',
+        'figsdn/common/openflow/v0x05/common',
+        'figsdn/common/openflow/v0x05/message',
+        'figsdn/common/utils',
+        # Report Application
+        'figsdn/report',
     ],
 
     scripts=[

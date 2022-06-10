@@ -15,8 +15,9 @@ from weka.core import jvm
 from figsdn.common import app_path
 from figsdn.common.utils import terminal, ExitCode
 from figsdn.common.utils.log import add_logging_level
-from figsdn_report import arguments, experiment, nodes
-from figsdn_report.arguments import Command
+from figsdn.report import arguments, nodes
+from figsdn.report import experiment
+from figsdn.report.arguments import Command
 
 
 def parse_arguments(args: Optional[Iterable] = None):

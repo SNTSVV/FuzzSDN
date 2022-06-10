@@ -7,7 +7,7 @@ import argparse
 from typing import Iterable, Optional
 
 from figsdn import __version__ as __figsdn_version__, __app_name__ as __figsdn_name__
-from figsdn_report import __version__, __app_name__
+from figsdn.report import __version__, __app_name__
 from figsdn.common.utils import StrEnum
 
 
