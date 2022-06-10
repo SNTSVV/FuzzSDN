@@ -5,7 +5,7 @@ import re
 import shutil
 from typing import List
 
-from common import app_path
+from figsdn.common import app_path
 
 
 class LogParser:

@@ -3,7 +3,7 @@ import numpy as np
 import networkx as nx
 import pandas as pd
 
-from common.metrics import metrics
+from figsdn.common.metrics import metrics
 
 
 def eps_nn_graph(X, epsilon : float, include_self=False):

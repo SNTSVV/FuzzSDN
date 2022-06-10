@@ -5,7 +5,7 @@ import os
 
 # Local dependencies
 from figsdn.app import main
-from common.utils.terminal import Fore, Style
+from figsdn.common.utils.terminal import Fore, Style
 
 
 # ====== (Main Function) ===============================================================================================

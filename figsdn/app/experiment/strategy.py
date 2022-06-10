@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 import random
 
-import common.openflow.v0x05.message.struct as ofp_0x05_msg_struct
-from common.openflow.v0x05.common.message import ofp_type
+import figsdn.common.openflow.v0x05.message.struct as ofp_0x05_msg_struct
+from figsdn.common.openflow.v0x05.common.message import ofp_type
 
 
 # NB: Simple implementation for now

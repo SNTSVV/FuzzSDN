@@ -10,10 +10,10 @@ from configparser import ConfigParser
 from datetime import datetime
 from typing import Optional
 
-from common import app_path
-from common.utils import str_to_typed_value
-from common.utils.log import add_logging_level
-from common.utils.terminal import Fore, Style
+from figsdn.common import app_path
+from figsdn.common.utils import str_to_typed_value
+from figsdn.common.utils.log import add_logging_level
+from figsdn.common.utils.terminal import Fore, Style
 
 from figsdn import __version__, __app_name__
 

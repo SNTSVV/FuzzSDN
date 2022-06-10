@@ -12,7 +12,7 @@ import sympy
 from sympy import *
 from z3 import z3
 
-from common.utils import smt
+from figsdn.common.utils import smt
 
 # TODO: Calculate ctx when parsing a packet from the input data
 CTX_PKT_IN_tmp = {

@@ -8,10 +8,8 @@ import sys
 import time
 
 from figsdn.app import setup
-from figsdn.app.drivers import FuzzerDriver
-from figsdn.app.drivers import MininetDriver
-from figsdn.app.drivers import OnosDriver
-from common.utils.database import Database as SqlDb
+from figsdn.app.drivers import FuzzerDriver, MininetDriver, OnosDriver
+from figsdn.common.utils.database import Database as SqlDb
 
 # ===== ( Parameters ) =================================================================================================
 

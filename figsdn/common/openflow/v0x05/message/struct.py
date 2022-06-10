@@ -2,7 +2,7 @@
 """
 Utility module that gives the structure of a message
 """
-from common.openflow.v0x05.common.message import ofp_type
+from figsdn.common.openflow.v0x05.common.message import ofp_type
 
 
 # TODO: Construct it automatically from matches, etc, etc,

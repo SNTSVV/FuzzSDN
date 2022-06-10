@@ -7,14 +7,12 @@ The information about the remote VMs are stored locally in the state directory
 """
 import json
 import os
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Optional
 
 import paramiko
 
-from common import app_path
-from common.utils import terminal
+from figsdn.common import app_path
 
 _REMOTE_VMS_FILE = os.path.join(app_path.state_dir(), "remote_vms.json")
 __FRAMEWORK_NAME__ = "figsdn"

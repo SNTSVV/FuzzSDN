@@ -12,10 +12,9 @@ from typing import Iterable, Optional
 from tabulate import tabulate
 from weka.core import jvm
 
-from common import app_path
-from common.utils import terminal
-from common.utils.exit_codes import ExitCode
-from common.utils.log import add_logging_level
+from figsdn.common import app_path
+from figsdn.common.utils import terminal, ExitCode
+from figsdn.common.utils.log import add_logging_level
 from figsdn_report import arguments, experiment, nodes
 from figsdn_report.arguments import Command
 

@@ -7,7 +7,7 @@ from time import sleep
 from typing import Optional
 
 from figsdn.app import setup
-from common.utils.log import LogPipe
+from figsdn.common.utils.log import LogPipe
 
 
 class FuzzerDriver:

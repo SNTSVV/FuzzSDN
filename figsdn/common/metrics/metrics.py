@@ -11,8 +11,8 @@ import gower
 import numpy as np
 from numpy.linalg import matrix_rank
 
-from common.metrics import graph
-from common.metrics.mst import mst
+from figsdn.common.metrics import graph
+from figsdn.common.metrics.mst import mst
 
 
 def fraction_of_borderline_points(X : np.ndarray, y : np.ndarray, cat_features : Optional[Iterable[bool]] = None) -> float:

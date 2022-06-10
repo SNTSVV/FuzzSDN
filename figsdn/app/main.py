@@ -17,13 +17,11 @@ from typing import Optional
 from scipy.stats import rankdata
 from weka.core import jvm, packages
 
-import common.utils.exit_codes
-from common import app_path
-from common.utils import csv_ops, utils
-from common.utils.database import Database as SqlDb
-from common.utils.exit_codes import ExitCode
-from common.utils.terminal import Style
-from figsdn import arguments
+from figsdn.common import app_path
+from figsdn.common.utils import csv_ops, utils, ExitCode
+from figsdn.common.utils.database import Database as SqlDb
+from figsdn.common.utils.terminal import Style
+from figsdn import arguments, common
 from figsdn.app import setup
 from figsdn.arguments import Limit
 from figsdn.app.drivers import FuzzerDriver, OnosDriver, RyuDriver

@@ -13,7 +13,7 @@ from weka.core.dataset import Instances
 from weka.filters import Filter, MultiFilter
 
 from figsdn.app.experiment import Rule, RuleSet
-from common.utils import str_to_typed_value
+from figsdn.common.utils import str_to_typed_value
 
 
 class ModelInfo(NamedTuple):

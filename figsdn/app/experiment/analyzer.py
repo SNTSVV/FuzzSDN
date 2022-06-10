@@ -8,8 +8,8 @@ from typing import Optional
 import pandas as pd
 from pypika import Column, JoinType, Query, Tables
 
-from common import app_path
-from common.utils.database import Database as SqlDb
+from figsdn.common import app_path
+from figsdn.common.utils.database import Database as SqlDb
 from figsdn.app import setup
 from figsdn.app.analytics.log import LogParser, OnosLogParser, RyuLogParser
 from figsdn.app.experiment import RuleSet

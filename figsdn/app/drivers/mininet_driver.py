@@ -8,7 +8,7 @@ import pexpect
 
 from figsdn.app.analytics.ping_stats import PingStats
 from figsdn.app.drivers.commons import sudo_expect
-from common.utils.exit_codes import ExitCode
+from figsdn.common.utils import ExitCode
 
 MININET_PROMPT = "mininet>"
 

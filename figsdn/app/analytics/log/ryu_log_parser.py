@@ -2,9 +2,9 @@
 import logging
 import os
 
-from figsdn.app.analytics.log import LOG_RGX, LogParser
 from figsdn.app import setup
-from common.openflow.v0x05.error import ErrorType
+from figsdn.app.analytics.log import LOG_RGX, LogParser
+from figsdn.common.openflow.v0x05.error import ErrorType
 
 
 class RyuLogParser(LogParser):

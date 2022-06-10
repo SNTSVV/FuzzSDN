@@ -14,7 +14,7 @@ from iteround import saferound
 
 import figsdn.resources.criteria
 from figsdn.app.experiment import Analyzer, CTX_PKT_IN_tmp, RuleSet, strategy
-from common.utils.terminal import progress_bar
+from figsdn.common.utils.terminal import progress_bar
 
 
 # noinspection PyArgumentList

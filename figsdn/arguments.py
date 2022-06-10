@@ -9,9 +9,9 @@ import sys
 from typing import Iterable, Optional
 from importlib import resources
 
-from common.utils import time_parse
+from figsdn.common.utils import time_parse
 from figsdn import __version__, __app_name__
-from common.utils.str_enum import StrEnum
+from figsdn.common.utils import StrEnum
 from figsdn.resources import scenarios, criteria
 
 
