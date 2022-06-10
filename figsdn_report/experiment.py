@@ -23,7 +23,7 @@ from common import app_path
 from common.metrics import density, fraction_of_borderline_points, geometric_diversity, imbalance_ratio, standard_deviation
 from common.utils import terminal
 from common.utils.terminal import progress_bar
-from figsdn.experiment import Model
+from figsdn.app.experiment import Model
 
 print_evl_data  = True
 display_graphs  = False

@@ -6,7 +6,7 @@ import subprocess
 from time import sleep
 from typing import Optional
 
-from figsdn import setup
+from figsdn.app import setup
 from common.utils.log import LogPipe
 
 

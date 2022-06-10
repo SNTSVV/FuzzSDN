@@ -8,8 +8,8 @@ from time import sleep
 import pexpect
 
 import figsdn.resources.tools.onos as onos_tools
-from figsdn import setup
-from figsdn.drivers.commons import sudo_expect
+from figsdn.app import setup
+from figsdn.app.drivers.commons import sudo_expect
 
 
 class OnosDriver:

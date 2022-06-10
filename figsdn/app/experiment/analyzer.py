@@ -10,9 +10,9 @@ from pypika import Column, JoinType, Query, Tables
 
 from common import app_path
 from common.utils.database import Database as SqlDb
-from figsdn import setup
-from figsdn.analytics.log import LogParser, OnosLogParser, RyuLogParser
-from figsdn.experiment import RuleSet
+from figsdn.app import setup
+from figsdn.app.analytics.log import LogParser, OnosLogParser, RyuLogParser
+from figsdn.app.experiment import RuleSet
 
 DB_NAME = "figsdn"
 

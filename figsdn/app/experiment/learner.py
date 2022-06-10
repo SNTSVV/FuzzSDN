@@ -7,15 +7,13 @@ from copy import copy
 from typing import Dict, NamedTuple, Optional, Tuple
 
 from weka.classifiers import Classifier, Evaluation, FilteredClassifier
-from weka.core import jvm
 from weka.core.classes import Random
 from weka.core.converters import Loader
 from weka.core.dataset import Instances
 from weka.filters import Filter, MultiFilter
 
-from figsdn.experiment import Rule, RuleSet
+from figsdn.app.experiment import Rule, RuleSet
 from common.utils import str_to_typed_value
-from common.utils.log import add_logging_level
 
 
 class ModelInfo(NamedTuple):

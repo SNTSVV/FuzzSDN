@@ -2,8 +2,8 @@
 import logging
 import os.path
 
-from figsdn.analytics.log import LOG_RGX, LogParser
-from figsdn import setup
+from figsdn.app.analytics.log import LOG_RGX, LogParser
+from figsdn.app import setup
 
 
 class OnosLogParser(LogParser):

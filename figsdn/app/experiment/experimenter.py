@@ -13,7 +13,7 @@ from typing import Optional, Union, Tuple
 from iteround import saferound
 
 import figsdn.resources.criteria
-from figsdn.experiment import Analyzer, CTX_PKT_IN_tmp, RuleSet, strategy
+from figsdn.app.experiment import Analyzer, CTX_PKT_IN_tmp, RuleSet, strategy
 from common.utils.terminal import progress_bar
 
 

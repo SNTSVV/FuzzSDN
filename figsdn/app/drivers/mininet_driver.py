@@ -6,8 +6,8 @@ from typing import Optional, Tuple
 
 import pexpect
 
-from figsdn.analytics.ping_stats import PingStats
-from figsdn.drivers.commons import sudo_expect
+from figsdn.app.analytics.ping_stats import PingStats
+from figsdn.app.drivers.commons import sudo_expect
 from common.utils.exit_codes import ExitCode
 
 MININET_PROMPT = "mininet>"

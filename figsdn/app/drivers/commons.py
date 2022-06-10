@@ -7,7 +7,7 @@ from typing import Iterable
 
 import pexpect
 
-from figsdn import setup
+from figsdn.app import setup
 
 
 # TODO: Make logger specifically for this module

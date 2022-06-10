@@ -6,14 +6,12 @@ import signal
 import subprocess
 import sys
 import time
-from datetime import datetime
 
-from figsdn import setup
-from figsdn.drivers import FuzzerDriver
-from figsdn.drivers import MininetDriver
-from figsdn.drivers import OnosDriver
+from figsdn.app import setup
+from figsdn.app.drivers import FuzzerDriver
+from figsdn.app.drivers import MininetDriver
+from figsdn.app.drivers import OnosDriver
 from common.utils.database import Database as SqlDb
-from common.utils.exit_codes import ExitCode
 
 # ===== ( Parameters ) =================================================================================================
 

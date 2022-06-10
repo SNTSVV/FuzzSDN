@@ -38,9 +38,10 @@ setup(
         'common/utils',
         # main app packages
         'figsdn',
-        'figsdn/analytics',
-        'figsdn/drivers',
-        'figsdn/experiment',
+        'figsdn/app',
+        'figsdn/app/analytics',
+        'figsdn/app/drivers',
+        'figsdn/app/experiment',
     ],
 
     scripts=[

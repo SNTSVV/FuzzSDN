@@ -1,7 +1,7 @@
 import json
 from typing import Optional
 
-from figsdn.experiment import Learner, Model
+from figsdn.app.experiment import Learner, Model
 
 
 class Stats:

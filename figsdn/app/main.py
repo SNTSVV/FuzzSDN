@@ -23,11 +23,12 @@ from common.utils import csv_ops, utils
 from common.utils.database import Database as SqlDb
 from common.utils.exit_codes import ExitCode
 from common.utils.terminal import Style
-from figsdn import arguments, setup
+from figsdn import arguments
+from figsdn.app import setup
 from figsdn.arguments import Limit
-from figsdn.drivers import FuzzerDriver, OnosDriver, RyuDriver
-from figsdn.experiment import Analyzer, Experimenter, Method, Learner, Model, RuleSet
-from figsdn.stats import Stats
+from figsdn.app.drivers import FuzzerDriver, OnosDriver, RyuDriver
+from figsdn.app.experiment import Analyzer, Experimenter, Method, Learner, Model, RuleSet
+from figsdn.app.stats import Stats
 
 # ===== ( locals ) =====================================================================================================
 

@@ -2,8 +2,8 @@
 import logging
 import os
 
-from figsdn.analytics.log import LOG_RGX, LogParser
-from figsdn import setup
+from figsdn.app.analytics.log import LOG_RGX, LogParser
+from figsdn.app import setup
 from common.openflow.v0x05.error import ErrorType
 
 
