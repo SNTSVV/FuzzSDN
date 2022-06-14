@@ -401,17 +401,17 @@ class Learner:
             self.log.debug("Building the filter for the preprocessing strategy \"{}\"...".format(self._filter))
             try:
                 pp_fltr = self.__build_pp_filters()
-                if len(pp_fltr) > 1:  # Multiple filters
-                    filter_ = MultiFilter()
-                    for f in pp_fltr:
-                        filter_.append(f)
-                elif len(pp_fltr) == 1:  # One filter
-                    filter_ = pp_fltr[0]
+                if pp_fltr:
+                    if len(pp_fltr) > 1:  # Multiple filters
+                        filter_ = MultiFilter()
+                        for f in pp_fltr:
+                            filter_.append(f)
+                    elif len(pp_fltr) == 1:  # One filter
+                        filter_ = pp_fltr[0]
+                    else:
+                        filter_ = None
                 else:
-                    # If the implementation for __build_pp_filter is correct, we should never reach this point.
-                    # If an empty filter is returned and it is not normal or it requires a warning, this should be done
-                    # in the __build_pp_filter function directly.
-                    pass
+                    filter_ = None
             except ValueError as e:
                 # A value error is risen only when the preprocess strategy is not known
                 self.log.error("Couldn't apply strategy {} with error \"{}\"".format(self._filter, str(e)))
@@ -545,37 +545,39 @@ class Learner:
                         percentage = 0.0  # If within the target ratio range then nothing should be done
 
                 if 'threshold' in self._filter_hp:
-                    if min(class1_cnt, class2_cnt) / (class1_cnt + class2_cnt) > max(0.0,
-                                                                                     float(self._filter_hp['threshold'])):
+                    if 1 - min_cls_cnt / max_cls_cnt < min(1.0, float(self._filter_hp['threshold'])):
                         percentage = 0.0
 
                 if 'multiplier' in self._filter_hp:
                     percentage *= max(0.0, float(self._filter_hp['multiplier']))
 
             # Create the filters
-            filters.append(
-                Filter(
-                    classname="weka.filters.supervised.instance.SMOTE",
-                    options=[
-                        '-K', str(nn),
-                        '-P', str(percentage)
-                    ]
+            if percentage > 0.0:
+                filters.append(
+                    Filter(
+                        classname="weka.filters.supervised.instance.SMOTE",
+                        options=[
+                            '-K', str(nn),
+                            '-P', str(percentage)
+                        ]
+                    )
                 )
-            )
-            filters.append(
-                Filter(
-                    classname="weka.filters.unsupervised.attribute.NumericTransform",
-                    options=[
-                        '-C', "java.lang.Math",
-                        '-M', "ceil",
-                        '-R', ','.join(index_list)
-                    ]
+                filters.append(
+                    Filter(
+                        classname="weka.filters.unsupervised.attribute.NumericTransform",
+                        options=[
+                            '-C', "java.lang.Math",
+                            '-M', "ceil",
+                            '-R', ','.join(index_list)
+                        ]
+                    )
                 )
-            )
+            else:
+                filters = None
 
         else:
             raise ValueError("Unknown strategy: {}".format(self._filter))
 
         return filters
-    # End def _build_pp_filters
+    # End def __build_pp_filters
 # End class Learner

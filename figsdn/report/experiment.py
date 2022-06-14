@@ -6,6 +6,7 @@ import datetime
 import json
 import math
 import os
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from os.path import join
 from pathlib import Path
@@ -544,20 +545,23 @@ def generate_graphics(experiment, display: bool = False):
     ### Draw the regression line for the number of rules generated
     x = np.array(range(expt_info["context"]["iterations"]))
     y = np.array(nb_of_rules)
-    coef = np.polyfit(x, y, 1)
-    ax.plot(x,
-            coef[0] * x + coef[1],
-            ls='--',
-            color='orange')
-    ax.locator_params(axis="x", integer=True, tight=True)
-    ax.legend(loc="best", fontsize=10)
-    ax.set_title("Number of rules per iteration")
-    plt.tight_layout()
-    plt.plot()
-    if display is True:
-        plt.show()
-    fig.savefig(os.path.join(paths.graphs, 'nb_rules_graph.png'))
-    plt.close(fig)
+    try:
+        coef = np.polyfit(x, y, 1)
+        ax.plot(x,
+                coef[0] * x + coef[1],
+                ls='--',
+                color='orange')
+        ax.locator_params(axis="x", integer=True, tight=True)
+        ax.legend(loc="best", fontsize=10)
+        ax.set_title("Number of rules per iteration")
+        plt.tight_layout()
+        plt.plot()
+        if display is True:
+            plt.show()
+        fig.savefig(os.path.join(paths.graphs, 'nb_rules_graph.png'))
+        plt.close(fig)
+    except Exception as e:
+        print("Couldn't plot number of rules per iteration graph. Reason: {}".format(e), file=sys.stderr)
 
     # ====== 2nd Graph: Average rule usage accuracy per iteration ======================================================
 
@@ -822,7 +826,11 @@ def generate_graphics(experiment, display: bool = False):
             marker='x',
             color='blue',
             label=target_class)
-    ax.set_ylim([min_ax, max_ax])
+    try:
+        ax.set_ylim([min_ax, max_ax])
+    except Exception as e:
+        print("Couldn't determine mcc best y-axis, using the default one", file=sys.stderr)
+        ax.set_ylim([-1, 1])
     ax.locator_params(axis="x", integer=True, tight=True)
     ax.legend(loc="best", fontsize=10)
     ax.set_title('MCC score per iteration')

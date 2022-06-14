@@ -236,6 +236,12 @@ class Experimenter:
             try:
                 self.__log.debug("Running \"{}#test\"".format(self.__scenario.__name__))
                 self.__scenario.test(instruction=fuzz_instr[i])
+            except IndexError as e:
+                self.__log.error("An exception occurred while running \"{}#test\"".format(self.__scenario.__name__))
+                self.__log.debug("There is an issue with the number of instructions... Printing the instructions:")
+                for i in range(len(fuzz_instr)):
+                    self.__log.debug("Instruction {}: {}".format(i, fuzz_instr[i]))
+                raise e  # Re-raise the exception so that it is handled at a higher level
             except Exception as e:
                 self.__log.exception("An exception occurred while running \"{}#test\"".format(self.__scenario.__name__))
                 raise e
