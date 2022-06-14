@@ -51,6 +51,5 @@ setup(
 
     scripts=[
         'bin/figsdn',
-        'bin/figsdn-report'
     ],
 )

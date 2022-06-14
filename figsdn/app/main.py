@@ -12,7 +12,7 @@ import sys
 import time
 import traceback
 from os.path import join
-from typing import Optional
+from typing import Iterable, Optional, Union
 
 from scipy.stats import rankdata
 from weka.core import jvm, packages
@@ -66,69 +66,80 @@ _context = {
 }
 
 
-# ===== ( Init functions ) ============================================================================================
-
-def init() -> None:
-
-    global _context
-
-    _log.info("Parsing the program arguments...")
-    args = arguments.parse()
-
-    # initialize the setup module
-    setup.init(args)
-
-    _log.info("Loading experiment context...")
-    # Fill the context dictionary
-    _context = {
-
-        # Experiment
-        'scenario'          : args.scenario,
-        'criterion'         : {
-            'name'          : args.criterion_name,
-            'kwargs'        : args.criterion_kwargs
-        },
-        'method'            : args.method,          # Fuzzing method
-        'budget'            : args.budget,          # Budget calculation method
-        'target_class'      : args.target_class,    # Class to predict
-        'other_class'       : args.other_class,     # Class to predict
-
-        # Iterations
-        'nb_of_samples'     : args.samples,
-        'it_limit'          : int(args.limit[1]) if args.limit and args.limit[0] == Limit.ITERATION else None,
-        'time_limit'        : int(args.limit[1]) if args.limit and args.limit[0] == Limit.TIME else None,
-
-        # Machine Learning
-        'algorithm'         : args.algorithm ,
-        'filter'            : args.filter,
-        'cv_folds'          : args.cv_folds,
-
-        # Rule Application
-        "mutation_rate"     : args.mutation_rate,
-    }
-
-    _log.info("Experiment context loaded. context is: {}".format(json.dumps(_context)))
-
-    ## Initialize the statistics
-    Stats.init(_context)
-# End def init
-
-
 # ===== ( Run function ) ===============================================================================================
 
-def run() -> None:
+def run(
+    mode='new',
+    scenario : Optional[str] = None,
+    criterion : Optional[str] = None,
+    target_class : Optional[str] = None,
+    other_class : Optional[str] = None,
+    samples : Optional[int] = None,
+    method : Optional[str] = None,
+    budget : Optional[int] = None,
+    ml_algorithm : Optional[str] = None,
+    ml_filter : Optional[str] = None,
+    ml_cv_folds : Optional[int] = None,
+    mutation_rate : Optional[int] = None,
+    criterion_kwargs : Optional[dict] = None,
+    limit : Optional[Iterable] = None,
+    reference : Optional[Union[str, int, float]] = None
+):
 
-    global _context
+    # Check if a valid mode has been selected
+    if mode not in ('new', 'resume'):
+        raise AttributeError("Run mode must be either \'run\' or \'resume\', not \'{}\'.".format(mode))
 
-    # Create variables used by the algorithm
-    precision = 0  # Algorithm precision
-    recall    = 0  # Algorithm recall
-    it        = 0  # iteration index
+    if not setup.is_initialized():
+        raise RuntimeError("'setup' module must be initialized before running the main function.")
 
-    # Initialize the rule set
-    rule_set              = RuleSet()
-    rule_set.target_class = _context['target_class']
-    rule_set.other_class  = _context['other_class']
+    # Setup for new mode
+    if mode == 'new':
+        _log.info("Loading experiment context...")
+        # Fill the context dictionary
+        _context = {
+
+            # Experiment
+            'scenario'          : scenario,
+            'criterion'         : {
+                'name'          : criterion,
+                'kwargs'        : criterion_kwargs
+            },
+            'method'            : method,          # Fuzzing method
+            'budget'            : budget,          # Budget calculation method
+            'target_class'      : target_class,    # Class to predict
+            'other_class'       : other_class,     # Class to predict
+
+            # Iterations
+            'nb_of_samples'     : samples,
+            'it_limit'          : int(limit[1]) if limit and limit[0] == Limit.ITERATION else None,
+            'time_limit'        : int(limit[1]) if limit and limit[0] == Limit.TIME else None,
+
+            # Machine Learning
+            'algorithm'         : ml_algorithm ,
+            'filter'            : ml_filter,
+            'cv_folds'          : ml_cv_folds,
+
+            # Rule Application
+            "mutation_rate"     : mutation_rate,
+        }
+        _log.info("Experiment context loaded. context is: {}".format(json.dumps(_context)))
+
+        ## Initialize the statistics
+        Stats.init(_context)
+
+        # Create variables used by the algorithm
+        precision = 0  # Algorithm precision
+        recall = 0  # Algorithm recall
+        it = 0  # iteration index
+
+        # Initialize the rule set
+        rule_set = RuleSet()
+        rule_set.target_class = _context['target_class']
+        rule_set.other_class = _context['other_class']
+
+    elif mode == 'resume':
+        raise NotImplementedError("Resume function is not yet implemented")
 
     ## Get the criterion kwargs string
     if len(_context['criterion']['kwargs']) > 0:
@@ -359,10 +370,9 @@ def calculate_budget(data_size, samples, target, target_count, ruleset, method=a
         for i in range(len(ruleset)):
             confidence = ruleset.confidence(i, relative=True, relative_to_class=True)
             if ruleset[i].get_class() == _context['target_class']:
-                ruleset[i].set_budget(confidence * s_min / samples)
-
+                ruleset[i].set_budget(confidence * s_min)
             else:  # other_class
-                ruleset[i].set_budget(confidence * s_maj / samples)
+                ruleset[i].set_budget(confidence * s_maj)
 # End def calculate_budget
 
 
@@ -433,7 +443,22 @@ def cleanup(*args):
 # ===== ( Main Function ) ==============================================================================================
 
 # TODO: Check for sudo permissions otherwise ask for password
-def main() -> None:
+def main(
+        scenario,
+        criterion,
+        target_class,
+        other_class,
+        samples,
+        method,
+        budget,
+        ml_algorithm,
+        ml_filter,
+        ml_cv_folds,
+        mutation_rate,
+        criterion_kwargs : Optional[dict] = None,
+        limit : Optional[Iterable] = None,
+        reference : Optional[Union[str, int, float]] = None
+) -> None:
 
     global _crashed
 
@@ -444,13 +469,8 @@ def main() -> None:
     # Create configuration reload signal
     # signal.signal(signal.SIGHUP, None)
 
-    # Initialize the tool
-    try:
-        init()
-    except Exception as e:
-        print("Couldn't initialize the tool with reason: {}".format(e))
-        print(traceback.format_exc())
-        raise SystemExit(common.utils.exit_codes.ExitCode.EX_CONFIG)
+    # initialize the setup module
+    setup.init(reference)
 
     try:
 
@@ -475,7 +495,23 @@ def main() -> None:
         _log.debug("WEKA packages check has been done.")
 
         # Launch run function
-        run()
+        run(
+            mode='new',
+            scenario=scenario,
+            criterion=criterion,
+            target_class=target_class,
+            other_class=other_class,
+            samples=samples,
+            method=method,
+            budget=budget,
+            ml_algorithm=ml_algorithm,
+            ml_filter=ml_filter,
+            ml_cv_folds=ml_cv_folds,
+            mutation_rate=mutation_rate,
+            criterion_kwargs=criterion_kwargs,
+            limit=limit,
+            reference=reference
+        )
 
     except KeyboardInterrupt:
         _log.info("figsdn stopped by user.")

@@ -20,13 +20,46 @@ from figsdn.resources import scenarios, criteria
 class Command(StrEnum):
     """Enum for the possible commands of figsdn."""
 
-    # Values
-    RUN         = 'run',
+    # Nodes main command
+    NODES           = 'nodes',
+    EXPERIMENT      = 'experiment',
 
     @staticmethod
     def values():
         """Returns a list of all the possible commands"""
         return list(map(lambda c: c.value, Command))
+# End class Command
+
+
+class NodesCommand(StrEnum):
+    """Enum for the possible commands of figsdn."""
+
+    # Nodes main command
+    ADD             = 'add',
+    LIST            = 'list',
+    REMOVE          = 'remove',
+    STATUS          = 'status'
+
+    @staticmethod
+    def values():
+        """Returns a list of all the possible commands"""
+        return list(map(lambda c: c.value, NodesCommand))
+# End class NodesCommand
+
+
+class ExperimentCommand(StrEnum):
+    """Enum for the possible commands of figsdn."""
+
+    # Nodes main command
+    LIST       = 'list',
+    REPORT     = 'report',
+    RUN        = 'run',
+    STATUS     = 'status'
+
+    @staticmethod
+    def values():
+        """Returns a list of all the possible commands"""
+        return list(map(lambda c: c.value, ExperimentCommand))
 # End class Command
 
 
@@ -139,24 +172,149 @@ def parse(args: Optional[Iterable] = None):
         help="Do not perform cleaning actions on exit"
     )
 
-    # ==== ( command argument ) ========================================================================================
+    parser.add_argument(
+        '-y',
+        '--yes',
+        '--assume-yes',
+        dest='assume_yes',
+        help="Automatic yes to prompts; assume \"yes\" as answer to all prompts and run non-interactively.",
+        action='store_true',
+    )
+
+    # ==== (  Global Positional arguments ) ============================================================================
 
     command_parser = parser.add_subparsers(
         title='command',
-        dest='command',
+        dest='cmd',
         required=True,
-        metavar='COMMAND',
+        metavar='CMD',
         help="Command to be executed."
     )
 
-    # ==== ( Run Command arguments ) ===================================================================================
+    # ==============================
+    # ===== ( NODES Command ) ======
+    # ==============================
 
-    run_cmd = command_parser.add_parser(
-        name=Command.RUN,
+    nodes_cmd = command_parser.add_parser(
+        name=Command.NODES,
+        help='Manages the remote nodes.'
+    )
+
+    nodes_cmd_parser = nodes_cmd.add_subparsers(
+        title='command',
+        dest='nodes_cmd',
+        required=True,
+        metavar='CMD',
+        help="Command to be executed."
+    )
+
+    # ==== ( Args for command LIST_NODES ) =========
+
+    list_node_cmd = nodes_cmd_parser.add_parser(
+        name=NodesCommand.LIST,
+        help='List all previously saved remote nodes'
+    )
+
+    list_node_cmd.add_argument(
+        '--show-pass',
+        action='store_true',
+        dest='show_pass',
+        help="Display the passwords of the saved nodes in the console.",
+        required=False
+    )
+
+    add_node_cmd = nodes_cmd_parser.add_parser(
+        name=NodesCommand.ADD,
+        help='Add a remote node to the list of known modes'
+    )
+
+    # Fetch the results from a remote node
+    add_node_cmd.add_argument(
+        'hostname',
+        help="Hostname of the node",
+        type=str,
+    )
+
+    add_node_cmd.add_argument(
+        'user',
+        help="user to ssh into",
+        type=str,
+    )
+
+    add_node_cmd.add_argument(
+        '-s',
+        '--ssh-port',
+        action='store',
+        default=22,  # Default ssh port on most machines
+        dest="rport",
+        type=int,
+        required=False
+    )
+
+    # Password
+    add_node_cmd.add_argument(
+        '-p',
+        '--password',
+        type=str,
+        default=None,
+        dest='rpwd',
+        help="Password to SSH into the remote node. Used only if --remote is used."
+    )
+
+    add_node_cmd.add_argument(
+        '-o',
+        '--overwrite',
+        action='store_true',
+        dest='overwrite',
+        help="Overwrites the information of a previous node if it exists."
+    )
+
+    # ==== ( Args for command RMV_NODE ) =========
+
+    rmv_node_cmd = nodes_cmd_parser.add_parser(
+        name=NodesCommand.REMOVE,
+        help='Remove a node from the list of known modes'
+    )
+
+    # Fetch the results from a remote node
+    rmv_node_cmd.add_argument(
+        'node',
+        help="Saved node to remove. Accepted values are either the name of the node, its hostname or 'all'.",
+        type=str,
+    )
+
+    # ===================================
+    # ===== ( EXPERIMENT Command ) ======
+    # ===================================
+
+    expt_cmd = command_parser.add_parser(
+        name=Command.EXPERIMENT,
+        help='Manage experiments.'
+    )
+
+    expt_cmd_parser = expt_cmd.add_subparsers(
+        title='command',
+        dest='expt_cmd',
+        required=True,
+        metavar='CMD',
+        help="Command to be executed."
+    )
+
+    expt_cmd.add_argument(
+        '-n',
+        '--node',
+        metavar='<node>',
+        help='Specify which node to perform the command on. Otherwise'
+    )
+
+    # ===== ( EXPERIMENT RUN Command ) ======
+
+    expt_run_cmd = expt_cmd_parser.add_parser(
+        name=ExperimentCommand.RUN,
         help='Run an experiment.'
     )
 
-    run_cmd.add_argument(
+    expt_run_cmd.add_argument(
         'error_type',
         metavar='ERROR_TYPE',
         type=str,
@@ -166,7 +324,7 @@ def parse(args: Optional[Iterable] = None):
     )
 
     # Positional argument to choose the machine learning algorithm
-    run_cmd.add_argument(
+    expt_run_cmd.add_argument(
         'scenario',
         metavar='SCENARIO',
         type=str,
@@ -178,7 +336,7 @@ def parse(args: Optional[Iterable] = None):
     # Positional argument to choose the criterion
     # Break criterion positional argument in two names to circumvent a bug where a positional argument can't have
     # several kwargs defined (python issue 14074: https://bugs.python.org/issue14074)
-    run_cmd.add_argument(
+    expt_run_cmd.add_argument(
         'criterion_name',
         metavar='CRITERION',
         type=str,
@@ -187,7 +345,7 @@ def parse(args: Optional[Iterable] = None):
              "Allowed values are: {}".format(', '.join("\'{}\'".format(crit) for crit in CRITERIA))
     )
 
-    run_cmd.add_argument(
+    expt_run_cmd.add_argument(
         'criterion_kwargs',
         metavar='kwargs',
         nargs='*',
@@ -195,10 +353,8 @@ def parse(args: Optional[Iterable] = None):
         help="kwargs for the criterion (optional)"
     )
 
-    # ==== ( Run Command Optionals ) ===================================================================================
-
     # Argument to choose the machine learning algorithm
-    run_cmd.add_argument(
+    expt_run_cmd.add_argument(
         '-A,',
         '--algorithm',
         metavar='',
@@ -209,7 +365,7 @@ def parse(args: Optional[Iterable] = None):
     )
 
     # Argument to choose the machine learning algorithm
-    run_cmd.add_argument(
+    expt_run_cmd.add_argument(
         '-b,',
         '--budget',
         metavar='',
@@ -222,7 +378,7 @@ def parse(args: Optional[Iterable] = None):
     )
 
     # Argument to choose the number of cross validation folds
-    run_cmd.add_argument(
+    expt_run_cmd.add_argument(
         '--cv-folds',
         metavar='',
         type=int,
@@ -233,7 +389,7 @@ def parse(args: Optional[Iterable] = None):
     )
 
     # Argument to limit the number of iterations
-    run_cmd.add_argument(
+    expt_run_cmd.add_argument(
         '-l',
         '--limit',
         metavar='',
@@ -245,7 +401,7 @@ def parse(args: Optional[Iterable] = None):
     )
 
     # Argument to choose the preprocessing strategy
-    run_cmd.add_argument(
+    expt_run_cmd.add_argument(
         '-F',
         '--filter',
         metavar='',
@@ -256,7 +412,7 @@ def parse(args: Optional[Iterable] = None):
     )
 
     # Argument to choose the experiment mode
-    run_cmd.add_argument(
+    expt_run_cmd.add_argument(
         '--method',
         metavar='',
         type=str,
@@ -268,7 +424,7 @@ def parse(args: Optional[Iterable] = None):
     )
 
     # Argument to choose the mutation rate of additional fields
-    run_cmd.add_argument(
+    expt_run_cmd.add_argument(
         '--mutation-rate',
         metavar='',
         type=float,
@@ -279,7 +435,7 @@ def parse(args: Optional[Iterable] = None):
     )
 
     # Argument to choose the reference name of the experiment
-    run_cmd.add_argument(
+    expt_run_cmd.add_argument(
         '-R',
         '--reference',
         metavar='',
@@ -290,7 +446,7 @@ def parse(args: Optional[Iterable] = None):
     )
 
     # Argument to choose the number of sample to generate
-    run_cmd.add_argument(
+    expt_run_cmd.add_argument(
         '-s',
         '--samples',
         metavar='',
@@ -300,7 +456,45 @@ def parse(args: Optional[Iterable] = None):
         help="Override the number of samples. (default: %(default)s)"
     )
 
+    # ===== ( EXPERIMENT LIST Command ) ======
+
+    expt_list_cmd = expt_cmd_parser.add_parser(
+        name=ExperimentCommand.LIST,
+        help='List all the experiments in on a node.'
+    )
+
+    # ===== ( EXPERIMENT REPORT Command ) ======
+
+    expt_rpt_cmd = expt_cmd_parser.add_parser(
+        name=ExperimentCommand.REPORT,
+        help='Report from an experiment.'
+    )
+
+    # Fetch the results from a remote node
+    expt_rpt_cmd.add_argument(
+        'expt',
+        help="Name of the experiment to fetch",
+        type=str,
+    )
+
+    # Force to tool fetch again the already downloaded experiments
+    expt_rpt_cmd.add_argument(
+        '--ignore-existing',
+        action='store_true',
+        dest='ignore_existing',
+        help="Skip updating the datasets and models files that have already been downloaded beforehand."
+    )
+
+    expt_rpt_cmd.add_argument(
+        '-t',
+        '--test-on-data',
+        dest='test_on_data',
+        default=None,
+        help="If a test to perform is added to the list,"
+    )
+
     args = parser.parse_args(sys.argv[1:] if args is None else args)
+    print(args)
     return _format_args(parser, args)
 # End def parse
 
@@ -310,44 +504,47 @@ def parse(args: Optional[Iterable] = None):
 def _format_args(parser : argparse.ArgumentParser, args : argparse.Namespace):
     """ Perform some operations on the arguments."""
 
-    # TODO: All this sections should be removed and integrated within the experimenter
-    setattr(args, 'target_class', args.error_type)
-    delattr(args, 'error_type')
-    setattr(args, 'other_class', None)
+    if args.cmd == Command.EXPERIMENT and args.expt_cmd == ExperimentCommand.RUN:
+        # TODO: All this sections should be removed and integrated within the experimenter
+        setattr(args, 'target_class', args.error_type)
+        delattr(args, 'error_type')
+        setattr(args, 'other_class', None)
 
-    if args.target_class == ErrorType.KNOWN_REASON:
-        args.other_class = ErrorType.UNKNOWN_REASON.value
+        if args.target_class == ErrorType.KNOWN_REASON:
+            args.other_class = ErrorType.UNKNOWN_REASON.value
 
-    elif args.target_class == ErrorType.UNKNOWN_REASON:
-        args.other_class = ErrorType.KNOWN_REASON.value
+        elif args.target_class == ErrorType.UNKNOWN_REASON:
+            args.other_class = ErrorType.KNOWN_REASON.value
 
-    elif args.target_class == ErrorType.PARSING_ERROR:
-        args.other_class = ErrorType.NON_PARSING_ERROR.value
+        elif args.target_class == ErrorType.PARSING_ERROR:
+            args.other_class = ErrorType.NON_PARSING_ERROR.value
 
-    elif args.target_class == ErrorType.NON_PARSING_ERROR:
-        args.other_class = ErrorType.PARSING_ERROR.value
+        elif args.target_class == ErrorType.NON_PARSING_ERROR:
+            args.other_class = ErrorType.PARSING_ERROR.value
 
-    elif args.target_class == ErrorType.OFP_BAD_OUT_PORT:
-        args.other_class = "OTHER_REASON"
+        elif args.target_class == ErrorType.OFP_BAD_OUT_PORT:
+            args.other_class = "OTHER_REASON"
 
-    # Format the criterion
-    if args.criterion_kwargs:
-        kwargs = dict()
-        for kwarg in args.criterion_kwargs:
-            name, value = kwarg.split("=")
-            kwargs[name] = value
-        args.criterion_kwargs = kwargs
+        # Format the criterion
+        if args.criterion_kwargs:
+            kwargs = dict()
+            for kwarg in args.criterion_kwargs:
+                name, value = kwarg.split("=")
+                kwargs[name] = value
+            args.criterion_kwargs = kwargs
+        else:
+            args.criterion_kwargs = dict()
+
+        # Format the date of time_limit
+        if args.limit:
+            if args.limit[0] == Limit.TIME:
+                tmp = time_parse(args.limit[1])
+                if tmp is None:
+                    parser.error("Invalid time format. (got : \'{}\')".format(args.limit[1]))
+                else:
+                    args.limit[1] = tmp
     else:
-        args.criterion_kwargs = dict()
-
-    # Format the date of time_limit
-    if args.limit:
-        if args.limit[0] == Limit.TIME:
-            tmp = time_parse(args.limit[1])
-            if tmp is None:
-                parser.error("Invalid time format. (got : \'{}\')".format(args.limit[1]))
-            else:
-                args.limit[1] = tmp
+        pass  # Nothing for now
 
     return args
 # End def _format_args

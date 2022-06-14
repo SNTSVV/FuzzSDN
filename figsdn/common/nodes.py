@@ -15,7 +15,6 @@ import paramiko
 from figsdn.common import app_path
 
 _REMOTE_VMS_FILE = os.path.join(app_path.state_dir(), "remote_vms.json")
-__FRAMEWORK_NAME__ = "figsdn"
 
 
 # ===== (  ) ===========================================================================================================
@@ -45,15 +44,15 @@ def list_remote_exp(hostname: str, ssh_port: int, username: str, password: Optio
     usr_home = stdout.readlines()[0].strip()
 
     # List all the experiments that can be listed
-    # TODO: Find a way to autmatically find the remote exp_path.
-    #       Maybe by writting it to a file or something...
+    # TODO: Find a way to automatically find the remote exp_path.
+    #       Maybe by writing it to a file or something...
     stdin, stdout, stderr = ssh.exec_command("ls {}/.local/share/figsdn/experiments".format(usr_home))
     return list(sorted([x.strip() for x in stdout.readlines()]))
 # End def list_remote_exp
 
 
 def add(hostname: str, ssh_port: int, username: str, name: Optional[str] = None, password: Optional[str] = None,
-             overwrite=False):
+        overwrite=False):
     """
     Save a configuration about the remote host
     :param name:

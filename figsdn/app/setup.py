@@ -8,7 +8,7 @@ import os
 import pwd
 from configparser import ConfigParser
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
 
 from figsdn.common import app_path
 from figsdn.common.utils import str_to_typed_value
@@ -22,7 +22,7 @@ from figsdn import __version__, __app_name__
 CONFIG              = None
 CONFIG_NAME         = "{}.cfg".format(__app_name__)
 EXP_REF             = ""
-
+_IS_INIT            = False
 
 # ===== ( Config Section class ) =======================================================================================
 
@@ -94,10 +94,11 @@ class Configuration:
 
 # ===== ( Init ) =======================================================================================================
 
-def init(args=None):
+def init(expt_reference : Optional[Union[str, int, float]] = None):
 
     global CONFIG
     global EXP_REF
+    global _IS_INIT
 
     # Verify that there is a configuration file in the configuration directory
     config_path = os.path.join(app_path.config_dir(), CONFIG_NAME)
@@ -108,15 +109,22 @@ def init(args=None):
             "Couldn't find configuration file \"{}\"  under \"{}\"".format(CONFIG_NAME, config_path))
 
     # Parse the reference
-    if args is not None and isinstance(args.reference, (str, int, float)):
-        EXP_REF = str(args.reference).strip()
+    if expt_reference is not None:
+        EXP_REF = str(expt_reference).strip()
     else:
         EXP_REF = datetime.now().strftime("%Y%d%m_%H%M%S")
     app_path.set_experiment_reference(EXP_REF)
 
     _configure_pid()
     _configure_logger()
+
+    _IS_INIT = True
 # End def make_folder_struct
+
+
+def is_initialized() -> bool:
+    return _IS_INIT
+# End def is_initialized
 
 
 # ===== ( Functions ) ==================================================================================================
@@ -218,7 +226,8 @@ def _configure_logger():
     global EXP_REF
 
     # Add the trace level
-    add_logging_level(level_name='TRACE', level_num=logging.DEBUG-5)
+    if not hasattr(logging, 'trace'):
+        add_logging_level(level_name='TRACE', level_num=logging.DEBUG-5)
 
     # Remove all handlers associated with the root logger object.
     for handler in logging.root.handlers[:]:

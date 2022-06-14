@@ -4,7 +4,7 @@
 import os
 
 # Local dependencies
-from figsdn.app import main
+from figsdn import main
 from figsdn.common.utils.terminal import Fore, Style
 
 
