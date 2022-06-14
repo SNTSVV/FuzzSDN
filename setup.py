@@ -14,7 +14,7 @@ with open('requirements.txt', 'r') as f:
 setup(
     # Metadata
     name='figsdn',
-    version='0.6.0',
+    version='0.7.0',
     description='A Failure-Inducing Model generation scheme for SDN based systems using Fuzzing and Machine Learning '
                 'Techniques',
     url='',
