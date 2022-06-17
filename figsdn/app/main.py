@@ -21,7 +21,7 @@ from figsdn.common import app_path
 from figsdn.common.utils import csv_ops, utils, ExitCode
 from figsdn.common.utils.database import Database as SqlDb
 from figsdn.common.utils.terminal import Style
-from figsdn import arguments, common
+from figsdn import __app_name__, arguments, common
 from figsdn.app import setup
 from figsdn.arguments import Limit
 from figsdn.app.drivers import FuzzerDriver, OnosDriver, RyuDriver
@@ -83,8 +83,9 @@ def run(
     mutation_rate : Optional[int] = None,
     criterion_kwargs : Optional[dict] = None,
     limit : Optional[Iterable] = None,
-    reference : Optional[Union[str, int, float]] = None
 ):
+
+    global _context
 
     # Check if a valid mode has been selected
     if mode not in ('new', 'resume'):
@@ -92,6 +93,11 @@ def run(
 
     if not setup.is_initialized():
         raise RuntimeError("'setup' module must be initialized before running the main function.")
+
+    # Create variables used by the algorithm
+    precision = 0  # Algorithm precision
+    recall = 0  # Algorithm recall
+    it = 0  # iteration index
 
     # Setup for new mode
     if mode == 'new':
@@ -127,11 +133,6 @@ def run(
 
         ## Initialize the statistics
         Stats.init(_context)
-
-        # Create variables used by the algorithm
-        precision = 0  # Algorithm precision
-        recall = 0  # Algorithm recall
-        it = 0  # iteration index
 
         # Initialize the rule set
         rule_set = RuleSet()
@@ -308,11 +309,12 @@ def run(
 # End def run
 
 
-def calculate_budget(data_size, samples, target, target_count, ruleset, method=arguments.Budget.CONFIDENCE_AND_RANK):
+def calculate_budget(data_size, samples, target, target_count, ruleset, method=arguments.Budget.CONFIDENCE):
     """"""
     # TODO: Move this calculation to the experimenter
     if method not in arguments.Budget.values():
         raise ValueError("Unknown method '{}'".format(method))
+    _log.debug("Setting rule budget according to method \"{}\".".format(method))
 
     # Calculate the constants used in all methods
     class_ratio = target_count / data_size if target_count <= (data_size / 2) else (data_size - target_count)/data_size
@@ -364,15 +366,23 @@ def calculate_budget(data_size, samples, target, target_count, ruleset, method=a
         # Assign the budgets to the corresponding rules
         for i, budget in budgets:
             ruleset[i].set_budget(budget)
+            _log.debug("Set a budget of {} for rule {}".format(ruleset[i].budget, i))
 
-    if method == arguments.Budget.CONFIDENCE:
-
+    elif method == arguments.Budget.CONFIDENCE:
         for i in range(len(ruleset)):
             confidence = ruleset.confidence(i, relative=True, relative_to_class=True)
-            if ruleset[i].get_class() == _context['target_class']:
-                ruleset[i].set_budget(confidence * s_min)
+            if ruleset[i].get_class() == target:
+                if target_count <= (data_size / 2):
+                    ruleset[i].set_budget(confidence * s_min)
+                else:
+                    ruleset[i].set_budget(confidence * s_maj)
             else:  # other_class
-                ruleset[i].set_budget(confidence * s_maj)
+                if target_count <= (data_size / 2):
+                    ruleset[i].set_budget(confidence * s_maj)
+                else:
+                    ruleset[i].set_budget(confidence * s_min)
+
+            _log.debug("Set a budget of {} for rule {}".format(ruleset[i].budget, i))
 # End def calculate_budget
 
 
@@ -509,21 +519,20 @@ def main(
             ml_cv_folds=ml_cv_folds,
             mutation_rate=mutation_rate,
             criterion_kwargs=criterion_kwargs,
-            limit=limit,
-            reference=reference
+            limit=limit
         )
 
     except KeyboardInterrupt:
-        _log.info("figsdn stopped by user.")
+        _log.info("{} stopped by user.".format(__app_name__))
 
     except Exception as e:
-        _log.exception("An uncaught exception happened while running figsdn")
-        print("An uncaught exception happened while running figsdn: {}".format(e))
-        print("Check the logs at \"{}\" for more information.".format(app_path.log_dir()))
+        _log.exception("An uncaught exception happened while running {}".format(__app_name__))
+        print("An uncaught exception happened while running {}: {}".format(__app_name__, e))
+        print("Check the logs at \"{}\" for more information.".format(os.path.join(app_path.log_dir(), setup.EXP_REF + ".log")))
         _crashed = True
 
     finally:
-        _log.info("Closing figsdn.")
+        _log.info("Closing {}.".format(__app_name__))
         jvm.stop()  # Close the JVM
         cleanup()  # Clean up the program
 # End def main

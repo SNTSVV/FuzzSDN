@@ -360,7 +360,7 @@ class Experimenter:
     # End def __build_fuzzer_action
 
     def __get_budget_for_rules(self):
-        budget_list = [self.ruleset[i].get_budget() for i in range(len(self.ruleset))]
+        budget_list = [self.ruleset[i].budget for i in range(len(self.ruleset))]
         rounded_budget = [int(x) for x in saferound(budget_list, places=0)]
         self.__log.trace("Calculated budget for {} rules: {}".format(len(self.ruleset), rounded_budget))
         return rounded_budget
