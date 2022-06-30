@@ -119,7 +119,8 @@ def standard_deviation(X, normalize : bool = False):
     data = copy(X)
     # Then normalize the columns
     if normalize is True:
-        data = data / data.max(axis=0)
+        # divide data by data.max(axis=0) and prevent warnings on divide by 0 if a whole column is equal to 0 !
+        data = np.divide(data, data.max(axis=0), out=np.zeros_like(data), where=data.max(axis=0) != 0)
     # Finally, return the standard deviation
     return np.nanstd(data)
 # End def standard_deviation
