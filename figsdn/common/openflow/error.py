@@ -29,7 +29,7 @@ class ErrorType(IntEnum):
 
     @property
     def code_class(self):
-        """Return a Code class based on current ErrorType value.
+        """Return a Code class based on current FailureToTestType value.
         Returns:
             enum.IntEnum: class referenced by current error type.
         """

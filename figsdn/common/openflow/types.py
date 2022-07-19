@@ -71,5 +71,4 @@ class ofp_type(IntEnum):
 
     # Controller Status async message.
     OFPT_CONTROLLER_STATUS  = 35,
-
 # End def ofp_type

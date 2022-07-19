@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 import random
 
-import figsdn.common.openflow.v0x05.message.struct as ofp_0x05_msg_struct
-from figsdn.common.openflow.v0x05.common.message import ofp_type
+import figsdn.common.openflow.message.struct as ofp_0x05_msg_struct
+from figsdn.common.openflow.types import ofp_type
 
 
 # NB: Simple implementation for now
@@ -22,9 +22,16 @@ def beads_fuzzer_actions():
     return actions
 
 
-# self testing
+def figsdn_action_mutate_rule(rule : Rule, amount, scenario, criterion, mutation_rate):
 
-if __name__ == '__main__':
-    import json
+    ctx = None
+    include_header = True if criterion == "first_hello_message" else False
+    ctx = CRITERION_CTX_OPTIONS.get(criterion, None)
 
-    print(json.dumps(beads_fuzzer_actions(), indent=4, sort_keys=False))
+    return rule.convert_to_fuzzer_actions(
+        n=amount,
+        include_header=include_header,
+        mutation_rate=mutation_rate,
+        ctx=ctx.to_dict() if ctx is not None else None
+    )
+# End def figsdn_action_mutate_rule

@@ -4,7 +4,7 @@ import os
 
 from figsdn.app import setup
 from figsdn.app.analytics.log import LOG_RGX, LogParser
-from figsdn.common.openflow.v0x05.error import ErrorType
+from figsdn.common.openflow.error import ErrorType
 
 
 class RyuLogParser(LogParser):
