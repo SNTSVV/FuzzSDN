@@ -14,10 +14,15 @@ LOG_RGX = {
                         r'(?P<mac_addr>(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2})',   # Match the mac address
 
         # Switch Disconnected
-        'SWITCH_DISCONNECTED': r'Switch\sdisconnected\scallback\sfor\ssw:NiciraSwitchHandshaker{'           # Match message
+        'SWITCH_DISCONNECTED': r'Switch\sdisconnected\scallback\sfor\ssw:NiciraSwitchHandshaker{'       # Match message
                                r'session=(?P<session>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d{1,5},\s'    # Match session
                                r'dpid=(?P<dpid>(?:[0-9A-Fa-f]{2}[:-]){7}[0-9A-Fa-f]{2})}'               # Match dpid
-                               r'\.\sCleaning\sup',                                                         # Match message
+                               r'\.\sCleaning\sup',                                                     # Match message
+
+        # Switch Disconnected
+        'SWITCH_DISCONNECTED_HELLO': r'Switch\sdisconnected\scallback\sfor\ssw:'
+                                     r'\[\/(?P<IP>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d{1,5}\sDPID\[\?\]\]'
+                                     r'\.\sCleaning\sup',
 
 
         # ONOS controller send HELLO Message
@@ -32,6 +37,10 @@ LOG_RGX = {
                             r'switch\sNiciraSwitchHandshaker{'
                             r'session=(?P<session>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d{1,5},\s'
                             r'dpid=(?P<dpid>(?:[0-9A-Fa-f]{2}[:-]){7}[0-9A-Fa-f]{2})}',
+
+        'PROCESSING_ERROR_HELLO': r'Error\swhile\sprocessing\smessage\sfrom\sswitch\s\[\/'
+                                  r'(?P<IP>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d{1,5}'
+                                  r'\sDPID\[\?\]\]\s*state\sWAIT_HELLO',
 
         # Matches Traceback and parse the error
         'TRACEBACK': r'Traceback \(most recent call last\):'                                 # Match the traceback
@@ -79,3 +88,4 @@ LOG_RGX = {
 
     }
 }
+

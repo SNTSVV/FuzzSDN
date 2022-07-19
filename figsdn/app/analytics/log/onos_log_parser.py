@@ -14,7 +14,11 @@ class OnosLogParser(LogParser):
     def __init__(self):
         super().__init__()
         self.__log = logging.getLogger(__name__)
-        self.__log_path = os.path.join(os.path.expanduser(setup.config().onos.root_dir), 'karaf', 'data', 'log', 'karaf.log')
+        try:
+            self.__log_path = os.path.join(os.path.expanduser(setup.config().onos.root_dir), 'karaf', 'data', 'log', 'karaf.log')
+        except AttributeError:
+            self.__log.warning("Couldn't find log path to onos.")
+            self.__log_path = None
     # End def __init__
 
     def parse_log(self, path=None):
@@ -44,6 +48,12 @@ class OnosLogParser(LogParser):
             if hello_happened is False:
                 if rgx_key == 'OF_HELLO':
                     hello_happened = True
+                elif rgx_key == 'PROCESSING_ERROR_HELLO':
+                    self.__log.trace("Hello processing error detected.")
+                    hello_happened = True
+                    has_error = True
+                    error_type = 'PROCESSING_ERROR'
+
             else:
                 if has_error is False:
                     if rgx_key == 'PROCESSING_ERROR':
@@ -101,11 +111,10 @@ class OnosLogParser(LogParser):
                             continue  # Process the next match
 
                 # Find if there is a switch disconnection
-                if rgx_key == 'SWITCH_DISCONNECTED' and has_error is True:
+                if rgx_key in ('SWITCH_DISCONNECTED', 'SWITCH_DISCONNECTED_HELLO') and has_error is True:
                     self.__log.trace("Switch disconnection detected")
                     error_effect = 'SWITCH_DISCONNECTED'
 
         return has_error, error_type, error_reason, error_effect, self.log_trace
     # End def parse_log
-
 # End class OnosLogParser

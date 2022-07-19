@@ -37,9 +37,9 @@ class StrEnum(str, Enum):
 
     __str__ = str.__str__
 
-    def _generate_next_value_(name, start, count, last_values):
+    def _generate_next_value_(self, start, count, last_values):
         """
         Return the lower-cased version of the member name.
         """
-        return name.lower()
+        return self.lower()
 # End class StrEnum

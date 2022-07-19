@@ -189,6 +189,7 @@ class Model:
         return ModelInfo(
             classes=(class_label[0], class_label[1]),
             evaluation_method="test_data: {}".format(data_path),
+            scheme="{} {}".format(self._classifier.classname, " ".join(self._classifier.options)),
             instances=int(evaluator.num_instances),
             accuracy=evaluator.percent_correct,
             num_tp={

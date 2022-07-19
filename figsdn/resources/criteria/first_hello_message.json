@@ -1,0 +1,4 @@
+{
+    "criteria": [{"packetType": "hello"}],
+    "matchLimit": 1
+}

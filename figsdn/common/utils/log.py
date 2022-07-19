@@ -47,8 +47,7 @@ class LogPipe(threading.Thread):
 
 
 def add_logging_level(level_name, level_num, method_name=None):
-    """
-    Comprehensively adds a new logging level to the `logging` module and the currently configured logging class.
+    """Comprehensively adds a new logging level to the `logging` module and the currently configured logging class.
 
     To avoid accidental clobberings of existing attributes, this method will raise an `AttributeError` if the level name
     is already an attribute of the `logging` module or if the method name is already present
@@ -63,15 +62,17 @@ def add_logging_level(level_name, level_num, method_name=None):
     5
     ------
 
-    :param level_name: becomes an attribute of the `logging` module with the value
-    :param level_num:
-    :param method_name: becomes a convenience method for both `logging`
-                        itself and the class returned by `logging.getLoggerClass()` (usually just
-                        `logging.Logger`). If `methodName` is not specified, `levelName.lower()` is
-                        used.
+    Args:
+        level_name: becomes an attribute of the `logging` module with the value
+        level_num:
+        method_name: becomes a convenience method for both `logging`
+                     itself and the class returned by `logging.getLoggerClass()` (usually just
+                     `logging.Logger`). If `methodName` is not specified, `levelName.lower()` is
+                     used.
 
-    :raise AttributeError: to avoid accidental clobberings of existing attributes if the level name is already an
-                           attribute of the `logging` module or if the method name is already present
+    Raises:
+        AttributeError: to avoid accidental clobberings of existing attributes if the level name is already an
+                        attribute of the `logging` module or if the method name is already present
     """
     if not method_name:
         method_name = level_name.lower()

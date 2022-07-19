@@ -239,8 +239,8 @@ class Experimenter:
             except IndexError as e:
                 self.__log.error("An exception occurred while running \"{}#test\"".format(self.__scenario.__name__))
                 self.__log.debug("There is an issue with the number of instructions... Printing the instructions:")
-                for i in range(len(fuzz_instr)):
-                    self.__log.debug("Instruction {}: {}".format(i, fuzz_instr[i]))
+                for j in range(len(fuzz_instr)):
+                    self.__log.debug("Instruction {}: {}".format(j, fuzz_instr[j]))
                 raise e  # Re-raise the exception so that it is handled at a higher level
             except Exception as e:
                 self.__log.exception("An exception occurred while running \"{}#test\"".format(self.__scenario.__name__))
@@ -307,7 +307,7 @@ class Experimenter:
                 json_dict.update(self.__criterion)
                 json_dict['actions'] = [{
                     "intent": "mutate_packet",
-                    "includeHeader": False
+                    "includeHeader": True if self.__criterion_name == 'first_hello_message' else False
                 }]
                 instructions.append(json.dumps({"instructions": [json_dict]}))
 
@@ -340,12 +340,10 @@ class Experimenter:
                 # Create the action for the rule i
                 self.__log.trace("Budget for rule {}: {}".format(i, budget_list[i]))
                 if budget_list[i] > 0:
-                    actions = self.ruleset[i].convert_to_fuzzer_actions(
-                        n=budget_list[i],
-                        include_header=False,
-                        mutation_rate=self.mutation_rate,
-                        ctx=CTX_PKT_IN_tmp
-                    )
+                    actions = strategy.figsdn_action_mutate_rule(rule=self.ruleset[i], amount=budget_list[i],
+                                                                 scenario=self.__scenario_name,
+                                                                 criterion=self.__criterion_name,
+                                                                 mutation_rate=self.mutation_rate)
                     self.__log.trace("Number of actions generated for rule {}: {}".format(i, len(actions)))
                     for action in actions:
                         json_dict = dict()
