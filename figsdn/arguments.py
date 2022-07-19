@@ -63,20 +63,21 @@ class ExperimentCommand(StrEnum):
 # End class Command
 
 
-class ErrorType(StrEnum):
-    """Enum for the possible error type of figsdn."""
+class FailureToTestType(StrEnum):
+    """Enum for the possible failures to test type of figsdn."""
     # Positional argument to choose the target
-    UNKNOWN_REASON      = 'unknown_reason',
-    KNOWN_REASON        = 'known_reason',
-    PARSING_ERROR       = 'parsing_error',
-    NON_PARSING_ERROR   = 'non_parsing_error',
-    OFP_BAD_OUT_PORT    = 'ofp_bad_out_port'
+    UNKNOWN_REASON          = 'unknown_reason',
+    KNOWN_REASON            = 'known_reason',
+    PARSING_ERROR           = 'parsing_error',
+    NON_PARSING_ERROR       = 'non_parsing_error',
+    SWITCH_DISCONNECTION    = 'switch_disconnection',
+    OFP_BAD_OUT_PORT        = 'ofp_bad_out_port'
 
     @staticmethod
     def values():
         """Returns a list of all the possible commands"""
-        return list(map(lambda c: c.value, ErrorType))
-# End class ErrorType
+        return list(map(lambda c: c.value, FailureToTestType))
+# End class FailureToTestType
 
 
 class Method(StrEnum):
@@ -315,12 +316,12 @@ def parse(args: Optional[Iterable] = None):
     )
 
     expt_run_cmd.add_argument(
-        'error_type',
-        metavar='ERROR_TYPE',
+        'failure_under_test',
+        metavar='FAILURE_UNDER_TEST',
         type=str,
-        choices=ErrorType.values(),
+        choices=FailureToTestType.values(),
         help="Choose the error type to detect. "
-             "Allowed values are: {}".format(', '.join("\'{}\'".format(e) for e in ErrorType.values()))
+             "Allowed values are: {}".format(', '.join("\'{}\'".format(e) for e in FailureToTestType.values()))
     )
 
     # Positional argument to choose the machine learning algorithm
@@ -506,24 +507,6 @@ def _format_args(parser : argparse.ArgumentParser, args : argparse.Namespace):
 
     if args.cmd == Command.EXPERIMENT and args.expt_cmd == ExperimentCommand.RUN:
         # TODO: All this sections should be removed and integrated within the experimenter
-        setattr(args, 'target_class', args.error_type)
-        delattr(args, 'error_type')
-        setattr(args, 'other_class', None)
-
-        if args.target_class == ErrorType.KNOWN_REASON:
-            args.other_class = ErrorType.UNKNOWN_REASON.value
-
-        elif args.target_class == ErrorType.UNKNOWN_REASON:
-            args.other_class = ErrorType.KNOWN_REASON.value
-
-        elif args.target_class == ErrorType.PARSING_ERROR:
-            args.other_class = ErrorType.NON_PARSING_ERROR.value
-
-        elif args.target_class == ErrorType.NON_PARSING_ERROR:
-            args.other_class = ErrorType.PARSING_ERROR.value
-
-        elif args.target_class == ErrorType.OFP_BAD_OUT_PORT:
-            args.other_class = "OTHER_REASON"
 
         # Format the criterion
         if args.criterion_kwargs:

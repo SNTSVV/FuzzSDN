@@ -1,32 +1,31 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import datetime
-import grp
 import json
 import logging
-import math
 import os
 import pwd
 import signal
 import sys
 import time
-import traceback
 from os.path import join
 from typing import Iterable, Optional, Union
 
+import grp
+import math
 from scipy.stats import rankdata
 from weka.core import jvm, packages
 
+from figsdn import __app_name__, arguments
+from figsdn.app import setup
+from figsdn.app.drivers import FuzzerDriver, OnosDriver, RyuDriver
+from figsdn.app.experiment import Analyzer, Experimenter, Learner, Method, Model, RuleSet
+from figsdn.app.stats import Stats
+from figsdn.arguments import Limit
 from figsdn.common import app_path
-from figsdn.common.utils import csv_ops, utils, ExitCode
+from figsdn.common.utils import ExitCode, csv_ops, utils
 from figsdn.common.utils.database import Database as SqlDb
 from figsdn.common.utils.terminal import Style
-from figsdn import __app_name__, arguments, common
-from figsdn.app import setup
-from figsdn.arguments import Limit
-from figsdn.app.drivers import FuzzerDriver, OnosDriver, RyuDriver
-from figsdn.app.experiment import Analyzer, Experimenter, Method, Learner, Model, RuleSet
-from figsdn.app.stats import Stats
 
 # ===== ( locals ) =====================================================================================================
 
@@ -41,8 +40,7 @@ _context = {
         "name"      : str(),
         "kwargs"    : dict()
     },
-    "target_class"          : str(),
-    "other_class"           : str(),
+    "fut"                   : str(),
     "method"                : str(),
     "budget"                : str(),
 
@@ -72,8 +70,7 @@ def run(
     mode='new',
     scenario : Optional[str] = None,
     criterion : Optional[str] = None,
-    target_class : Optional[str] = None,
-    other_class : Optional[str] = None,
+    failure_under_test : Optional[str] = None,
     samples : Optional[int] = None,
     method : Optional[str] = None,
     budget : Optional[int] = None,
@@ -111,10 +108,9 @@ def run(
                 'name'          : criterion,
                 'kwargs'        : criterion_kwargs
             },
-            'method'            : method,          # Fuzzing method
-            'budget'            : budget,          # Budget calculation method
-            'target_class'      : target_class,    # Class to predict
-            'other_class'       : other_class,     # Class to predict
+            'method'            : method,               # Fuzzing method
+            'budget'            : budget,               # Budget calculation method
+            'fut'               : failure_under_test,   # Failure tested
 
             # Iterations
             'nb_of_samples'     : samples,
@@ -136,8 +132,8 @@ def run(
 
         # Initialize the rule set
         rule_set = RuleSet()
-        rule_set.target_class = _context['target_class']
-        rule_set.other_class = _context['other_class']
+        rule_set.target_class   = 'FAIL'  # Always '''FAIL'''
+        rule_set.other_class    = 'PASS'  # and '''PASS'''
 
     elif mode == 'resume':
         raise NotImplementedError("Resume function is not yet implemented")
@@ -154,7 +150,7 @@ def run(
     print(Style.BOLD, "*** Criterion: {}{}".format(_context['criterion']['name'], criterion_kwargs_str), Style.RESET)
     print(Style.BOLD, "*** Fuzzing Method: {}".format(_context['method']), Style.RESET)
     print(Style.BOLD, "*** Budget Calculation Method: {}".format(_context['budget']), Style.RESET)
-    print(Style.BOLD, "*** Target class: {}".format(_context['target_class']), Style.RESET)
+    print(Style.BOLD, "*** Failure under test: {}".format(_context['fut']), Style.RESET)
     print(Style.BOLD, "*** Machine Learning Algorithm: {}".format(_context['algorithm']), Style.RESET)
     print(Style.BOLD, "*** Machine Learning Filter: {}".format(_context['filter']), Style.RESET)
     print(Style.BOLD, "*** Mutation Rate: {}".format(_context['mutation_rate']), Style.RESET)
@@ -176,8 +172,8 @@ def run(
 
     # Setup the Learner
     learner = Learner()
-    learner.target_class    = _context['target_class']
-    learner.other_class     = _context['other_class']
+    learner.target_class    = 'FAIL'  # Always '''FAIL'''
+    learner.other_class     = 'PASS'  # and '''PASS'''
     learner.algorithm       = _context['algorithm']
     learner.filter          = _context['filter']
     learner.cv_folds        = _context['cv_folds']
@@ -227,11 +223,11 @@ def run(
         data.to_csv(join(app_path.exp_dir('data'), "it_{}_raw.csv".format(it)), index=False, encoding='utf-8')
 
         # Write the formatted data to the file
-        data = experimenter.analyzer.get_dataset(error_class=_context['target_class'])
+        data = experimenter.analyzer.get_dataset(failure_under_test=_context['fut'])
         data.to_csv(join(app_path.exp_dir('data'), "it_{}.csv".format(it)), index=False, encoding='utf-8')
 
         # Write the debug dataset to the file
-        data = experimenter.analyzer.get_dataset(error_class=_context['target_class'], debug=True)
+        data = experimenter.analyzer.get_dataset(failure_under_test=_context['fut'], debug=True)
         data.to_csv(join(app_path.exp_dir('data'), "it_{}_debug.csv".format(it)), index=False, encoding='utf-8')
 
         # Convert the set to an arff file
@@ -262,22 +258,16 @@ def run(
             ml_model.save(file_path=model_path)
 
             # Get recall and precision from the evaluator results
-            precision = ml_model.info.precision[_context['target_class']]
-            recall    = ml_model.info.recall[_context['target_class']]
+            precision = ml_model.info.precision['FAIL']
+            recall    = ml_model.info.recall['FAIL']
             # Avoid cases where precision or recall are NaN values
             recall = 0.0 if math.isnan(recall) else recall
             precision = 0.0 if math.isnan(precision) else precision
 
             # budget calculation
             data_size   = learner.get_instances_count()
-            calculate_budget(
-                data_size=data_size['all'],
-                samples=_context['nb_of_samples'],
-                target=_context['target_class'],
-                target_count=data_size[_context['target_class']],
-                ruleset=ml_model.ruleset,
-                method=_context['budget']
-            )
+            calculate_budget(data_size=data_size['all'], samples=_context['nb_of_samples'],
+                             failure_count=data_size['FAIL'], ruleset=ml_model.ruleset, method=_context['budget'])
 
         else:
             precision = 0.0
@@ -309,7 +299,7 @@ def run(
 # End def run
 
 
-def calculate_budget(data_size, samples, target, target_count, ruleset, method=arguments.Budget.CONFIDENCE):
+def calculate_budget(data_size, samples, failure_count, ruleset, method=arguments.Budget.CONFIDENCE):
     """"""
     # TODO: Move this calculation to the experimenter
     if method not in arguments.Budget.values():
@@ -317,7 +307,7 @@ def calculate_budget(data_size, samples, target, target_count, ruleset, method=a
     _log.debug("Setting rule budget according to method \"{}\".".format(method))
 
     # Calculate the constants used in all methods
-    class_ratio = target_count / data_size if target_count <= (data_size / 2) else (data_size - target_count)/data_size
+    class_ratio = failure_count / data_size if failure_count <= (data_size / 2) else (data_size - failure_count) / data_size
     s_min = min(0.5 * (data_size + samples) - class_ratio * data_size, samples)
     s_maj = max(samples - s_min, 0)
 
@@ -335,8 +325,8 @@ def calculate_budget(data_size, samples, target, target_count, ruleset, method=a
             })
 
         # Separate the two class in two different groups
-        tgt_rules = [r for r in rule_info if r['cls'] == target]
-        oth_rules = [r for r in rule_info if r['cls'] != target]
+        tgt_rules = [r for r in rule_info if r['cls'] == 'FAIL']
+        oth_rules = [r for r in rule_info if r['cls'] != 'FAIL']
 
         # Perform the budget calculation on both the rules for the target class and the other classes
         for rules in (tgt_rules, oth_rules):
@@ -350,13 +340,13 @@ def calculate_budget(data_size, samples, target, target_count, ruleset, method=a
             bgts = [b / sum(bgts) for b in bgts]
             # Multiply the budgets by either
             for i in range(len(rules)):
-                if rules[i]['cls'] == target:
-                    if target_count <= (data_size / 2):
+                if rules[i]['cls'] == 'FAIL':
+                    if failure_count <= (data_size / 2):
                         b = bgts[i] * s_min
                     else:
                         b = bgts[i] * s_maj
                 else:
-                    if target_count <= (data_size / 2):
+                    if failure_count <= (data_size / 2):
                         b = bgts[i] * s_maj
                     else:
                         b = bgts[i] * s_min
@@ -371,13 +361,13 @@ def calculate_budget(data_size, samples, target, target_count, ruleset, method=a
     elif method == arguments.Budget.CONFIDENCE:
         for i in range(len(ruleset)):
             confidence = ruleset.confidence(i, relative=True, relative_to_class=True)
-            if ruleset[i].get_class() == target:
-                if target_count <= (data_size / 2):
+            if ruleset[i].get_class() == 'FAIL':
+                if failure_count <= (data_size / 2):
                     ruleset[i].set_budget(confidence * s_min)
                 else:
                     ruleset[i].set_budget(confidence * s_maj)
             else:  # other_class
-                if target_count <= (data_size / 2):
+                if failure_count <= (data_size / 2):
                     ruleset[i].set_budget(confidence * s_maj)
                 else:
                     ruleset[i].set_budget(confidence * s_min)
@@ -456,8 +446,7 @@ def cleanup(*args):
 def main(
         scenario,
         criterion,
-        target_class,
-        other_class,
+        failure_under_test,
         samples,
         method,
         budget,
@@ -509,8 +498,7 @@ def main(
             mode='new',
             scenario=scenario,
             criterion=criterion,
-            target_class=target_class,
-            other_class=other_class,
+            failure_under_test=failure_under_test,
             samples=samples,
             method=method,
             budget=budget,

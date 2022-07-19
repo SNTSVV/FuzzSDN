@@ -10,11 +10,11 @@ class Stats:
     
     @classmethod
     def init(cls, context: dict):
-        cls._stats = cls._create_stats_dict(target_class=context["target_class"],
-                                            other_class=context["other_class"])
+        cls._stats = cls._create_stats_dict()
 
         cls._stats['context']['scenario']               = context['scenario']
         cls._stats['context']['criterion']              = context['criterion']
+        cls._stats['context']['fut']                    = context['fut']
         cls._stats['context']['method']                 = context['method']
         cls._stats['context']['algorithm']              = context['algorithm']
         cls._stats['context']['filter']                 = context['filter']
@@ -28,10 +28,10 @@ class Stats:
     def save(cls, path: str, pretty : bool = False):
         """
         Save the statistics to a file.
-        :param path: The os path to the statistic file
-        :type: bool
-        :param pretty:
-        :type: bool
+
+        Args:
+            path (bool): The os path to the statistic file
+            pretty (bool): Save in a pretty format, indented, and sorted by keys
         """
         with open(path, 'w') as stats_file:
             if pretty is True:
@@ -124,12 +124,11 @@ class Stats:
     # ====== ( create the dict ) ===========================================================================================
 
     @classmethod
-    def _create_stats_dict(cls, target_class: str, other_class: str) -> dict:
-        """
-        Create the dictionary used by the stats class to generate
-        :param target_class: The class that is the target of the prediction
-        :param other_class:  The other class of the classifier
-        :return: An empty statistics dictionaryƒ
+    def _create_stats_dict(cls) -> dict:
+        """Create the dictionary used by the stats class to generate
+
+        Returns:
+            The dictionary used to store statistics.
         """
         stats = dict()
 
@@ -137,6 +136,7 @@ class Stats:
         stats['context']                                = dict()
         stats['context']['scenario']                    = str()
         stats['context']['criterion']                   = dict()
+        stats['context']['fut']                         = str()
         stats['context']['method']                      = str()
         stats['context']['criterion']['name']           = str()
         stats['context']['criterion']['kwargs']         = dict()
@@ -145,8 +145,8 @@ class Stats:
         stats['context']['iterations']                  = int()
         stats['context']['algorithm']                   = str()
         stats['context']['filter']                      = str()
-        stats['context']['target_class']                = target_class
-        stats['context']['other_class']                 = other_class
+        stats['context']['target_class']                = 'FAIL'  # Always '''FAIL'''
+        stats['context']['other_class']                 = 'PASS'  # and '''PASS'''
 
         # Information of the timing
         stats['timing']                                 = dict()
@@ -157,8 +157,8 @@ class Stats:
         stats['data']                                   = dict()
         stats['data']['count']                          = dict()
         stats['data']['count']['all']                   = list()
-        stats['data']['count'][target_class]            = list()
-        stats['data']['count'][other_class]             = list()
+        stats['data']['count']['FAIL']                  = list()
+        stats['data']['count']['PASS']                  = list()
 
         # Information on the machine learning information
         stats['learning']                               = dict()
@@ -166,10 +166,10 @@ class Stats:
         stats['learning']['accuracy']                   = list()
         stats['learning']['confidence']                 = list()
         stats['learning']['rules']                      = list()
-        stats['learning'][target_class]                 = dict()
-        stats['learning'][other_class]                  = dict()
+        stats['learning']['FAIL']                       = dict()
+        stats['learning']['PASS']                       = dict()
 
-        for class_ in (target_class, other_class):
+        for class_ in ('FAIL', 'PASS'):
             stats['learning'][class_]["num_tp"]         = list()
             stats['learning'][class_]["num_fp"]         = list()
             stats['learning'][class_]["num_tn"]         = list()

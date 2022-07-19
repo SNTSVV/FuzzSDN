@@ -48,8 +48,7 @@ def main():
             app_main(
                 scenario=args.scenario,
                 criterion=args.criterion_name,
-                target_class=args.target_class,
-                other_class=args.other_class,
+                failure_under_test=args.failure_under_test,
                 samples=args.samples,
                 method=args.method,
                 budget=args.budget,

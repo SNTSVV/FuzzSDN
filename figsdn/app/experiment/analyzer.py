@@ -58,38 +58,41 @@ class Analyzer:
     # End def controller
 
     @controller.setter
-    def controller(self, value: str):
-        """
-        Sets the target controller
-        :param value:
-        :return:
+    def controller(self, ctrl: str):
+        """Sets the target controller
+
+        Args:
+            ctrl: name of the controller
         """
         allowed_controllers = ('onos', 'ryu')
 
-        if value.lower() == 'onos':
+        if ctrl.lower() == 'onos':
             self.__controller = 'onos'
             self.__log_parser = OnosLogParser()
 
-        elif value.lower() == 'ryu':
+        elif ctrl.lower() == 'ryu':
             self.__controller = 'ryu'
             self.__log_parser = RyuLogParser()
 
         else:
-            raise AttributeError("Unknown controller \"{}\". Supported controllers are: {}".format(value, ','.join(
+            raise AttributeError("Unknown controller \"{}\". Supported controllers are: {}".format(ctrl, ','.join(
                 '\"{}\"'.format(c) for c in allowed_controllers)))
     # End def controller.setter
 
     # ===== ( Getters ) ================================================================================================
 
-    def get_dataset(self, iteration=None, error_class=None, debug=False) -> pd.DataFrame:
-        """
-        Outputs the analyzed dataset as a Pandas' dataframe.
+    def get_dataset(self, iteration=None, failure_under_test=None, debug=False) -> pd.DataFrame:
+        """Outputs the analyzed dataset as a Pandas' dataframe.
 
-        :param iteration: Output the dataset of a given iteration. If set to None, the whole dataset is output.
-        :param error_class: Parse the dataset according to the error class. If set to None, no error class is inferred.
-        :param debug: whether or not to output debug information
+        Args:
+            iteration: Output the dataset of a given iteration.
+                       If set to None, the whole dataset is output.
+            error_class: Parse the dataset according to the error class.
+                         If set to None, no error class is inferred.
+            debug: whether or not to output debug information
 
-        :return: a pd.DataFrame
+        Returns:
+            a pd.DataFrame
         """
         # Get the latest available dataset
         # query: FROM `samples` SELECT samples.*, log.* JOIN `logs` ON samples.id == log.log_id
@@ -154,38 +157,62 @@ class Analyzer:
         # Transform the has_error column into boolean values
         df['has_error'] = df['has_error'].apply(lambda x: x == b'\x01')
 
-        if error_class is not None:
+        if failure_under_test is not None:
             # OFPBAC_BAD_OUT_PORT
-            if error_class == 'OFPBAC_BAD_OUT_PORT':
+            if failure_under_test == 'OFPBAC_BAD_OUT_PORT':
                 if self.__controller == 'ryu':
                     df['class'] = df['error_reason'].apply(
-                        lambda row: "OFPBAC_BAD_OUT_PORT" if row == "OFPBAC_BAD_OUT_PORT" else "OTHER_REASON")
+                        lambda row: "FAIL" if row == "OFPBAC_BAD_OUT_PORT" else "PASS")
 
                 elif self.__controller == 'onos':
                     df['class'] = df.error_reason.apply(
-                        lambda row: "OFPBAC_BAD_OUT_PORT" if 'BAD_OUT_PORT' in row else "OTHER_REASON"
+                        lambda row: "FAIL" if 'BAD_OUT_PORT' in row else "PASS"
                     )
 
             # Unknown Reason / Known Reason
-            elif error_class in ('unknown_reason', 'known_reason'):
+            elif failure_under_test in ('unknown_reason', 'known_reason'):
+                reverse = failure_under_test == 'known_reason'
                 if self.__controller == 'onos':
-                    df['class'] = df.apply(
-                        lambda row: 'unknown_reason' if row.has_error is True and row.error_reason is None else 'known_reason',
-                        axis='columns'
-                    )
+                    if reverse is False:
+                        df['class'] = df.apply(
+                            lambda row: 'FAIL' if row.has_error is True and row.error_reason is None else 'PASS',
+                            axis='columns'
+                        )
+                    else:
+                        df['class'] = df.apply(
+                            lambda row: 'PASS' if row.has_error is True and row.error_reason is None else 'FAIL',
+                            axis='columns'
+                        )
+
                 elif self.__controller == 'ryu':
-                    df['class'] = df.apply(
-                        lambda row: 'unknown_reason' if row.error_reason is None else 'known_reason',
-                        axis='columns'
-                    )
+                    if reverse is False:
+                        df['class'] = df.apply(
+                            lambda row: 'FAIL' if row.error_reason is None else 'PASS',
+                            axis='columns'
+                        )
+                    else:
+                        df['class'] = df.apply(
+                            lambda row: 'PASS' if row.error_reason is None else 'FAIL',
+                            axis='columns'
+                        )
+
             # Parsing / Non parsing error
-            elif error_class in ('parsing_error', 'non_parsing_error'):
-                df['class'] = df['error_reason'].apply(
-                    lambda row: "parsing_error" if row == "PARSING_ERROR" else "non_parsing_error")
+            elif failure_under_test in ('parsing_error', 'non_parsing_error'):
+                if failure_under_test == 'non_parsing_error':
+                    df['class'] = df['error_reason'].apply(
+                        lambda row: "PASS" if row == "PARSING_ERROR" else "FAIL")
+                else:
+                    df['class'] = df['error_reason'].apply(
+                        lambda row: "FAIL" if row == "PARSING_ERROR" else "PASS")
+
+            elif failure_under_test == 'switch_disconnection':
+                df['class'] = df.apply(
+                    lambda row: 'FAIL' if row.has_error is True and row.error_effect == 'SWITCH_DISCONNECTED' else 'PASS',
+                    axis='columns')
 
             # Unknown Target Error
             else:
-                raise ValueError("Unknown target error '{}'".format(error_class))
+                raise ValueError("Unknown target error '{}'".format(failure_under_test))
 
             # Drop the error-related columns
             if not debug:
