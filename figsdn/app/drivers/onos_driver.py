@@ -306,4 +306,46 @@ class OnosDriver:
         return True
     # End def flush_onos_logs
 
+    # ===== set log level ====
+
+    @classmethod
+    def set_log_level(cls, level : str):
+        """Sets the log level of onos
+
+        Args:
+            level ('TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR') : The log level of to choose from.
+        """
+        allowed_levels = ('TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR')
+        if level not in allowed_levels:
+            raise AttributeError(
+                "ONOS log level must be either {} or {}, not \"{}\"".format(", ".join(allowed_levels[:-1]),
+                                                                            allowed_levels[-1], level))
+        # connect to the ssh
+        log_level_set = False
+        session = pexpect.spawn("ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no "
+                                + "-p 8101 "
+                                + "karaf@localhost ")
+        try:
+            resp = session.expect(['Password:', pexpect.EOF, pexpect.TIMEOUT], timeout=cls.__timeout)
+            if resp == 0:
+                session.sendline(setup.config().onos.karaf_password)
+                resp = session.expect([r'.*>.*',
+                                       r'Connection\sclosed\sby',
+                                       pexpect.EOF,
+                                       pexpect.TIMEOUT]
+                                      , timeout=cls.__timeout)
+
+                if resp == 0:
+                    session.sendline("log:set {}".format(level))
+                    resp = session.expect([r'.*>.*', pexpect.EOF, pexpect.TIMEOUT], timeout=cls.__timeout)
+                    if resp == 0:
+                        log_level_set = True  # all good
+                    elif resp > 0:
+                        cls.__log.warning("Something wrong happened while setting ONOS log level.")
+
+                elif resp == 1:
+                    cls.__log.warning("Couldn't establish ssh session with karaf")
+        finally:
+            session.close()
+            return log_level_set
 # End class OnosDriver
