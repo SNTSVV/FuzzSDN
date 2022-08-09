@@ -12,10 +12,10 @@ class Field:
 
     """
 
-    def __init__(self, name : str, size : int , mask=None):
-        self.name   = name
-        self.size   = size
-        self.mask   = mask
+    def __init__(self, name: str, size: int, mask=None):
+        self.name = name
+        self.size = size
+        self.mask = mask
     # End def __init__
 
     def __repr__(self):
@@ -66,7 +66,7 @@ class PktStruct:
     @property
     def bit_size(self):
         """Return the total size in bits of the structure."""
-        bits_len  = 0
+        bits_len = 0
 
         for f in self.fields:
             if f.mask is None:
@@ -78,13 +78,13 @@ class PktStruct:
                     mask_copy = mask_copy >> 1  # binary shifting
 
         return bits_len
-    # End def bytesize
+    # End def bit_size
 
     @property
     def byte_size(self):
         """Return the total size in bytes of the PktStruct."""
         return ceil(self.bit_size / 8.0)
-    # End def bit_size
+    # End def byte_size
 
     # ==== (builtin overload) =====
 
@@ -112,17 +112,17 @@ class PktStruct:
 
     # ===== ( methods ) ====
 
-    def append(self, *fields : Field):
+    def append(self, *fields: Field):
         """Appends one or several fields to the list of fields"""
         for f in fields:
             self.fields.append(f)
     # End def append
 
-    def extend(self, other : PktStruct):
+    def extend(self, other: PktStruct):
         self.fields.extend(other.fields)
     # End def extend
 
-    def index(self, f_name : str):
+    def index(self, f_name: str):
         """Return the index of a field by its name."""
         try:
             return next(idx for idx, e in enumerate(self.fields) if e.name == f_name)
@@ -143,10 +143,10 @@ class PktStruct:
 
         offset = 0
         if idx > 0:  # If the index is 0 then just return 0
-            for i in range(1, idx+1):
+            for i in range(1, idx + 1):
                 # Add the length of the previous field, unless the previous field is masked and this one as well.
-                if self[i].mask is None or self[i].mask is not None and self[i-1].mask is None:
-                    offset += self[i-1].size
+                if self[i].mask is None or self[i].mask is not None and self[i - 1].mask is None:
+                    offset += self[i - 1].size
 
         return offset
     # End def offset
@@ -170,12 +170,20 @@ class PktStruct:
 # End class PktStruct
 
 
-def of(type_ : ofp_type, **kwargs) -> PktStruct:
+def of(type_: ofp_type, **kwargs) -> PktStruct:
     """Return a struct that characterize the format of a message.
 
-    :param type_:
-    :param kwargs:
-    :return:
+    Accepted types are OFPT_HELLO, OFPT_ECHO_REQUEST and OFPT_ECHO_REPLY.
+    Each type as a list of arguments that can be accepted
+
+    Args:
+        type_ (ofp_type) : The type of message to generate a struct for
+        **kwargs: Options during to refine the packet structure
+            - **hello_elements (int): if a OFPT_HELLO message is set, define the number of hello elements in it
+            - **match (dict): used to add some match
+                - **oxms (int) : number of oxms in the match
+    Returns:
+        A PktStruct of the message
     """
 
     pkt_struct = PktStruct()
@@ -183,10 +191,10 @@ def of(type_ : ofp_type, **kwargs) -> PktStruct:
     if type_ == ofp_type.OFPT_HELLO:
         # Add the header
         pkt_struct.append(
-            Field(name="version", size=2),
-            Field(name="of_type", size=8),
-            Field(name="length" , size=2),
-            Field(name="xid"    , size=4))
+            Field(name="version", size=1),
+            Field(name="type", size=1),
+            Field(name="length", size=2),
+            Field(name="xid", size=4))
 
         if "hello_elements" in kwargs:
             elements = kwargs.get("hello_elements")
@@ -200,26 +208,38 @@ def of(type_ : ofp_type, **kwargs) -> PktStruct:
 
                 i += 1
 
+    # Echo messages
+    elif type_ in (ofp_type.OFPT_ECHO_REQUEST, type_ == ofp_type.OFPT_ECHO_REPLY):
+        # Add the header
+        pkt_struct.append(
+            Field(name="version", size=1),
+            Field(name="type", size=1),
+            Field(name="length", size=2),
+            Field(name="xid", size=4))
+
+        if "data" in kwargs:
+            pkt_struct.append(Field(name="data", size=kwargs.get("data", 0)))
+
     elif type_ == ofp_type.OFPT_PACKET_IN:
         pkt_struct.append(
-            Field(name="version"   , size=2),
-            Field(name="of_type"   , size=1),
-            Field(name="length"    , size=2),
-            Field(name="xid"       , size=4),
-            Field(name="buffer_id" , size=4),
-            Field(name="total_len" , size=2),
-            Field(name="reason"    , size=1),
-            Field(name="table_id"  , size=1),
-            Field(name="cookie"    , size=8),
+            Field(name="version", size=1),
+            Field(name="type", size=1),
+            Field(name="length", size=2),
+            Field(name="xid", size=4),
+            Field(name="buffer_id", size=4),
+            Field(name="total_len", size=2),
+            Field(name="reason", size=1),
+            Field(name="table_id", size=1),
+            Field(name="cookie", size=8),
         )
 
         # Build the match !
         if "match" in kwargs and isinstance(kwargs.get('match'), dict):
 
             pkt_struct.append(
-                Field(name="match_type"   , size=2),
-                Field(name="match_length" , size=2),
-                Field(name="match_pad"    , size=4)  # TODO: Dynamically calculate length of pad
+                Field(name="match_type", size=2),
+                Field(name="match_length", size=2),
+                Field(name="match_pad", size=4)  # TODO: Dynamically calculate length of pad
             )
 
             match_dict = kwargs.get('match')
@@ -227,11 +247,11 @@ def of(type_ : ofp_type, **kwargs) -> PktStruct:
             if 'oxms' in match_dict:
                 for i in range(int(match_dict['oxms'])):
                     pkt_struct.append(
-                        Field(name="oxm_{}_class".format(i)    , size=2),
-                        Field(name="oxm_{}_field".format(i)    , size=1 , mask=0b11111110),
-                        Field(name="oxm_{}_has_mask".format(i) , size=1 , mask=0b00000001),
-                        Field(name="oxm_{}_length".format(i)   , size=1),
-                        Field(name="oxm_{}_value".format(i)    , size=4)
+                        Field(name="oxm_{}_class".format(i), size=2),
+                        Field(name="oxm_{}_field".format(i), size=1, mask=0b11111110),
+                        Field(name="oxm_{}_has_mask".format(i), size=1, mask=0b00000001),
+                        Field(name="oxm_{}_length".format(i), size=1),
+                        Field(name="oxm_{}_value".format(i), size=4)
                     )
 
         # Pad before data (16 bits)
@@ -241,22 +261,22 @@ def of(type_ : ofp_type, **kwargs) -> PktStruct:
             data_dict = kwargs.get('data')
             if data_dict["type"] == 'ethernet':
                 pkt_struct.append(
-                    Field(name="eth_dst"   , size=6),
-                    Field(name="eth_src"   , size=6),
-                    Field(name="ethertype" , size=2)
+                    Field(name="eth_dst", size=6),
+                    Field(name="eth_src", size=6),
+                    Field(name="ethertype", size=2)
                 )
 
                 if data_dict.get("ethertype", None) == "arp":
                     pkt_struct.append(
-                        Field(name="arp_htype" , size=2),
-                        Field(name="arp_ptype" , size=2),
-                        Field(name="arp_hlen"  , size=1),
-                        Field(name="arp_plen"  , size=1),
-                        Field(name="arp_oper"  , size=2),
-                        Field(name="arp_sha"   , size=6),
-                        Field(name="arp_spa"   , size=4),
-                        Field(name="arp_tha"   , size=6),
-                        Field(name="arp_tpa"   , size=4)
+                        Field(name="arp_htype", size=2),
+                        Field(name="arp_ptype", size=2),
+                        Field(name="arp_hlen", size=1),
+                        Field(name="arp_plen", size=1),
+                        Field(name="arp_oper", size=2),
+                        Field(name="arp_sha", size=6),
+                        Field(name="arp_spa", size=4),
+                        Field(name="arp_tha", size=6),
+                        Field(name="arp_tpa", size=4)
                     )
 
         elif "data_length" in kwargs:
@@ -266,15 +286,42 @@ def of(type_ : ofp_type, **kwargs) -> PktStruct:
         else:
             pass
 
-    elif ofp_type.OFPT_BARRIER_REQUEST:
-        pass
+    # Barrier messages.
+    elif type_ in (ofp_type.OFPT_BARRIER_REQUEST, ofp_type.OFPT_BARRIER_REPLY):
+        pkt_struct.append(
+            Field(name="version", size=1),
+            Field(name="type", size=1),
+            Field(name="length", size=2),
+            Field(name="xid", size=4))
+
+    elif type_ == ofp_type.OFPT_FLOW_REMOVED:
+        pkt_struct.append(
+            Field(name="version", size=1),
+            Field(name="type", size=1),
+            Field(name="length", size=2),
+            Field(name="xid", size=4),
+            Field(name="cookie", size=8),
+            Field(name="priority", size=2),
+            Field(name="reason", size=1),
+            Field(name="table_id", size=1),
+            Field(name="duration_sec", size=4),
+            Field(name="duration_nsec", size=4),
+            Field(name="idle_timeout", size=2),
+            Field(name="hard_timeout", size=2),
+            Field(name="packet_count", size=8),
+            Field(name="byte_count", size=8),
+            Field(name="match_type", size=2),
+            Field(name="match_length", size=2),
+            Field(name="oxm_0_class", size=2),
+            Field(name="oxm_0_field", size=1, mask=254),
+            Field(name="oxm_0_has_mask", size=1, mask=1),
+            Field(name="oxm_0_length", size=1),
+            Field(name="oxm_0_value", size=2),
+            Field(name="match_pad", size=6)
+        )
 
     else:
-        raise AttributeError("Unknown Openflow(0x05) message \"{}\"".format(type_))
+        raise AttributeError("Unknown Openflow message \"{}\"".format(type_))
 
     return pkt_struct
 # End def get_msg_struct
-
-
-
-

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # coding: utf-8
 import itertools
+import logging
 import operator
 import random
 import re as regex
@@ -14,40 +15,8 @@ from z3 import z3
 
 from figsdn.common.utils import smt
 
-# TODO: Calculate ctx when parsing a packet from the input data
-CTX_PKT_IN_tmp = {
-    # Fields for Fields as feature
-    "of_version"    : {"min": 0, "max": int(pow(2, 8*2) - 1)},
-    "of_type"       : {"min": 0, "max": int(pow(2, 8*1) - 1)},
-    "length"        : {"min": 0, "max": int(pow(2, 8*2) - 1)},
-    "xid"           : {"min": 0, "max": int(pow(2, 8*4) - 1)},
-    "buffer_id"     : {"min": 0, "max": int(pow(2, 8*4) - 1)},
-    "total_len"     : {"min": 0, "max": int(pow(2, 8*2) - 1)},
-    "reason"        : {"min": 0, "max": int(pow(2, 8*1) - 1)},
-    "table_id"      : {"min": 0, "max": int(pow(2, 8*1) - 1)},
-    "cookie"        : {"min": 0, "max": int(pow(2, 8*8) - 1)},
-    "match_type"    : {"min": 0, "max": int(pow(2, 8*2) - 1)},
-    "match_length"  : {"min": 0, "max": int(pow(2, 8*2) - 1)},
-    "match_pad"     : {"min": 0, "max": int(pow(2, 8*4) - 1)},
-    "oxm_0_class"   : {"min": 0, "max": int(pow(2, 8*2) - 1)},
-    "oxm_0_field"   : {"min": 0, "max": int(pow(2, 7)   - 1)},
-    "oxm_0_has_mask": {"min": 0, "max": 1},
-    "oxm_0_length"  : {"min": 0, "max": int(pow(2, 8*1) - 1)},
-    "oxm_0_value"   : {"min": 0, "max": int(pow(2, 8*4) - 1)},
-    "pad"           : {"min": 0, "max": int(pow(2, 8*2) - 1)},
-    "eth_dst"       : {"min": 0, "max": int(pow(2, 8*6) - 1)},
-    "eth_src"       : {"min": 0, "max": int(pow(2, 8*6) - 1)},
-    "ethertype"     : {"min": 0, "max": int(pow(2, 8*2) - 1)},
-    "arp_htype"     : {"min": 0, "max": int(pow(2, 8*2) - 1)},
-    "arp_ptype"     : {"min": 0, "max": int(pow(2, 8*2) - 1)},
-    "arp_hlen"      : {"min": 0, "max": int(pow(2, 8*1) - 1)},
-    "arp_plen"      : {"min": 0, "max": int(pow(2, 8*1) - 1)},
-    "arp_oper"      : {"min": 0, "max": int(pow(2, 8*2) - 1)},
-    "arp_sha"       : {"min": 0, "max": int(pow(2, 8*6) - 1)},
-    "arp_spa"       : {"min": 0, "max": int(pow(2, 8*4) - 1)},
-    "arp_tha"       : {"min": 0, "max": int(pow(2, 8*6) - 1)},
-    "arp_tpa"       : {"min": 0, "max": int(pow(2, 8*4) - 1)},
-}
+# Module Logger
+logger = logging.getLogger(__name__)
 
 
 # ===== ( RuleSet class ) ==============================================================================================
@@ -373,6 +342,10 @@ class Rule(object):
 
     def get_models(self, n, ctx=None) -> List[dict]:
 
+        # Log in the instruction
+        logger.trace("Getting {} models for rule{}".format(n, self.id, ", with context {}".format(ctx) if ctx is not None else ""))
+
+        # Init z3 options
         z3.set_option('smt.arith.random_initial_value', True)
 
         # Convert rule to cnf form
@@ -436,7 +409,12 @@ class Rule(object):
         z3.set_option('smt.phase_selection', 5)
         z3.set_option('sat.phase', 'random')
         z3_models = smt.get_model(z3_formula, n, exact=True)  # Get z3 models
+
+        logger.trace("z3 object: {}".format(z3))
+
         # Build the dictionary
+        logger.trace("z3 symbols: {}".format(symbols))
+
         for z3_model in z3_models:
             model = dict()
             for k in symbols.keys():

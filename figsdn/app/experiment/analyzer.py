@@ -20,6 +20,9 @@ DB_NAME = "figsdn"
 class Analyzer:
 
     def __init__(self):
+
+        self.last_list_of_fields : Optional[list] = None
+
         self.__log = logging.getLogger(__name__)
 
         # Parameters
@@ -371,8 +374,7 @@ class Analyzer:
     # ===== ( Private Methods ) ========================================================================================
 
     # TODO: Parse actions and the mutations
-    @staticmethod
-    def __read_fuzz_report():
+    def __read_fuzz_report(self):
 
         report_path = os.path.expanduser(setup.config().fuzzer.out_path)
         with open(report_path, 'r') as f:
@@ -380,6 +382,7 @@ class Analyzer:
 
         # Get the packet structure, sorted by offset
         pkt_struct = sorted(data['packetStruct']['fields'], key=lambda d: d['offset'])
+        self.last_list_of_fields = pkt_struct  # Save the last packet struct
         # Get the fuzzed packet
         fuzzed_packet = base64.b64decode(data['finalPacket'])
 
