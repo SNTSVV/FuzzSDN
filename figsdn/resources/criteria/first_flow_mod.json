@@ -1,0 +1,4 @@
+{
+    "criteria": [{"packetType": "flow_mod"}],
+    "matchLimit": 1
+}

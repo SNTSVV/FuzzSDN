@@ -1,0 +1,6 @@
+{
+    "criteria": [
+        {"packetType": "echo_reply"}
+    ],
+    "matchLimit": 1
+}

@@ -6,22 +6,28 @@ LOG_RGX = {
     'ONOS': {
         # Switch connection to ONOS
         'SWITCH_CONNECTION': r'(?<=New\sswitch\sconnection\sfrom\s/)'              # Match the message
-                             r'(?P<ip_addr>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'     # Match the ip address
-                             r':*(?P<port>\d{1,5})',                                # Match the port if it is given
+                             r'(?P<ip_addr>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:*\d{1,5})?)',     # Match the IP address
 
         # Switch added to ONOS Flow table
         'ADDED_SWITCH': r'Added\sswitch\s'                                          # Match added switch
                         r'(?P<mac_addr>(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2})',   # Match the mac address
 
         # Switch Disconnected
-        'SWITCH_DISCONNECTED': r'Switch\sdisconnected\scallback\sfor\ssw:NiciraSwitchHandshaker{'       # Match message
-                               r'session=(?P<session>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d{1,5},\s'    # Match session
-                               r'dpid=(?P<dpid>(?:[0-9A-Fa-f]{2}[:-]){7}[0-9A-Fa-f]{2})}'               # Match dpid
-                               r'\.\sCleaning\sup',                                                     # Match message
+        'SWITCH_DISCONNECTED_NICIRA':  r'Switch\sdisconnected\scallback\sfor\ssw:NiciraSwitchHandshaker{'           # Match message
+                                       r'session=(?P<ip_addr>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:*\d{1,5})?),\s'    # Match session
+                                       r'dpid=(?P<dpid>(?:[0-9A-Fa-f]{2}[:-]){7}[0-9A-Fa-f]{2})}'                   # Match dpid
+                                       r'\.\sCleaning\sup',                                                         # Match message
+
+        # Switch Disconnected
+        'SWITCH_DISCONNECTED_STD': r'Switch\sdisconnected\scallback\sfor\ssw:'
+                                   r'\[\/(?P<ip_addr>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:*\d{1,5})?)\s'
+                                   r'DPID\[(?P<dpid>(?:[0-9A-Fa-f]{2}[:-]){7}[0-9A-Fa-f]{2})\]\]'
+                                   r'\.\sCleaning\sup',
 
         # Switch Disconnected
         'SWITCH_DISCONNECTED_HELLO': r'Switch\sdisconnected\scallback\sfor\ssw:'
-                                     r'\[\/(?P<IP>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d{1,5}\sDPID\[\?\]\]'
+                                     r'\[\/(?P<ip_addr>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:*\d{1,5})?)\s'
+                                     r'DPID\[\?\]\]'
                                      r'\.\sCleaning\sup',
 
 
@@ -60,7 +66,21 @@ LOG_RGX = {
         # Standard OF Error Message
         'OPENFLOW_ERROR':             r'Received\serror\smessage\s(?P<msg>[^(]*)'  # Match the error type
                                       r'\(xid=(?P<xid>[^,]*)'                       # Match the XID
-                                      r',\scode=(?P<code>[^,]*)'                    # Match the error code
+                                      r',\scode=(?P<code>[^,]*)',                   # Match the error code
+
+        'OF_BAD_REQUEST_ERROR':       r'OFBadRequestErrorMsgVer\d{0-2}\('
+                                      r'xid=(?P<xid>\d+), code=BAD_VERSION, data=(?P<data>.*\))'
+                                      r'\sfrom\sswitch\s\[\/'
+                                      r'(?P<IP>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d{1,5})\s'
+                                      r'DPID\[(?P<DPID>(?:[0-9A-Fa-f]{2}[:-]){7}[0-9A-Fa-f]{2})]]'
+                                      r'\sin\sstate\s(?P<state>.*)',
+        
+        'SWITCH_STATE_ERROR': r'Disconnecting\sswitch.*due\sto\sswitch\sstate\serror:'                  # Switch state error message
+                              r'\sSwitch:\s\[\[\/(?P<IP>\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d{1,5})'    # IP
+                              r'\sDPID\[(?P<DPID>(?:[0-9A-Fa-f]{2}[:-]){7}[0-9A-Fa-f]{2})\]\]\],\s'     # DPID
+                              r'State:\s\[(?P<state>.*)\],\s'                                           # state
+                              r'received:\s\[(?P<received>.*)\],\s'                                     # received
+                              r'details:\s(?P<reason>.*)'                                               # Reason
     },
 
     'RYU': {

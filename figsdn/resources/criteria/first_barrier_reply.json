@@ -1,0 +1,6 @@
+{
+    "criteria": [
+        {"packetType": "barrier_reply"}
+    ],
+    "matchLimit": 1
+}

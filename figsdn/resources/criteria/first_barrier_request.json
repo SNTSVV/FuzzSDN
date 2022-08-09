@@ -1,0 +1,6 @@
+{
+    "criteria": [
+        {"packetType": "barrier_request"}
+    ],
+    "matchLimit": 1
+}

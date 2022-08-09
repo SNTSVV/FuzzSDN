@@ -44,6 +44,8 @@ class OnosLogParser(LogParser):
         
         hello_happened = False
 
+        connected_switches = list()
+
         self.__log.debug("Detecting error tokens the log...")
         key_and_matches = self._match(LOG_RGX['ONOS'])
 
@@ -51,6 +53,9 @@ class OnosLogParser(LogParser):
             # When no error was previously detected
             rgx_key = key_match['rgx_key']
             rgx_match = key_match['match']
+
+            if rgx_key == 'SWITCH_CONNECTION':
+                connected_switches.append(str(rgx_match['ip_addr']))  # Add the
 
             # If there is no hello message yet, then nothing should be processed
             if hello_happened is False:
@@ -87,6 +92,26 @@ class OnosLogParser(LogParser):
                             error_reason = rgx_match['reason']
                         continue  # Process the next match
 
+                    elif rgx_key == 'OF_BAD_REQUEST_ERROR':
+                        self.__log.trace("OF_BAD_REQUEST_ERROR detected")
+                        has_error = True
+                        error_type = 'OPENFLOW_ERROR'
+                        error_reason = 'OF_BAD_REQUEST_ERROR'
+                        continue
+
+                    elif rgx_key == 'SWITCH_STATE_ERROR':
+                        self.__log.trace("Switch State error detected")
+                        has_error = True
+                        error_type = 'SWITCH_STATE_ERROR'
+                        print('here')
+                        if 'switch should never send this message in the current state' in str(rgx_match['reason']).lower():
+                            error_reason = 'received \"{}\" in state \"{}\"'.format(rgx_match['received'], rgx_match['state'])
+                        else:
+                            error_reason = '({} (received: \"{}\", state: \"{}\")'.format(str(rgx_match['reason']).lower(),
+                                                                                          rgx_match['received'],
+                                                                                          rgx_match['state'])
+                        continue
+
                 # If there already was an error
                 else:
                     # If the previous error is a processing error
@@ -118,11 +143,28 @@ class OnosLogParser(LogParser):
                                 error_reason = rgx_match['reason']
                             continue  # Process the next match
 
-                # Find if there is a switch disconnection
-                if rgx_key in ('SWITCH_DISCONNECTED', 'SWITCH_DISCONNECTED_HELLO') and has_error is True:
+            # Find if there is a switch disconnection
+            if rgx_key in ('SWITCH_DISCONNECTED_STD', 'SWITCH_DISCONNECTED_NICIRA', 'SWITCH_DISCONNECTED_HELLO'):
+                if has_error is True:
                     self.__log.trace("Switch disconnection detected")
                     error_effect = 'SWITCH_DISCONNECTED'
 
         return has_error, error_type, error_reason, error_effect, self.log_trace
     # End def parse_log
 # End class OnosLogParser
+
+
+
+if __name__ == '__main__':
+
+    from figsdn.common.utils.log import add_logging_level
+    add_logging_level('TRACE', logging.DEBUG - 1)
+
+    parser = OnosLogParser()
+
+    results = parser.parse_log('/Users/raphael.ollando/',
+                               pattern=re.compile(r'test_log(\d+)*\.log', re.I),
+                               concatenate=True,
+                               reverse=False
+                              )
+    print(results[-1])

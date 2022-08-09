@@ -71,6 +71,7 @@ class FailureToTestType(StrEnum):
     PARSING_ERROR           = 'parsing_error',
     NON_PARSING_ERROR       = 'non_parsing_error',
     SWITCH_DISCONNECTION    = 'switch_disconnection',
+    SWITCH_STATE_ERROR      = 'switch_state_error',
     OFP_BAD_OUT_PORT        = 'ofp_bad_out_port'
 
     @staticmethod

@@ -1,0 +1,4 @@
+{
+    "criteria": [{"packetType": "flow_removed"}],
+    "matchLimit": 1
+}

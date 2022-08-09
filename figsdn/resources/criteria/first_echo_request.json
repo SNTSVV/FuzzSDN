@@ -1,0 +1,4 @@
+{
+    "criteria": [{"packetType": "echo_request"}],
+    "matchLimit": 1
+}
