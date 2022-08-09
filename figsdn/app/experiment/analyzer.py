@@ -22,6 +22,9 @@ class Analyzer:
     def __init__(self):
         self.__log = logging.getLogger(__name__)
 
+        # Parameters
+        self.__save_logs: bool = False
+
         # Analytics
         self.__controller   : Optional[str] = None
         self.__log_parser   : Optional[LogParser] = None
@@ -79,17 +82,29 @@ class Analyzer:
                 '\"{}\"'.format(c) for c in allowed_controllers)))
     # End def controller.setter
 
+    @property
+    def save_logs(self):
+        return self.__save_logs
+
+    @save_logs.setter
+    def save_logs(self, enable : bool):
+        if isinstance(enable, bool):
+            self.__save_logs = enable
+        else:
+            raise AttributeError("analyzer.save_logs can only be a bool value (True or False)")
+
+
     # ===== ( Getters ) ================================================================================================
 
     def get_dataset(self, iteration=None, failure_under_test=None, debug=False) -> pd.DataFrame:
         """Outputs the analyzed dataset as a Pandas' dataframe.
 
         Args:
-            iteration: Output the dataset of a given iteration.
+            iteration (int): Output the dataset of a given iteration.
                        If set to None, the whole dataset is output.
-            error_class: Parse the dataset according to the error class.
+            failure_under_test (str): Parse the dataset according to the error class.
                          If set to None, no error class is inferred.
-            debug: whether or not to output debug information
+            debug (bool): whether or not to output debug information
 
         Returns:
             a pd.DataFrame
@@ -296,9 +311,10 @@ class Analyzer:
 
         log_parse_results = self.__log_parser.parse_log()
 
-        # Save the log_trace:
-        with open(os.path.join(app_path.exp_dir('logs'), 'it_{}.log'.format(self.__sample_cnt)), 'w') as f:
-            f.write(log_parse_results[4])
+        # Save the log_trace if required:
+        if self.save_logs is True:
+            with open(os.path.join(app_path.exp_dir('logs'), 'it_{}.log'.format(self.__sample_cnt)), 'w') as f:
+                f.write(log_parse_results[4])
 
         # Create the samples and log table if required
         if self.__sample_table_created is False:

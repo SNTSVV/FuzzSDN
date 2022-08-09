@@ -1,6 +1,8 @@
 #!/bin/env python3
 import logging
 import os.path
+import re
+from typing import Optional
 
 from figsdn.app.analytics.log import LOG_RGX, LogParser
 from figsdn.app import setup
@@ -15,19 +17,25 @@ class OnosLogParser(LogParser):
         super().__init__()
         self.__log = logging.getLogger(__name__)
         try:
-            self.__log_path = os.path.join(os.path.expanduser(setup.config().onos.root_dir), 'karaf', 'data', 'log', 'karaf.log')
+            self.__log_dir = os.path.join(os.path.expanduser(setup.config().onos.root_dir), 'karaf', 'data', 'log')
         except AttributeError:
-            self.__log.warning("Couldn't find log path to onos.")
-            self.__log_path = None
+            self.__log.warning("Couldn't find log directory to onos.")
+            self.__log_dir = None
     # End def __init__
 
-    def parse_log(self, path=None):
-        self.__log.info("Parsing ONOS log file at: \"{}\"".format(self.__log_path if path in (None, '') else path))
+    def parse_log(self, path : Optional[str] = None, pattern : Optional[re.Pattern] = None, concatenate : bool = True, reverse : bool = False):
+        self.__log.info("Parsing ONOS log file at: \"{}\"".format(self.__log_dir if path in (None, '') else path))
         # Read the log first
         if path is None or path == '':
-            self.load_from_file(self.__log_path)
+            self.load_from_file(self.__log_dir,
+                                pattern=re.compile(r'karaf(-\d+)*\.log', re.I),
+                                concatenate=True,
+                                reverse=False)
         else:
-            self.load_from_file(path)
+            self.load_from_file(path,
+                                pattern=pattern,
+                                concatenate=concatenate,
+                                reverse=reverse)
 
         has_error = False
         error_type = None

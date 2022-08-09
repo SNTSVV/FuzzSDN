@@ -159,8 +159,9 @@ def run(
     if _context['it_limit'] is not None:
         print(Style.BOLD, "*** Iteration Limit: {}".format(_context['it_limit']), Style.RESET)
 
-    # Set up the experimenter
+    # Set up the Analyzer
     analyzer = Analyzer()
+    analyzer.save_logs = False
 
     # Set up the experimenter
     experimenter = Experimenter()
