@@ -39,7 +39,8 @@ def main():
             report_main(
                 expt=args.expt,
                 node=args.node,
-                ignore_existing=args.ignore_existing,
+                ignore_existing=not args.force_download,
+                disable_fetching=not args.download,
                 test_on_data=args.test_on_data
             )
 
@@ -48,6 +49,7 @@ def main():
             app_main(
                 scenario=args.scenario,
                 criterion=args.criterion_name,
+                scenario_options=args.scenario_options,
                 failure_under_test=args.failure_under_test,
                 samples=args.samples,
                 method=args.method,

@@ -7,10 +7,12 @@ import json
 import math
 import os
 import sys
+import traceback
 from concurrent.futures import ThreadPoolExecutor
 from os.path import join
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -270,11 +272,17 @@ def calculate_generation_accuracy_per_rule(experiment):
 # End def calculate_prediction_accuracy_per_rule
 
 
-def create_folder_structure(experiment):
-    #
-    # # Create root and report folder
-    # dirs = ["{}/.figsdn/".format(os.path.expanduser("~")), report_dir]
+def create_folder_structure(experiment, test_data : str = None):
+    """Create the folder structure for an experiment
 
+    The paths base folder are not overwritten if they already exists.
+
+    Args:
+        experiment (str): The name of the experiement
+        test_data (str, optional): Optional name of the test data or its path.
+            Generate the folder for the test as well. Also copy the test file
+            to the root folder if a path is given.
+    """
     paths = get_paths(experiment)
 
     # Create the folder structure:
@@ -286,14 +294,23 @@ def create_folder_structure(experiment):
         Path(paths.models).mkdir(parents=False, exist_ok=True)
         Path(paths.graphs).mkdir(parents=False, exist_ok=True)
         Path(paths.cms).mkdir(parents=False, exist_ok=True)
+
+        if test_data:
+            test_paths = get_paths(experiment, test_data=test_data)
+            Path(test_paths.root).mkdir(parents=True, exist_ok=True)
+            Path(test_paths.data).mkdir(parents=True, exist_ok=True)
+            Path(test_paths.graphs).mkdir(parents=False, exist_ok=True)
+            Path(test_paths.cms).mkdir(parents=False, exist_ok=True)
+
     except Exception:
+        print(traceback.format_exc())
         raise SystemExit("Cannot create experiment directories")
 
     return paths
 # End def _create_folder_structure
 
 
-def fetch_files(hostname, port, username, password, experiment, ignore_existing=False, quiet=False):
+def fetch_experiment_data(hostname, port, username, password, experiment, ignore_existing=False, quiet=False):
 
     dest_root = join(app_path.report_dir(), experiment)
     dest_data = join(dest_root, "data")
@@ -322,6 +339,7 @@ def fetch_files(hostname, port, username, password, experiment, ignore_existing=
     usr_home = stdout.readlines()[0].strip()
 
     # TODO: Find a way to automatically infer the path instead of using hardcoded values
+    #       Maybe get them from the configuration file ?
     remote_exp_dir = os.path.join(usr_home, ".local/share/figsdn/experiments")
 
     # Get the file from the experiment we want to fetch
@@ -412,42 +430,49 @@ def fetch_files(hostname, port, username, password, experiment, ignore_existing=
                     )
     else:
         print("No new files to fetch")
-# End def fetch_files
+# End def fetch_experiment_data
 
 
-def generate_confusion_matrices(experiment : str):
-    """
-    Generate the confusion matrices for the current experiment
-    :param experiment: Name of the experiment
-    :type experiment: str
+def generate_confusion_matrices(experiment : str, test_data : Optional[str] = None):
+    """Generate the confusion matrices
+
+    Args:
+        experiment (str): Name of the experiment
+        test_data (str): The test data
     """
     # TODO: Parallelize the process
     # Get the paths and info
-    paths       = get_paths(experiment)
-    expt_info   = get_info(experiment)
+    paths       = get_paths(experiment, test_data=test_data)
+    expt_info   = get_info(experiment, test_data=test_data)
 
     target_class = expt_info["context"]["target_class"]
     other_class = expt_info["context"]["other_class"]
     params_map = []
     for i in range(expt_info["context"]["iterations"]):
-        params_map.append({
-            'it': i,
-            'data': 'learning',
-            'target': target_class,
-            'other': other_class,
-            'title': "Confusion Matrix - Iteration {}".format(i),
-            'path': os.path.join(paths.cms, 'cm_it_{}.png'.format(i))
-        })
+        # Confusion matrix for experiment
+        if not test_data:
+            params_map.append({
+                'it': i,
+                'data': 'learning',
+                'target': target_class,
+                'other': other_class,
+                'title': "Confusion Matrix - Iteration {}".format(i),
+                'path': os.path.join(paths.cms, 'cm_it_{}.png'.format(i))
+            })
 
-        if 'test_evl' in expt_info:
+        # Confusion matrix for test
+        elif 'test_evl' in expt_info:
             params_map.append({
                 'it': i,
                 'data': 'test_evl',
                 'target': target_class,
                 'other': other_class,
-                'title': "Confusion Matrix - Re-evaluation - Iteration {}".format(i),
-                'path': os.path.join(paths.cms, 'cm_it_{}_reeval.png'.format(i))
+                'title': "Confusion Matrix - Iteration {}".format(i),
+                'path': os.path.join(paths.cms, 'cm_it_{}.png'.format(i))
             })
+        # Error: no the evaluation as not been performed beforehand
+        else:
+            raise RuntimeError("No evaluation data found for test \"{}\"".format(Path(test_data).stem))
 
     def plot_cms(args):
 
@@ -510,17 +535,17 @@ def generate_confusion_matrices(experiment : str):
 # End def _generate_confusion_matrices
 
 
-def generate_graphics(experiment, display: bool = False):
-    """
-    Generate the graphics for the report
-    :param experiment: The name of the experiment
-    :type experiment: str
-    :param display: If set to True, the graphs are display using plt
-    :type display: bool
+def generate_graphics(experiment, test_data : Optional[str] = None, display: bool = False):
+    """Generate the graphics from the data
+
+    Args:
+        experiment (str): The name of the experiment
+        test_data (str, optional): The name of the test to generate the graphics for
+        display (bool): If set to True, the graphs are displayed using plt
     """
     # Get the paths and experiment information
-    paths       = get_paths(experiment)
-    expt_info   = get_info(experiment)
+    paths       = get_paths(experiment, test_data=test_data)
+    expt_info   = get_info(experiment, test_data=test_data)
 
     # Get some constant variables from the experiment info
     it_ax           = list(range(expt_info["context"]["iterations"]))
@@ -532,155 +557,159 @@ def generate_graphics(experiment, display: bool = False):
     plt.rcParams.update({'font.size': 22})
 
     # ===== 1st Graph: Number of rules per iteration ===================================================================
-
-    nb_of_rules = [0 if rules[i] is None else len(rules[i]) for i in it_ax]
-    fig, ax = plt.subplots(1, 1, figsize=(10, 7), dpi=96)
-    ### Draw the number of rules graph
-    ax.plot(it_ax,
-            nb_of_rules,
-            ls='-',
-            marker='x',
-            color='blue',
-            label=target_class)
-    ### Draw the regression line for the number of rules generated
-    x = np.array(range(expt_info["context"]["iterations"]))
-    y = np.array(nb_of_rules)
-    try:
-        coef = np.polyfit(x, y, 1)
-        ax.plot(x,
-                coef[0] * x + coef[1],
-                ls='--',
-                color='orange')
-        ax.locator_params(axis="x", integer=True, tight=True)
-        ax.legend(loc="best", fontsize=10)
-        ax.set_title("Number of rules per iteration")
-        plt.tight_layout()
-        plt.plot()
-        if display is True:
-            plt.show()
-        fig.savefig(os.path.join(paths.graphs, 'nb_rules_graph.png'))
-        plt.close(fig)
-    except Exception as e:
-        print("Couldn't plot number of rules per iteration graph. Reason: {}".format(e), file=sys.stderr)
+    if not test_data:
+        nb_of_rules = [0 if rules[i] is None else len(rules[i]) for i in it_ax]
+        fig, ax = plt.subplots(1, 1, figsize=(10, 7), dpi=96)
+        ### Draw the number of rules graph
+        ax.plot(it_ax,
+                nb_of_rules,
+                ls='-',
+                marker='x',
+                color='blue',
+                label=target_class)
+        ### Draw the regression line for the number of rules generated
+        x = np.array(range(expt_info["context"]["iterations"]))
+        y = np.array(nb_of_rules)
+        try:
+            coef = np.polyfit(x, y, 1)
+            ax.plot(x,
+                    coef[0] * x + coef[1],
+                    ls='--',
+                    color='orange')
+            ax.locator_params(axis="x", integer=True, tight=True)
+            ax.legend(loc="best", fontsize=10)
+            ax.set_title("Number of rules per iteration")
+            plt.tight_layout()
+            plt.plot()
+            if display is True:
+                plt.show()
+            fig.savefig(os.path.join(paths.graphs, 'nb_rules_graph.png'))
+            plt.close(fig)
+        except Exception as e:
+            print("Couldn't plot number of rules per iteration graph. Reason: {}".format(e), file=sys.stderr)
 
     # ====== 2nd Graph: Average rule usage accuracy per iteration ======================================================
 
     # proceed only if the information is available
-    if expt_info["context"]["has_rule_gen_info"] is True:
-        avg_gen_acc = []
-        rule_lists = expt_info["learning"]["rules"]
-        for rule_list in rule_lists:
-            tot_gen = 0
-            tot_use = 0
-            if rule_list is None:
-                avg_gen_acc.append(None)
-                continue
-            for rule in rule_list:
-                if 'count_gen' in rule:
-                    tot_gen += rule['count_gen']
-                    tot_use += rule['count_use']
-            if tot_use > 0:
-                avg_gen_acc.append(float(tot_gen) / float(tot_use))
-            else:
-                avg_gen_acc.append(0)
+    if not test_data:
+        if expt_info["context"]["has_rule_gen_info"] is True:
+            avg_gen_acc = []
+            rule_lists = expt_info["learning"]["rules"]
+            for rule_list in rule_lists:
+                tot_gen = 0
+                tot_use = 0
+                if rule_list is None:
+                    avg_gen_acc.append(None)
+                    continue
+                for rule in rule_list:
+                    if 'count_gen' in rule:
+                        tot_gen += rule['count_gen']
+                        tot_use += rule['count_use']
+                if tot_use > 0:
+                    avg_gen_acc.append(float(tot_gen) / float(tot_use))
+                else:
+                    avg_gen_acc.append(0)
 
-        fig, ax = plt.subplots(1, 1, figsize=(10, 7), dpi=96)
-        ax.plot(it_ax, avg_gen_acc, ls='-', marker='x', color='blue')
-        ax.set_ylim([0, 1])
-        ax.legend(fontsize=10)
-        ax.set_title('Average rule generation accuracy per iteration')
+            fig, ax = plt.subplots(1, 1, figsize=(10, 7), dpi=96)
+            ax.plot(it_ax, avg_gen_acc, ls='-', marker='x', color='blue')
+            ax.set_ylim([0, 1])
+            ax.set_title('Average rule generation accuracy per iteration')
 
-        plt.tight_layout()
-        plt.plot()
-        if display is True:
-            plt.show()
-        fig.savefig(os.path.join(paths.graphs, 'avg_rule_gen_acc_graph.png'))
-        plt.close(fig)
+            plt.tight_layout()
+            plt.plot()
+            if display is True:
+                plt.show()
+            fig.savefig(os.path.join(paths.graphs, 'avg_rule_gen_acc_graph.png'))
+            plt.close(fig)
 
     # ===== 3rd Graph: Accuracy ========================================================================================
 
     fig, ax = plt.subplots(1, 1, figsize=(10, 7), dpi=96)
-    ### Draw the precision graph
-    ax.plot(it_ax,
-            expt_info['learning']['accuracy'],
-            ls='-',
-            marker='x',
-            color='blue',
-            label="accuracy_score")
+    ### Draw the accuracy graph
+    if not test_data:
+        ax.plot(it_ax,
+                expt_info['learning']['accuracy'],
+                ls='-',
+                marker='x',
+                color='blue',
+                label="accuracy_score")
+    else:
+        ax.plot(it_ax,
+                expt_info['learning']['accuracy'],
+                ls='-',
+                marker='x',
+                color='blue',
+                label="accuracy-learning")
+        ax.plot(it_ax,
+                expt_info['test_evl']['accuracy'],
+                ls='-',
+                marker='x',
+                color='blue',
+                label="accuracy-test")
+
     ax.set_ylim([0, 100])
     ax.yaxis.set_major_formatter(ticker.PercentFormatter())
     ax.locator_params(axis="x", integer=True, tight=True)
-    ax.legend(fontsize=10)
+    ax.legend(loc="best", fontsize=10)
     ax.set_title('Classifier Accuracy per iteration')
 
     plt.tight_layout()
     plt.plot()
     if display is True:
         plt.show()
-    fig.savefig(os.path.join(paths.graphs, 'accuracy_graph.png'))
+
+    if test_data:
+        fig.savefig(os.path.join(paths.graphs, 'accuracy_graph.png'))
     plt.close(fig)
 
-    # ===== 3rd Graph TP/FP rate for target_class, TP/FP rate for other class ==========================================
+    # ===== 3rd Graph TP/FP/TN/FN for target_class, TP/FP rate for other class ==========================================
 
-    fig, axs = plt.subplots(1, 2, figsize=(21, 7), dpi=96)
+    fig, ax = plt.subplots(1, 1, figsize=(21, 7), dpi=96)
 
-    axs[0].plot(it_ax,
-                expt_info['learning'][target_class]["num_tp"],
+    for outcome in ('TP', 'FP', 'TN', 'FN'):
+        ax.plot(it_ax,
+                expt_info['learning'][target_class]["num_{}".format(outcome.lower())],
                 ls='-',
                 marker='x',
-                color='blue',
-                label="TP Rate")
-    axs[0].plot(it_ax,
-                expt_info['learning'][target_class]["num_fp"],
-                ls='-',
-                marker='x',
-                color='red',
-                label="FP Rate")
-    axs[0].locator_params(axis="x", integer=True, tight=True)
-    axs[0].legend(loc="best", fontsize=10)
-    axs[0].set_title('TP/FP Rate for {} per iteration'.format(target_class))
-
-    ### Draw the TP/FP graph for the other class
-    axs[1].plot(it_ax,
-                expt_info['learning'][other_class]["num_tp"],
-                ls='-',
-                marker='x',
-                color='blue',
-                label="TP Rate")
-    axs[1].plot(it_ax,
-                expt_info['learning'][other_class]["num_fp"],
-                ls='-',
-                marker='x',
-                color='red',
-                label="FP Rate")
-    axs[1].locator_params(axis="x", integer=True, tight=True)
-    axs[1].legend(loc="best", fontsize=10)
-    axs[1].set_title('TP/FP Rate for {}'.format(other_class))
+                label=outcome if not test_data else "learning-{}".format(outcome))
+        if test_data:
+            ax.plot(it_ax,
+                    expt_info['test_evl'][target_class]["num_{}".format(outcome.lower())],
+                    ls='-',
+                    marker='x',
+                    label="test-{}".format(outcome))
+    ax.locator_params(axis="x", integer=True, tight=True)
+    ax.legend(loc="best", fontsize=10)
+    ax.set_title('Number of TP/FP/TN/FN for {} per iteration'.format(target_class))
 
     plt.tight_layout()
     plt.plot()
     if display is True:
         plt.show()
-    fig.savefig(os.path.join(paths.graphs, 'tp_fp_rate_graph.png'))
+    fig.savefig(os.path.join(paths.graphs, 'distribution_graph.png'))
     plt.close(fig)
 
     # ===== 4th graph: Precision =======================================================================================
 
     fig, ax = plt.subplots(1, 1, figsize=(10, 7), dpi=96)
     ### Draw the precision graph
+    y = [0 if p is None else p for p in expt_info['learning'][target_class]["precision"]]
+    y = [0 if math.isnan(p) else p for p in y]
     ax.plot(it_ax,
-            expt_info['learning'][target_class]["precision"],
+            y,
             ls='-',
             marker='x',
             color='blue',
-            label='{}-cv'.format(target_class) if print_evl_data and 'test_evl' in expt_info else target_class)
-    if print_evl_data and 'test_evl' in expt_info:
+            label='precision'.format(target_class) if not test_data else 'learning precision')
+    if test_data:
+        y = [0 if p is None else p for p in expt_info['test_evl'][target_class]["precision"]]
+        y = [0 if math.isnan(p) else p for p in y]
         ax.plot(it_ax,
-                expt_info['test_evl'][target_class]["precision"],
+                y,
                 ls='--',
                 marker='x',
                 color='orange',
-                label='{}-evl'.format(target_class))
+                label='test precision')
     ax.set_ylim([0, 1])
     ax.set_xlabel("iteration")
     ax.set_ylabel("precision")
@@ -700,19 +729,23 @@ def generate_graphics(experiment, display: bool = False):
     # ===== 5th graph: Recall ==========================================================================================
 
     fig, ax = plt.subplots(1, 1, figsize=(10, 7), dpi=96)
+    y = [0 if p is None else p for p in expt_info['learning'][target_class]["recall"]]
+    y = [0 if math.isnan(p) else p for p in y]
     ax.plot(it_ax,
-            expt_info['learning'][target_class]["recall"],
+            y,
             ls='-',
             marker='x',
             color='blue',
-            label='{}-cv'.format(target_class) if print_evl_data and 'test_evl' in expt_info else target_class)
-    if print_evl_data and 'test_evl' in expt_info:
+            label='recall' if not test_data else 'learning recall')
+    if test_data:
+        y = [0 if p is None else p for p in expt_info['test_evl'][target_class]["recall"]]
+        y = [0 if math.isnan(p) else p for p in y]
         ax.plot(it_ax,
-                expt_info['test_evl'][target_class]['recall'],
+                y,
                 ls='--',
                 marker='x',
                 color='orange',
-                label='{}-evl'.format(target_class))
+                label='test recall')
     ax.set_ylim([0, 1])
     ax.set_xlabel("iteration")
     ax.set_ylabel("recall")
@@ -738,14 +771,14 @@ def generate_graphics(experiment, display: bool = False):
             ls='-',
             marker='x',
             color='blue',
-            label=target_class)
-    if print_evl_data and 'test_evl' in expt_info:
+            label='F1 Score' if not test_data else 'Learning F1 Score')
+    if test_data:
         ax.plot(it_ax,
                 expt_info['test_evl'][target_class]['f_measure'],
                 ls='--',
                 marker='^',
                 color='orange',
-                label=other_class)
+                label='Test F1 Score')
     ax.set_ylim([0, 1])
     ax.locator_params(axis="x", integer=True, tight=True)
     ax.legend(loc="best", fontsize=10)
@@ -761,15 +794,21 @@ def generate_graphics(experiment, display: bool = False):
     # ===== 7th graph: Area under ROC ==================================================================================
 
     fig, ax = plt.subplots(1, 1, figsize=(10, 7), dpi=96)
-
     ax.plot(it_ax,
             expt_info['learning'][target_class]["auroc"],
             ls='-',
             marker='x',
-            color='blue')
+            color='blue',
+            label='AUROC' if not test_data else 'Learning AUROC')
+    if test_data:
+        ax.plot(it_ax,
+                expt_info['learning'][target_class]["auroc"],
+                ls='-',
+                color='orange',
+                label='Test AUROC')
+        ax.legend(loc="best", fontsize=10)
     ax.set_ylim([0, 1])
     ax.locator_params(axis="x", integer=True, tight=True)
-    ax.legend(loc="best", fontsize=10)
     ax.set_title('Area under ROC per iteration')
 
     plt.tight_layout()
@@ -787,14 +826,21 @@ def generate_graphics(experiment, display: bool = False):
             ls='-',
             marker='x',
             color='blue',
-            label='{}-cv'.format(target_class) if print_evl_data and 'test_evl' in expt_info else target_class)
+            label='AUPRC' if not test_data else 'Learning AUPRC')
+    if test_data:
+        ax.plot(it_ax,
+                expt_info['learning'][target_class]["auprc"],
+                ls='-',
+                marker='x',
+                color='orange',
+                label='Test AUPRC')
+        ax.legend(loc="best", fontsize=10)
     ax.set_ylim([0, 1])
     ax.set_xlabel("iteration")
     ax.set_ylabel("prc in %")
     ax.xaxis.label.set_color('dimgrey')
     ax.yaxis.label.set_color('dimgrey')
     ax.locator_params(axis="x", integer=True, tight=True)
-    ax.legend(loc="best", fontsize=10)
     ax.set_title('Area under PRC per iteration')
 
     plt.tight_layout()
@@ -807,28 +853,39 @@ def generate_graphics(experiment, display: bool = False):
     # ===== 9th graph: MCC =============================================================================================
 
     fig, ax = plt.subplots(1, 1, figsize=(10, 7), dpi=96)
-    min_mcc = math.inf
-    max_mcc = -math.inf
-    for v in expt_info['learning'][target_class]["mcc"]:
-        if v is None:  # Important to test before math.isnan
-            min_mcc = min(min_mcc, 0)
-            max_mcc = max(max_mcc, 0)
-        elif math.isnan(v):
-            continue
-        else:
-            min_mcc = min(min_mcc, v)
-            max_mcc = max(max_mcc, v)
-    min_ax = 0 if min_mcc > 0 else min_mcc - 0.25
-    max_ax = 1 if max_mcc > 0.5 else max_mcc + 0.25
-    ax.plot(it_ax,
-            expt_info['learning'][target_class]["mcc"],
+    min_mcc = min_ax = math.inf
+    max_mcc = max_ax = -math.inf
+
+    if test_data:
+        evl_methods = ['learning', 'test_evl']
+    else:
+        evl_methods = ['learning']
+
+    for method in evl_methods:
+        min_mcc = math.inf
+        max_mcc = -math.inf
+        for v in expt_info[method][target_class]["mcc"]:
+            if v is None:  # Important to test before math.isnan
+                min_mcc = min(min_mcc, 0)
+                max_mcc = max(max_mcc, 0)
+            elif math.isnan(v):
+                continue
+            else:
+                min_mcc = min(min_mcc, v)
+                max_mcc = max(max_mcc, v)
+        min_ax = min(0 if min_mcc > 0 else min_mcc - 0.25, min_ax)
+        max_ax = max(1 if max_mcc > 0.5 else max_mcc + 0.25, max_ax)
+        ax.plot(
+            it_ax,
+            expt_info[method][target_class]["mcc"],
             ls='-',
             marker='x',
             color='blue',
-            label=target_class)
+            label='MCC' if not test_data else '{} MCC'.format(method)
+        )
     try:
         ax.set_ylim([min_ax, max_ax])
-    except Exception as e:
+    except Exception:
         print("Couldn't determine mcc best y-axis, using the default one", file=sys.stderr)
         ax.set_ylim([-1, 1])
     ax.locator_params(axis="x", integer=True, tight=True)
@@ -844,7 +901,7 @@ def generate_graphics(experiment, display: bool = False):
 
     # ===== 10th graph: ratio of class and other class instances =======================================================
 
-    if 'imbalance' in expt_info['data']:
+    if not test_data and 'imbalance' in expt_info['data']:
         fig, ax = plt.subplots(1, 1, figsize=(10, 7), dpi=96)
         ### Draw the F1-Score graph
         ax.set_ylim([0, 1])
@@ -867,7 +924,7 @@ def generate_graphics(experiment, display: bool = False):
 
     # ===== 11th graph: Geometric Diversity ==================================================================
 
-    if 'geometric_diversity' in expt_info['data']:
+    if not test_data and 'geometric_diversity' in expt_info['data']:
         fig, ax = plt.subplots(1, 1, figsize=(10, 7), dpi=96)
         ### Draw the F1-Score graph
         ax.plot(it_ax,
@@ -889,7 +946,7 @@ def generate_graphics(experiment, display: bool = False):
 
     # ===== 12th graph: N1 Score ==================================================================
 
-    if 'N1_score' in expt_info['data']:
+    if not test_data and'N1_score' in expt_info['data']:
         fig, ax = plt.subplots(1, 1, figsize=(10, 7), dpi=96)
         ### Draw the F1-Score graph
         ax.plot(it_ax,
@@ -911,7 +968,7 @@ def generate_graphics(experiment, display: bool = False):
 
     # ===== 13th graph: Standard Deviation =============================================================================
 
-    if 'standard_deviation' in expt_info['data']:
+    if not test_data and 'standard_deviation' in expt_info['data']:
         fig, ax = plt.subplots(1, 1, figsize=(10, 7), dpi=96)
         ### Draw the F1-Score graph
         ax.plot(it_ax,
@@ -1032,11 +1089,16 @@ def generate_report(experiment : str):
 # End def _generate_report
 
 
-def generate_result_csv(experiment : str):
-    """Generate a csv file that list all the metrics."""
+def generate_result_csv(experiment : str, test_data : Optional[str] = None):
+    """Generate a csv file that list all the metrics
+
+    Args:
+        experiment (str): Name of the experiment
+        test_data (str): The name of the test data.
+    """
     # Get the paths and experiment information
-    paths = get_paths(experiment)
-    expt_info = get_info(experiment)
+    paths = get_paths(experiment, test_data=test_data)
+    expt_info = get_info(experiment, test_data=test_data)
 
     it_cnt = expt_info['context']['iterations']
     tgt_cls = expt_info['context']['target_class']
@@ -1044,15 +1106,15 @@ def generate_result_csv(experiment : str):
     df = pd.DataFrame()
 
     # Add the columns to the dataframe:
-    df['learning_accuracy']     = expt_info['learning']["accuracy"]
-    df['learning_precision']    = expt_info['learning'][tgt_cls]["precision"]
-    df['learning_recall']       = expt_info['learning'][tgt_cls]["recall"]
-    df['learning_mcc']          = expt_info['learning'][tgt_cls]["mcc"]
-    df['learning_auroc']        = expt_info['learning'][tgt_cls]["auroc"]
-    df['learning_auprc']        = expt_info['learning'][tgt_cls]["auprc"]
+    df['accuracy']     = expt_info['learning']["accuracy"]
+    df['precision']    = expt_info['learning'][tgt_cls]["precision"]
+    df['recall']       = expt_info['learning'][tgt_cls]["recall"]
+    df['mcc']          = expt_info['learning'][tgt_cls]["mcc"]
+    df['auroc']        = expt_info['learning'][tgt_cls]["auroc"]
+    df['auprc']        = expt_info['learning'][tgt_cls]["auprc"]
 
     # Add the data for the tests
-    if 'test_evl' in expt_info:
+    if 'test_evl' in expt_info and test_data:
         df['test_accuracy']     = expt_info['test_evl']["accuracy"]
         df['test_precision']    = expt_info['test_evl'][tgt_cls]["precision"]
         df['test_recall']       = expt_info['test_evl'][tgt_cls]["recall"]
@@ -1061,7 +1123,8 @@ def generate_result_csv(experiment : str):
         df['test_auprc']        = expt_info['test_evl'][tgt_cls]["auprc"]
 
     df['data_imbalance']        = expt_info['data']["imbalance"]
-    df['data_geom_div']         = expt_info['data']["geometric_diversity"]
+    if 'geometric_diversity' in expt_info['data']:
+        df['data_geom_div']         = expt_info['data']["geometric_diversity"]
 
     # Save the CSV file
     df.to_csv(
@@ -1070,40 +1133,59 @@ def generate_result_csv(experiment : str):
         index_label="iteration",
         sep=",",
     )
+# End def generate_result_csv
 
 
-def get_info(expt):
+def get_info(expt, test_data : str = None):
+    """Get the information for an experiment
+
+    Args:
+        expt (str): The experiment name
+        test_data (str, optional): The name of the test data
+
+    Returns:
+        (dict) The dictionary containing all the experiment information
     """
-    Get the information for an experiment
-    :param expt:
-    :return:
-    """
-    root_path = join(app_path.report_dir(), expt)
     # Get the statistics
-    with open(os.path.join(root_path, "stats.json"), 'r') as f:
+    with open(os.path.join(get_paths(expt, test_data=test_data).root, "stats.json"), 'r') as f:
         return json.load(f)
-# End def get info
+# End def get_info
 
 
-def get_paths(expt):
+def get_paths(expt : str, test_data : str = None):
+    """Get the information for an experiment
+
+    Args:
+        expt (str): The experiment name
+        test_data (str, optional): The path of the test data
+
+    Returns:
+        (SimpleNamespace) A namespace with all the standard paths for the report
     """
-    Get the information for an experiment
-    :param expt:
-    :return:
-    """
-    exp_root_dir = join(app_path.report_dir(), expt)
-    exp_data_dir = join(exp_root_dir, "data")
-    exp_model_dir = join(exp_root_dir, "models")
-    exp_graph_dir = join(exp_root_dir, "graphs")
-    exp_cm_dir = join(exp_root_dir, "confusion_matrices")
+    if not test_data:
+        root_dir    = join(app_path.report_dir(), expt)
+        data_dir    = join(root_dir, "data")
+        model_dir   = join(root_dir, "models")
+        graph_dir   = join(root_dir, "graphs")
+        cm_dir      = join(root_dir, "confusion_matrices")
+    else:
+        # Generic paths
+        data_dir    = join(app_path.report_dir(), expt, 'data')
+        model_dir   = join(app_path.report_dir(), expt, 'models')  # Models are stock in the
+
+        # Test specific paths
+        test_data_stem  = Path(test_data).stem
+        root_dir        = join(app_path.report_dir(), expt, 'test', test_data_stem)
+        graph_dir       = join(root_dir, "graphs")
+        cm_dir          = join(root_dir, "confusion_matrices")
 
     # Create the file dictionary:
     paths = {
-        'root'  : exp_root_dir,
-        'data'  : exp_data_dir,
-        'models': exp_model_dir,
-        'graphs': exp_graph_dir,
-        'cms'   : exp_cm_dir
+        'root'  : root_dir,
+        'data'  : data_dir,
+        'models': model_dir,
+        'graphs': graph_dir,
+        'cms'   : cm_dir
     }
 
     return SimpleNamespace(**paths)
@@ -1115,8 +1197,13 @@ def reevaluate_against_test_data(experiment, test_data_path):
     
     # Get the paths and experiment infos
     paths       = get_paths(experiment)
-    expt_info    = get_info(experiment)
-    
+    expt_info   = get_info(experiment)
+    test_name   = Path(test_data_path).stem
+
+    # Create the test data directory !
+    test_result_path = Path(os.path.join(paths.root, 'test', test_name))
+    test_result_path.mkdir(parents=True, exist_ok=True)
+
     # Get the target and other class
     target_class = expt_info['context']['target_class']
     other_class = expt_info['context']['other_class']
@@ -1143,7 +1230,7 @@ def reevaluate_against_test_data(experiment, test_data_path):
         expt_info['test_evl'][class_]["auroc"]       = list()
         expt_info['test_evl'][class_]["auprc"]       = list()
 
-    print("Evaluating the generated models against the test data: \"{}\"".format(test_data_path))
+    print("Evaluating the generated models against the test data \"{}\"".format(test_name))
     # Load the data
     loader = Loader("weka.core.converters.ArffLoader")
     dataset = loader.load_file(test_data_path)
@@ -1206,8 +1293,8 @@ def reevaluate_against_test_data(experiment, test_data_path):
 
         for class_ in (target_class, other_class):
             if model is not None and class_ in model.info.classes:
-                expt_info['test_evl'][class_]['num_tp']      += [model.info.num_fp[class_]]
-                expt_info['test_evl'][class_]['num_fp']      += [model.info.num_tp[class_]]
+                expt_info['test_evl'][class_]['num_tp']      += [model.info.num_tp[class_]]
+                expt_info['test_evl'][class_]['num_fp']      += [model.info.num_fp[class_]]
                 expt_info['test_evl'][class_]['num_tn']      += [model.info.num_tn[class_]]
                 expt_info['test_evl'][class_]['num_fn']      += [model.info.num_fn[class_]]
                 expt_info['test_evl'][class_]['precision']   += [model.info.precision[class_]]
@@ -1237,6 +1324,11 @@ def reevaluate_against_test_data(experiment, test_data_path):
         )
 
         # Re-save the updated stats.json file
-        with open(join(paths.root, 'stats.json'), 'w') as f:
+        # TODO: Save the updated one only in the corresponding test folder
+        with open(os.path.join(paths.root, 'stats.json'), 'w') as f:
+            json.dump(expt_info, f, indent=4, sort_keys=True)
+
+        # Re-save the updated stats.json file to the corresponding test folder
+        with open(os.path.join(paths.root, 'test', test_name, 'stats.json'), 'w') as f:
             json.dump(expt_info, f, indent=4, sort_keys=True)
 # End def reevaluate_against_test_data

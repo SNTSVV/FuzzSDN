@@ -14,7 +14,7 @@ from figsdn.common.utils.database import Database as SqlDb
 # ===== ( Parameters ) =================================================================================================
 
 logger                      = logging.getLogger(__name__)
-exp_logger                  = logging.getLogger("figsdn-fuzzer.jar")
+exp_logger                  = logging.getLogger("PacketFuzzer.jar")
 
 # ===== (Before, after functions) ======================================================================================
 
@@ -48,7 +48,7 @@ def before_each(**opts):
     # Start onos
     success &= OnosDriver.start()
     success &= OnosDriver.activate_app("org.onosproject.fwd")
-    success &= OnosDriver.set_log_level("INFO")
+    success &= OnosDriver.set_log_level("DEBUG")
 
     return success
 # End def before_each
@@ -100,7 +100,7 @@ def test(instruction=None, **opts):
     logger.info("Closing all previous instances on control flow fuzzer")
 
     # TODO: Use the FuzzerDriver instead
-    for pid in get_pid("figsdn-fuzzer.jar"):
+    for pid in get_pid("PacketFuzzer.jar"):
         os.kill(pid, signal.SIGKILL)
 
     logger.info("Starting Control Flow Fuzzer")
@@ -109,26 +109,36 @@ def test(instruction=None, **opts):
     logger.info("Starting Mininet network")
 
     MininetDriver.start(
-        cmd='mn --controller=remote,ip={},port={},protocols=OpenFlow14 --topo=single,2'.format(setup.config().onos.host,
+        cmd='mn --controller=remote,ip={},port={},protocols=OpenFlow14 --topo=single,0'.format(setup.config().onos.host,
                                                                                                setup.config().fuzzer.port)
     )
-
-    # Add a flow between h1 and h2
-    logger.info("Adding a flow to s1.")
-    MininetDriver.add_flow(sw='s1',
-                           flow="dl_src=00:00:00:00:00:01,dl_dst=00:00:00:00:00:02,actions=output:2",
-                           timeout=15.0)
-    time.sleep(2)
-    logger.info("Removing all flows from s1.")
-    MininetDriver.delete_flow(sw='s1', strict=False)
-
-    # TODO: Synchronize with fuzzer instead
-    time.sleep(5)
-
+    # Just wait 10s. An echo should be sent
+    # TODO: Wait for echo time depending on onos config
+    time.sleep(30)
+    # TODO: Synchronize with fuzzer
 # End def test
 
 
 # ===== ( Utility Functions ) ==========================================================================================
+
+def count_db_entries():
+
+    count = 0
+    try:
+        if not SqlDb.is_connected():
+            SqlDb.connect("control_flow_fuzzer")
+        # Storing a new log message stating that onos crashed
+        SqlDb.execute("SELECT COUNT(*) FROM fuzzed_of_message")
+        SqlDb.commit()
+        count = SqlDb.fetchone()[0]
+    except (Exception,):
+        logger.exception("An exception happened while recording mininet crash:")
+    finally:
+        SqlDb.disconnect()
+
+    return count
+# End def count_db_entries
+
 
 def get_pid(name: str):
     """ Search the PID of a program by its partial name"""

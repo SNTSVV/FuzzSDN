@@ -41,9 +41,6 @@ setup(
         'figsdn/common',
         'figsdn/common/metrics',
         'figsdn/common/openflow',
-        'figsdn/common/openflow/v0x05',
-        'figsdn/common/openflow/v0x05/common',
-        'figsdn/common/openflow/v0x05/message',
         'figsdn/common/utils',
         # Report Application
         'figsdn/report',

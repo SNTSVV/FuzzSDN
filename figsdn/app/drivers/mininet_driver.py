@@ -10,7 +10,7 @@ import pexpect
 
 from figsdn.app.analytics.ping_stats import PingStats
 from figsdn.app.drivers.commons import sudo_expect
-from figsdn.common.utils import ExitCode
+from figsdn.common.utils import ExitCode, StrEnum
 
 MININET_PROMPT = "mininet>"
 
@@ -93,17 +93,21 @@ class MininetDriver:
                         cls.__log.info("Building Mininet with topology file \"{}\"".format(topo_file))
                         cmd_.append("python")
                         cmd_.append(topo_file)
-                        if args is None or args == '':
-                            pass
+                        if isinstance(args, str):
+                            if args != "":
+                                cmd_.append(args)
+                        else:
+                            raise AttributeError("Wrong argument type \"args\" was given (expected a \"str\", but got \"{}\")".format(type(args)))
+
+                    # Finally build the command
                     cmd_ = " ".join(cmd_)
                 else:
                     if type(cmd) in (tuple, list):
                         cmd_ = " ".join(cmd)
-
                     elif type(cmd) == str:
                         cmd_ = cmd
                     else:
-                        raise AttributeError("Wrong argument type \"cmd\" was given (got a: {}, expected a \"str\", a \"tuple\" or a \"list\")".format(type(cmd)))
+                        raise AttributeError("Wrong argument type \"cmd\" was given (expected a \"str\", a \"tuple\" or a \"list\", but got: \"{}\")".format(type(cmd)))
 
                     cls.__log.info("Starting Mininet (with cmd: \"{}\")".format(cmd))
 

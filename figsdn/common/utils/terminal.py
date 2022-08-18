@@ -51,18 +51,25 @@ def clear():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 
-def query_yes_no(question, default="yes"):
+def query_yes_no(question, default="yes", assume_yes=False):
     """Ask a yes/no question via raw_input() and return the answer.
 
-    "question" is a string that is presented to the user.
-    "default" is the presumed answer if the user just hits <Enter>.
-            It must be "yes" (the default), "no" or None (meaning
-            an answer is required of the user).
+    Args:
+        question (str): The question presented to the user.
+        default (str): The default is the presumed answer if the user just hits <Enter>.
+            It must be "yes" (the default), "no" or None (meaning an answer is required of the user).
+        assume_yes (bool) : if set to True, skips the question and assume "yes"
 
-    The "answer" return value is True for "yes" or False for "no".
+    Returns:
+        bool: The "answer" return value is True for "yes" or False for "no".
 
-    Code taken from @fmark at https://stackoverflow.com/questions/3041986/apt-command-line-interface-like-yes-no-input
+    .. Code inspired from @fmark's answer at
+        https://stackoverflow.com/questions/3041986/apt-command-line-interface-like-yes-no-input
     """
+    # Just skip the question
+    if assume_yes is True:
+        return True
+
     valid = {"yes": True, "y": True, "ye": True, "no": False, "n": False}
     if default is None:
         prompt = " [y/n] "
@@ -71,7 +78,7 @@ def query_yes_no(question, default="yes"):
     elif default == "no":
         prompt = " [y/N] "
     else:
-        raise ValueError("invalid default answer: '{}'".format(default))
+        raise ValueError("Invalid default answer: '{}'".format(default))
 
     while True:
         sys.stdout.write(question + prompt)

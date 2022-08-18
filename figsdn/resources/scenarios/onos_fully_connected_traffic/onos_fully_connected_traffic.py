@@ -9,6 +9,7 @@ import signal
 import subprocess
 import sys
 import time
+import random
 
 from figsdn.app import setup
 from figsdn.app.drivers import FuzzerDriver, MininetDriver, OnosDriver
@@ -23,7 +24,7 @@ exp_logger = logging.getLogger("PacketFuzzer.jar")
 # ===== (Before, after functions) ======================================================================================
 
 
-def initialize():
+def initialize(**opts):
     """Job to be executed before the beginning of a series of test"""
 
     # Install onos
@@ -39,7 +40,7 @@ def initialize():
 # End def initialize
 
 
-def before_each():
+def before_each(**opts):
     """Job before after each test."""
 
     success = True
@@ -61,7 +62,7 @@ def before_each():
 # End def before_each
 
 
-def after_each():
+def after_each(**opts):
     """Job executed after each test."""
 
     if SqlDb.is_connected():
@@ -85,7 +86,7 @@ def after_each():
 # End def after_each
 
 
-def terminate():
+def terminate(**opts):
     """Job to be executed after the end of a series of test"""
     OnosDriver.uninstall()
 
@@ -96,11 +97,11 @@ def terminate():
 # ===== ( Main test function ) =========================================================================================
 
 
-def test(instruction=None):
-    """
-    Run the experiment
-    :param instruction:
-    :return:
+def test(instruction=None, **opts):
+    """Run the experiment
+
+    Args:
+        topo (str): The topology to choose.
     """
 
     # Write the instruction to the fuzzer
@@ -124,9 +125,17 @@ def test(instruction=None):
     with importlib.resources.path(topo_pkg, 'topo.py') as p:
         topo_path = p
 
-    # Start mininet with a fully connected topo of 5 switches with 5 hosts per switches
-    MininetDriver.start(cmd='mn --custom {} --topo=fully_connected --controller=remote,ip={},port={},protocols=OpenFlow14'.format(topo_path.as_posix(), setup.config().onos.host, setup.config().fuzzer.port))
+    # Start mininet with the topo
+    topo = '1s_2h'  # Default topology
+    if 'topo' in opts:
+        topo = opts.get('topo', None)
 
+    MininetDriver.start(
+        cmd="mn --custom {}".format(topo_path.as_posix())
+            + " --topo={}".format(topo)
+            + " --controller=remote,ip={},port={},protocols=OpenFlow14".format(setup.config().onos.host,
+                                                                               setup.config().fuzzer.port)
+    )
     # Get all the nodes
     nodes = MininetDriver.nodes()
     logger.trace("Acquired nodes:\n{}".format(json.dumps(nodes, indent=4)))
@@ -134,16 +143,13 @@ def test(instruction=None):
 
     if nodes is not None:
         host_nodes = {key: nodes[key] for key in nodes.keys() if nodes[key]['type'] == 'host'}
-        first_host = list(host_nodes.keys())[0]
-        last_host  = list(host_nodes.keys())[-1]
-
-        logger.info("Executing ping command: {} -> {}".format(first_host, last_host))
-        stats = MininetDriver.ping_host(src=first_host, dst=last_host, count=1, wait_timeout=5)
+        host1, host2 = random.sample(host_nodes.keys(), 2)  # Pick two random host from the list
+        logger.info("Executing ping command: {} -> {}".format(host1, host2))
+        stats = MininetDriver.ping_host(src=host1, dst=host2, count=1, wait_timeout=5)
         logger.trace("Ping results: {}".format(stats.as_dict() if stats is not None else stats))
 
     # TODO: Synchronize with fuzzer instead
     time.sleep(5)
-
 # End def test
 
 

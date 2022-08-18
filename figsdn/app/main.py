@@ -7,13 +7,13 @@ import os
 import pwd
 import signal
 import sys
-import time
 from os.path import join
 from typing import Iterable, Optional, Union
 
 import grp
 import math
 from scipy.stats import rankdata
+from timeit import default_timer as timer
 from weka.core import jvm, packages
 
 from figsdn import __app_name__, arguments
@@ -36,6 +36,7 @@ _crashed = False
 _context = {
     # Classifying
     "scenario"              : str(),
+    'scenario_options'      : dict(),
     "criterion"             : {
         "name"      : str(),
         "kwargs"    : dict()
@@ -79,6 +80,7 @@ def run(
     ml_cv_folds : Optional[int] = None,
     mutation_rate : Optional[int] = None,
     criterion_kwargs : Optional[dict] = None,
+    scenario_options : Optional[dict] = None,
     limit : Optional[Iterable] = None,
 ):
 
@@ -104,6 +106,7 @@ def run(
 
             # Experiment
             'scenario'          : scenario,
+            'scenario_options'  : scenario_options,
             'criterion'         : {
                 'name'          : criterion,
                 'kwargs'        : criterion_kwargs
@@ -138,15 +141,27 @@ def run(
     elif mode == 'resume':
         raise NotImplementedError("Resume function is not yet implemented")
 
+    ## Get the scenario kwargs string
+    if len(_context['scenario_options']) > 0:
+        scenario_options_str = " (options: {})".format(
+            ", ".join("{}=\'{}\'".format(key, _context['scenario_options'][key])
+                      for key in _context['scenario_options'].keys())
+        )
+    else:
+        scenario_options_str = ''
+
     ## Get the criterion kwargs string
     if len(_context['criterion']['kwargs']) > 0:
-        criterion_kwargs_str = " (kwargs: {})"
-        criterion_kwargs_str.format(", ".join("{}=\'{}\'".format(key, _context['criterion']['kwargs'][key]) for key in
-                                              _context['criterion']['kwargs'].keys()))
+        criterion_kwargs_str = " (kwargs: {})".format(
+            ", ".join("{}=\'{}\'".format(key, _context['criterion']['kwargs'][key])
+                      for key in _context['criterion']['kwargs'].keys())
+        )
+
     else:
         criterion_kwargs_str = ''
+
     # Display header:
-    print(Style.BOLD, "*** Scenario: {}".format(_context['scenario']), Style.RESET)
+    print(Style.BOLD, "*** Scenario: {}{}".format(_context['scenario'], scenario_options_str), Style.RESET)
     print(Style.BOLD, "*** Criterion: {}{}".format(_context['criterion']['name'], criterion_kwargs_str), Style.RESET)
     print(Style.BOLD, "*** Fuzzing Method: {}".format(_context['method']), Style.RESET)
     print(Style.BOLD, "*** Budget Calculation Method: {}".format(_context['budget']), Style.RESET)
@@ -166,7 +181,7 @@ def run(
     # Set up the experimenter
     experimenter = Experimenter()
     experimenter.mutation_rate          = _context['mutation_rate']
-    experimenter.scenario               = _context['scenario']
+    experimenter.scenario               = _context['scenario'], _context['scenario_options']
     experimenter.criterion              = _context['criterion']['name'], _context['criterion']['kwargs']
     experimenter.samples_per_iteration  = _context['nb_of_samples']
     experimenter.analyzer               = analyzer
@@ -183,13 +198,13 @@ def run(
     ml_model : Optional[Model] = None
 
     # Starts the main loop
-    start_timestamp = time.time()
+    start_timestamp = timer()
     keep_running = True
 
     while keep_running:
 
         # Register timestamp at the beginning of the iteration and set a new iteration for the analyzer
-        start_of_it = time.time()
+        start_of_it = timer()
         analyzer.new_iteration()
 
         # Write headers
@@ -240,7 +255,7 @@ def run(
         )
 
         # 3. Perform machine learning algorithms
-        start_of_ml = time.time()
+        start_of_ml = timer()
         try:
             learner.load_data(join(app_path.exp_dir('data'), "it_{}.arff".format(it)))
             ml_model = learner.learn()
@@ -249,8 +264,9 @@ def run(
             _log.warning("Continuing with no model")
             ml_model = None
         finally:
-            end_of_ml = time.time()
+            end_of_ml = timer()
 
+        st_of_plan    = timer()  # Start planning measurement
         if ml_model is not None:
 
             # Save the model
@@ -266,20 +282,26 @@ def run(
             precision = 0.0 if math.isnan(precision) else precision
 
             # budget calculation
+            st_of_plan = timer()
             data_size   = learner.get_instances_count()
             calculate_budget(data_size=data_size['all'], samples=_context['nb_of_samples'],
                              failure_count=data_size['FAIL'], ruleset=ml_model.ruleset, method=_context['budget'])
+            time_plan_end = timer()
 
         else:
             precision = 0.0
             recall = 0.0
+        end_of_plan = timer()  # End of planning measurement
 
         # End of iteration total time
-        end_of_it = time.time()
+        end_of_it = timer()
 
         # Update the timing statistics and classifier statistics and save them to a file
         Stats.add_iteration_statistics(
+            testing_time=sum(experimenter.run_time),  # Aggregate the testing time
+            fuzzing_time=sum(analyzer.fuzz_time),
             learning_time=end_of_ml - start_of_ml,
+            planning_time=(end_of_plan - st_of_plan),
             iteration_time=end_of_it - start_of_it,
             learner=learner,
             model=ml_model
@@ -294,7 +316,7 @@ def run(
             if it >= _context['it_limit']:
                 keep_running = False
         if _context['time_limit'] is not None:
-            if time.time() - start_timestamp >= _context['time_limit']:
+            if timer() - start_timestamp >= _context['time_limit']:
                 keep_running = False
     # End of main loop
 # End def run
@@ -455,6 +477,7 @@ def main(
         ml_filter,
         ml_cv_folds,
         mutation_rate,
+        scenario_options : Optional[dict] = None,
         criterion_kwargs : Optional[dict] = None,
         limit : Optional[Iterable] = None,
         reference : Optional[Union[str, int, float]] = None
@@ -507,6 +530,7 @@ def main(
             ml_filter=ml_filter,
             ml_cv_folds=ml_cv_folds,
             mutation_rate=mutation_rate,
+            scenario_options=scenario_options,
             criterion_kwargs=criterion_kwargs,
             limit=limit
         )

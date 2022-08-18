@@ -32,7 +32,8 @@ class Heap:
         self.size = 0
         self.pos = []
 
-    def newMinHeapNode(self, v, dist):
+    @staticmethod
+    def newMinHeapNode(v, dist):
         minHeapNode = [v, dist]
         return minHeapNode
 
@@ -132,7 +133,8 @@ class Graph:
         self.V = adjacency_matrix.shape[0]
         self._graph = convert_matrix_to_list(adjacency_matrix)
 
-    def _build_edges(self, parent, n):
+    @staticmethod
+    def _build_edges(parent, n):
         edges = []
         for i in range(1, n):
             edges.append([parent[i], i])

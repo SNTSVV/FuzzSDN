@@ -22,6 +22,7 @@ class Analyzer:
     def __init__(self):
 
         self.last_list_of_fields : Optional[list] = None
+        self.fuzz_time = list()
 
         self.__log = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class Analyzer:
         # Counters
         self.__sample_cnt   = -1  # Counts the samples. Starts at -1 so it's 0 at the first iteration
         self.__it_cnt       = -1  # Counts the framework iteration. Starts at -1 so it's 0 at the first iteration
+
 
         # Flags
         self.__sample_table_created     = False
@@ -290,12 +292,10 @@ class Analyzer:
     # ===== ( Analysis ) ===============================================================================================
 
     def new_iteration(self):
-        """
-        Notifies the analyzer that there is a new transaction
-        :return:
-        """
+        """Notifies the analyzer that there is a new iteration starting."""
         self.__it_cnt += 1
         self.__current_it_has_ruleset = False
+        self.fuzz_time = list()
     # End def new_iteration
 
     def start_analysis(self):
@@ -310,7 +310,9 @@ class Analyzer:
         """
         # TODO: take into account, the fact that there could be many different packets fuzzed
         # Read the fuzzer report
-        pkt_struct, pkt_values, pkt_actions = self.__read_fuzz_report()
+        pkt_struct, pkt_values, pkt_actions, fuzz_time = self.__read_fuzz_report()
+
+        self.fuzz_time.append(float(fuzz_time / 1000.0))  # Add fuzzing time in seconds
 
         log_parse_results = self.__log_parser.parse_log()
 
@@ -401,7 +403,10 @@ class Analyzer:
             # Store the value in the pkt_fields dictionary
             pkt_values[field['name']] = value
 
-        return pkt_struct, pkt_values, data['fuzzActions']
+        # get the elapsed time in ms
+        elapsed_time = data["endTime"] - data["startTime"]
+
+        return pkt_struct, pkt_values, data['fuzzActions'], elapsed_time
     # End def __read_fuzz_report
 
     def __create_sample_table_from_packet_struct(self, pkt_struct):

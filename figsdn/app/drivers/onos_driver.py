@@ -249,7 +249,7 @@ class OnosDriver:
         if activated is True:
             cls.__log.info("ONOS app \"{}\" is activated (took {} out of {} attempt(s)).".format(app_name, attempt, max_try))
         else:
-            cls.__log.error("ONOS app \"{}\" couldn't be activated.")
+            cls.__log.error("ONOS app \"{}\" couldn't be activated.".format(app_name))
 
         return activated
     # End def activate_app

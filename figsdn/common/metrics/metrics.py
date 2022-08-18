@@ -116,7 +116,8 @@ def standard_deviation(X, normalize : bool = False):
     :param normalize:
     :return:
     """
-    data = copy(X)
+    data = copy(X).astype(np.float64)
+
     # Then normalize the columns
     if normalize is True:
         # divide data by data.max(axis=0) and prevent warnings on divide by 0 if a whole column is equal to 0 !

@@ -21,26 +21,26 @@ class FullyConnectedTopo(Topo):
     """A fully connected topology.
 
         Args:
-            k (int): number of switches
-            n (int): number of nodes per switches
+            s (int): number of switches
+            h (int): number of hosts per switches
     """
 
-    def __init__(self, k, n, **opts):
+    def __init__(self, s, h, **opts):
 
         super(FullyConnectedTopo, self).__init__(**opts)
 
-        self.k = k
-        self.n = n
+        self.k = s
+        self.n = h
         switch_list = []
         host_list = []
 
         # Create the switches
-        for i in range(k):
+        for i in range(s):
             switch = self.addSwitch('s{}'.format(i + 1))
             switch_list.append(switch)
 
             # Create the hosts for this switch
-            for j in range(n):
+            for j in range(h):
                 host = self.addHost('h{}{}'.format(i, j))
                 self.addLink(host, switch)
                 host_list.append(switch)
@@ -52,4 +52,10 @@ class FullyConnectedTopo(Topo):
 # End def FullyConnectedTopo
 
 
-topos = {'fully_connected': (lambda: FullyConnectedTopo(5, 5))}
+topos = {
+    '1s_2h' : lambda: FullyConnectedTopo(1, 2),
+    '3s_2h' : lambda: FullyConnectedTopo(3, 2),
+    '5s_2h' : lambda: FullyConnectedTopo(5, 2),
+    '7s_2h' : lambda: FullyConnectedTopo(7, 2),
+    '10s_2h': lambda: FullyConnectedTopo(10, 2),
+}

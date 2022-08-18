@@ -9,7 +9,7 @@ import sys
 from typing import Iterable, Optional
 from importlib import resources
 
-from figsdn.common.utils import time_parse
+from figsdn.common.utils import str_to_typed_value, time_parse
 from figsdn import __version__, __app_name__
 from figsdn.common.utils import StrEnum
 from figsdn.resources import scenarios, criteria
@@ -302,13 +302,6 @@ def parse(args: Optional[Iterable] = None):
         help="Command to be executed."
     )
 
-    expt_cmd.add_argument(
-        '-n',
-        '--node',
-        metavar='<node>',
-        help='Specify which node to perform the command on. Otherwise'
-    )
-
     # ===== ( EXPERIMENT RUN Command ) ======
 
     expt_run_cmd = expt_cmd_parser.add_parser(
@@ -325,7 +318,7 @@ def parse(args: Optional[Iterable] = None):
              "Allowed values are: {}".format(', '.join("\'{}\'".format(e) for e in FailureToTestType.values()))
     )
 
-    # Positional argument to choose the machine learning algorithm
+    # Positional argument to choose the scenario
     expt_run_cmd.add_argument(
         'scenario',
         metavar='SCENARIO',
@@ -333,6 +326,16 @@ def parse(args: Optional[Iterable] = None):
         choices=SCENARIOS,
         help="Name of the scenario to be run. "
              "Allowed values are: {}".format(', '.join("\'{}\'".format(scn) for scn in SCENARIOS))
+    )
+
+    # Optional positional arguments to give arguments to a scenario
+    expt_run_cmd.add_argument(
+        'scenario_options',
+        nargs='?',
+        metavar='SCN_OPTS',
+        type=str,
+        default=None,
+        help="Options for the scenario."
     )
 
     # Positional argument to choose the criterion
@@ -372,7 +375,7 @@ def parse(args: Optional[Iterable] = None):
         '--budget',
         metavar='',
         type=str,
-        default=Budget.CONFIDENCE_AND_RANK.value,
+        default=Budget.CONFIDENCE.value,
         choices=Budget.values(),
         dest='budget',
         help="Select which Machine Learning algorithm to use. (default: \"%(default)s\"). "
@@ -465,11 +468,23 @@ def parse(args: Optional[Iterable] = None):
         help='List all the experiments in on a node.'
     )
 
+    expt_list_cmd.add_argument(
+        'node',
+        nargs='?',
+        help='Specify which node to report get the list for. If not stated list the experiments available on this machine.'
+    )
+
     # ===== ( EXPERIMENT REPORT Command ) ======
 
     expt_rpt_cmd = expt_cmd_parser.add_parser(
         name=ExperimentCommand.REPORT,
         help='Report from an experiment.'
+    )
+
+    expt_rpt_cmd.add_argument(
+        'node',
+        nargs='?',
+        help='Specify which node to report get the list for. If not stated list the experiments available on this machine.'
     )
 
     # Fetch the results from a remote node
@@ -481,11 +496,29 @@ def parse(args: Optional[Iterable] = None):
 
     # Force to tool fetch again the already downloaded experiments
     expt_rpt_cmd.add_argument(
-        '--ignore-existing',
+        '-f',
+        '--force-download',
         action='store_true',
-        dest='ignore_existing',
-        help="Skip updating the datasets and models files that have already been downloaded beforehand."
+        default=False,
+        dest='force_download',
+        help="Force the tool to re-download the datasets and models files that have already been downloaded beforehand."
     )
+
+    # Disable/Enable the download of an experiment
+    dl_cmd_group = expt_rpt_cmd.add_mutually_exclusive_group(required=False)
+    dl_cmd_group.add_argument(
+        '--download',
+        action='store_true',
+        dest='download',
+        help="Enable the download of the experiment files. Enabled by default. Cannot be used with '--no-download'"
+    )
+    dl_cmd_group.add_argument(
+        '--no-download',
+        action='store_false',
+        dest='download',
+        help="Disable the download of the experiment files. Enabled by default. Cannot be used with '--download'"
+    )
+    dl_cmd_group.set_defaults(download=True)
 
     expt_rpt_cmd.add_argument(
         '-t',
@@ -507,14 +540,24 @@ def _format_args(parser : argparse.ArgumentParser, args : argparse.Namespace):
     """ Perform some operations on the arguments."""
 
     if args.cmd == Command.EXPERIMENT and args.expt_cmd == ExperimentCommand.RUN:
-        # TODO: All this sections should be removed and integrated within the experimenter
+        # TODO: All this section should be removed and integrated within the experimenter
+
+        # Format scenario options
+        if args.scenario_options and args.scenario_options is not None:
+            scn_opts_dict = dict()
+            for kwarg in args.scenario_options.split(','):
+                key, value = kwarg.split('=')
+                scn_opts_dict[key] = str_to_typed_value(value)
+            args.scenario_options = scn_opts_dict
+        else:
+            args.scenario_options = dict()
 
         # Format the criterion
         if args.criterion_kwargs:
             kwargs = dict()
             for kwarg in args.criterion_kwargs:
-                name, value = kwarg.split("=")
-                kwargs[name] = value
+                key, value = kwarg.split("=")
+                kwargs[key] = value
             args.criterion_kwargs = kwargs
         else:
             args.criterion_kwargs = dict()

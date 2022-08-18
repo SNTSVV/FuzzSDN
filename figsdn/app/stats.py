@@ -43,7 +43,10 @@ class Stats:
     @classmethod
     def add_iteration_statistics(
             cls,
+            testing_time,
+            fuzzing_time,
             learning_time,
+            planning_time,
             iteration_time,
             learner : Learner,
             model: Optional[Model]
@@ -55,8 +58,11 @@ class Stats:
         cls._stats["context"]["iterations"] += 1
 
         # Add the new timings
-        cls._stats["timing"]["learning"]    += [str(learning_time)]
-        cls._stats["timing"]["iteration"]   += [str(iteration_time)]
+        cls._stats["timing"]["learning"]    += [float(learning_time)]
+        cls._stats["timing"]["iteration"]   += [float(iteration_time)]
+        cls._stats['timing']['testing']     += [float(testing_time)]
+        cls._stats['timing']['planning']    += [float(planning_time)]
+        cls._stats['timing']['fuzzing']     += [float(fuzzing_time)]
 
         # Add the information about the data
         count = learner.get_instances_count()
@@ -150,6 +156,9 @@ class Stats:
 
         # Information of the timing
         stats['timing']                                 = dict()
+        stats['timing']['testing']                      = list()
+        stats['timing']['fuzzing']                      = list()
+        stats['timing']['planning']                     = list()
         stats['timing']['learning']                     = list()
         stats['timing']['iteration']                    = list()
 

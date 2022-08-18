@@ -28,9 +28,7 @@ class Method(Enum):
 
 # noinspection PyUnresolvedReferences
 class Experimenter:
-    """
-    The experimenter class is responsible for running any experience defined in a script under "scenarios"
-    """
+    """The experimenter class is responsible for running any experience defined in a script under "scenarios"."""
 
     # ===== ( Constructor ) ============================================================================================
 
@@ -41,6 +39,7 @@ class Experimenter:
 
         self.__scenario         = None
         self.__scenario_name    = None
+        self.__scenario_options : Optional[dict] = None
         self.__scenario_ctx = {
             'has_init'      : bool(),
             'has_before'    : bool(),
@@ -49,13 +48,15 @@ class Experimenter:
         }
         self.__criterion        = dict()
         self.__criterion_name   = None
-
         self.__analyzer         : Optional[Analyzer] = None
 
         # Fuzzing parameters
         self.method             : Method = Method.RANDOM
         self.ruleset            : Optional[RuleSet] = None
         self.mutation_rate      : float = 1.0
+
+        # statistics
+        self.run_time           = list()
     # End def __init__
 
     # ===== ( Properties ) =============================================================================================
@@ -88,17 +89,25 @@ class Experimenter:
         return self.__scenario_name
 
     @scenario.setter
-    def scenario(self, name):
+    def scenario(self, value: Union[str, Tuple[str, dict]]):
+        """Set the scenario that should be used
+
+        Args:
+            name (str): name of the scenario
         """
-        Set the scenario that should be used
-        :param name: name of the scenario
-        :return:
-        """
+        if isinstance(value, str):
+            name = value
+            options = dict()
+        else:
+            name = value[0]
+            options = value[1]
+
         # Check if the scenario exists
-        # TODO properly check the resources folder instead of assuming a set format
+        # TODO: properly check the resources' folder instead of assuming a set format
         scenario_pkg = "figsdn.resources.scenarios.{0}.{0}".format(name)
         try:
             self.__scenario = importlib.import_module(scenario_pkg)
+            self.__scenario_options = options
             # Register the scenario context
             self.__scenario_ctx['has_init']   = hasattr(self.__scenario, "initialize") and hasattr(self.__scenario.initialize, '__call__')
             self.__scenario_ctx['has_term']   = hasattr(self.__scenario, "terminate") and hasattr(self.__scenario.terminate, '__call__')
@@ -183,10 +192,7 @@ class Experimenter:
     # ===== ( Run ) ====================================================================================================
 
     def run(self):
-        """
-        Main loop
-        :return:
-        """
+        """Main loop."""
 
         # ===== INITIALIZE =============================================================================================
         # Before running a test, run the "initialize" function of the scenario
@@ -212,6 +218,8 @@ class Experimenter:
         # Build the fuzzer instruction
         fuzz_instr = self.__build_fuzzer_instruction(count=self.samples_per_iteration)
 
+        # Reset the timing counter
+        self.run_time = list()
         for i in range(self.samples_per_iteration):
 
             # Start a time
@@ -235,7 +243,7 @@ class Experimenter:
             # Try to run the 'test' function
             try:
                 self.__log.debug("Running \"{}#test\"".format(self.__scenario.__name__))
-                self.__scenario.test(instruction=fuzz_instr[i])
+                self.__scenario.test(instruction=fuzz_instr[i], **self.__scenario_options)
             except IndexError as e:
                 self.__log.error("An exception occurred while running \"{}#test\"".format(self.__scenario.__name__))
                 # self.__log.debug("There might be an issue with the number of instructions... Printing the instructions:")
@@ -262,6 +270,7 @@ class Experimenter:
 
             # Stop the timer
             stop_time = timer()
+            self.run_time.append(stop_time - start_time)
 
             # Print log information
             self.__log.info("Test {} out of {} of scenario \"{}\" completed in {}s.".format(i + 1,
@@ -299,12 +308,14 @@ class Experimenter:
         # Create an instruction list of "count" instructions
         instructions = list()
 
+        # scenario option to force fuzz the scenario header
+        if 'fuzz_of_header' in self.__scenario_options:
+            include_header = self.__scenario_options['fuzz_of_header']
+        else:
+            include_header = False  # Defaults to false
+
         # Perform a random mutation
         if self.method == Method.RANDOM:
-            include_header = False
-            if self.__criterion_name in ('first_hello_message', 'first_echo_request', 'first_echo_reply',
-                                         'first_barrier_request', 'first_barrier_reply'):
-                include_header = True
 
             for i in range(count):
                 # Create the dictionary
@@ -372,5 +383,4 @@ class Experimenter:
         self.__log.trace("Calculated budget for {} rules: {}".format(len(self.ruleset), rounded_budget))
         return rounded_budget
     # End def __get_budget_for_rules
-
 # End class Experimenter
