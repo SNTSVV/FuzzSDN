@@ -53,9 +53,14 @@ class FullyConnectedTopo(Topo):
 
 
 topos = {
-    '1s_2h' : lambda: FullyConnectedTopo(1, 2),
-    '3s_2h' : lambda: FullyConnectedTopo(3, 2),
-    '5s_2h' : lambda: FullyConnectedTopo(5, 2),
-    '7s_2h' : lambda: FullyConnectedTopo(7, 2),
+    '1s_2h' : lambda: FullyConnectedTopo(1 , 2),
+    '2s_2h' : lambda: FullyConnectedTopo(2 , 2),
+    '3s_2h' : lambda: FullyConnectedTopo(3 , 2),
+    '4s_2h' : lambda: FullyConnectedTopo(4 , 2),
+    '5s_2h' : lambda: FullyConnectedTopo(5 , 2),
+    '6s_2h' : lambda: FullyConnectedTopo(6 , 2),
+    '7s_2h' : lambda: FullyConnectedTopo(7 , 2),
+    '8s_2h' : lambda: FullyConnectedTopo(8 , 2),
+    '9s_2h' : lambda: FullyConnectedTopo(9 , 2),
     '10s_2h': lambda: FullyConnectedTopo(10, 2),
 }
