@@ -23,12 +23,12 @@ def beads_fuzzer_actions():
         }
     ).to_dict()
 
-    field = random.choice(pkt_dict)
+    field = random.choice(list(pkt_dict.keys()))
 
     action = {
         "intent"    : "mutate_field",
-        "fieldName" : field["name"],
-        "range"     : [field["min"], field["max"]]
+        "fieldName" : field,
+        "range"     : [[pkt_dict[field]["min"], pkt_dict[field]["max"]]]
     }
     actions.append(action)
 
