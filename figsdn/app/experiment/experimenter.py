@@ -13,9 +13,12 @@ from typing import Optional, Union, Tuple
 from iteround import saferound
 
 import figsdn.resources.criteria
+from figsdn.app import setup
 from figsdn.app.experiment import Analyzer, RuleSet, strategy
 from figsdn.common.utils.terminal import progress_bar
 
+# TODO: Set MAX_RETRY as configuration parameter
+MAX_RETRY = 3
 
 # noinspection PyArgumentList
 class Method(Enum):
@@ -221,52 +224,70 @@ class Experimenter:
         # Reset the timing counter
         self.run_time = list()
         for i in range(self.samples_per_iteration):
-
+            trial = 0
+            completed = False
             # Start a time
             start_time = timer()
-
-            # ===== BEFORE EACH ========================================================================================
-            # Try to run the 'before_each' function
-            if self.__scenario_ctx['has_before'] is True:
+            while completed is not True:
                 try:
-                    self.__log.debug("Running \"{}#before_each\"".format(self.__scenario.__name__))
-                    self.__scenario.before_each()
-                except Exception as e:
-                    self.__log.exception("An exception occurred while running \"{}#before_each\"".format(self.__scenario.__name__))
-                    raise e
+                    # ===== BEFORE EACH ========================================================================================
+                    # Try to run the 'before_each' function
+                    if self.__scenario_ctx['has_before'] is True:
+                        try:
+                            self.__log.debug("Running \"{}#before_each\"".format(self.__scenario.__name__))
+                            self.__scenario.before_each()
+                        except Exception as e:
+                            self.__log.exception("An exception occurred while running \"{}#before_each\"".format(self.__scenario.__name__))
+                            raise e
 
-            # ===== TEST ===============================================================================================
-            # Start the analysis before the core test
-            if self.__analyzer is not None:
-                self.__analyzer.start_analysis()
+                    # ===== TEST ===============================================================================================
+                    # Start the analysis before the core test
+                    if self.__analyzer is not None:
+                        self.__analyzer.start_analysis()
 
-            # Try to run the 'test' function
-            try:
-                self.__log.debug("Running \"{}#test\"".format(self.__scenario.__name__))
-                self.__scenario.test(instruction=fuzz_instr[i], **self.__scenario_options)
-            except IndexError as e:
-                self.__log.error("An exception occurred while running \"{}#test\"".format(self.__scenario.__name__))
-                # self.__log.debug("There might be an issue with the number of instructions... Printing the instructions:")
-                # for j in range(len(fuzz_instr)):
-                #     self.__log.debug("Instruction {}: {}".format(j, fuzz_instr[j]))
-                raise e  # Re-raise the exception so that it is handled at a higher level
-            except Exception as e:
-                self.__log.exception("An exception occurred while running \"{}#test\"".format(self.__scenario.__name__))
-                raise e
+                    # Try to run the 'test' function
+                    try:
+                        self.__log.debug("Running \"{}#test\"".format(self.__scenario.__name__))
+                        self.__scenario.test(instruction=fuzz_instr[i], **self.__scenario_options)
+                    except IndexError as e:
+                        self.__log.error("An exception occurred while running \"{}#test\"".format(self.__scenario.__name__))
+                        # self.__log.debug("There might be an issue with the number of instructions... Printing the instructions:")
+                        # for j in range(len(fuzz_instr)):
+                        #     self.__log.debug("Instruction {}: {}".format(j, fuzz_instr[j]))
+                        raise e  # Re-raise the exception so that it is handled at a higher level
+                    except Exception as e:
+                        self.__log.exception("An exception occurred while running \"{}#test\"".format(self.__scenario.__name__))
+                        raise e
 
-            # Finish the analysis after the core test
-            if self.__analyzer is not None:
-                self.__analyzer.finish_analysis()
+                    # Finish the analysis after the core test
+                    if self.__analyzer is not None:
+                        self.__analyzer.finish_analysis()
 
-            # ===== AFTER EACH =========================================================================================
-            # Try to run the 'after_each' function
-            if self.__scenario_ctx['has_after'] is True:
-                try:
-                    self.__log.debug("Running \"{}#after_each\"".format(self.__scenario.__name__))
-                    self.__scenario.after_each()
-                except Exception as e:
-                    self.__log.exception("An exception occurred while running \"{}#after_each\"".format(self.__scenario.__name__))
-                    raise e
+                    # ===== AFTER EACH =========================================================================================
+                    # Try to run the 'after_each' function
+                    if self.__scenario_ctx['has_after'] is True:
+                        try:
+                            self.__log.debug("Running \"{}#after_each\"".format(self.__scenario.__name__))
+                            self.__scenario.after_each()
+                        except Exception as e:
+                            self.__log.exception("An exception occurred while running \"{}#after_each\"".format(self.__scenario.__name__))
+                            raise e
+
+                # Handling of some known exceptions
+                except FileNotFoundError as e:
+                    # If the fuzzer hasn't output anything, retry
+                    if os.path.expanduser(setup.config().fuzzer.out_path) in e.strerror:
+                        self.__log.error("The fuzzer did not output any instruction file (trial {}/{})".format(trial, MAX_RETRY))
+                        if trial < MAX_RETRY:
+                            self.__log.warning("The fuzzer did not output any instruction file")
+                            trial += 1
+                        else:  # Re-Raise the exception to trigger an exit
+                            raise e from None
+                    else:  # Unknown error, re-raise to trigger an exit
+                        raise e from None
+                else:
+                    completed = True
+            # End of the while loop
 
             # Stop the timer
             stop_time = timer()
@@ -277,7 +298,6 @@ class Experimenter:
                                                                                             self.samples_per_iteration,
                                                                                             self.__scenario.__name__,
                                                                                             stop_time - start_time))
-
             # Increment the progress bar
             progress_bar(
                 i + 1,
@@ -335,7 +355,7 @@ class Experimenter:
                 json_dict.update(self.__criterion)
                 json_dict['actions'] = [{
                     "intent": "mutate_bytes",
-                    "includeHeader": False
+                    "includeHeader": include_header
                 }]
                 instructions.append(json.dumps({"instructions": [json_dict]}))
 
