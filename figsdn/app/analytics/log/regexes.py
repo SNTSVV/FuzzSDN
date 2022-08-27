@@ -88,6 +88,8 @@ LOG_RGX = {
         'EVENT':            r'EVENT\s+'             # Match event token
                             r'(?P<event>.*)',       # Match event message into event group
 
+        'HELLO_EVENT': r'hello\sev\s<(?P<event>.*)>',  #
+
         'OPF_ERROR':  r'OFPErrorMsg\('                                      # Match the beginning of the error message
                       r'type=(?P<type>0[xX][0-9a-fA-F]+)'                   # Match the error message
                       r',\scode=(?P<code>0[xX][0-9a-fA-F]+)'                # Match the code

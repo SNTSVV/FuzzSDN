@@ -9,22 +9,23 @@ import time
 
 from figsdn.app import setup
 from figsdn.app.drivers import FuzzerDriver, MininetDriver, RyuDriver
+from figsdn.common.utils.database import Database as SqlDb
 
 # ===== ( Parameters ) =================================================================================================
 
 logger                      = logging.getLogger(__name__)
-exp_logger                  = logging.getLogger("PacketFuzzer.jar")
+exp_logger                  = logging.getLogger("figsdn-fuzzer.jar")
 
 # ===== (Before, after functions) ======================================================================================
 
 
-def initialize(**opt):
+def initialize(**opts):
     """Job to be executed before the beginning of a series of test"""
-    pass
+    return True
 # End def initialize
 
 
-def before_each(**opt):
+def before_each(**opts):
     """Job before after each test."""
 
     success = True
@@ -32,44 +33,49 @@ def before_each(**opt):
     # Flush the logs of ONOS
     success &= RyuDriver.flush_logs()
 
-    # Stop running instances of onos
+    # Stop running instances of ryu
     success &= RyuDriver.stop()
 
-    # Start onos
+    # Start Ryu
     success &= RyuDriver.start('ryu.app.simple_switch_14')
     time.sleep(2)
+
     return success
 # End def before_each
 
 
-def after_each(**opt):
+def after_each(**opts):
     """Job executed after each test."""
+
+    if SqlDb.is_connected():
+        logger.info("Disconnecting from the database...")
+        SqlDb.disconnect()
+        logger.info("Database is disconnected")
 
     # Clean mininet
     logger.info("Stopping Mininet")
     MininetDriver.stop()
     logger.debug("Done")
 
-    logger.info("Stopping Control Flow Fuzzer")
+    logger.info("Stopping fuzzer Fuzzer")
     FuzzerDriver.stop(5)
     logger.debug("Done")
 
     RyuDriver.stop()
-    time.sleep(2)
     logger.debug("done")
 # End def after_each
 
 
-def terminate(**opt):
+def terminate(**opts):
     """Job to be executed after the end of a series of test"""
-    pass
+    return True
 # End def terminate
 
 
 # ===== ( Main test function ) =========================================================================================
 
 
-def test(instruction=None, **opt):
+def test(instruction=None, **opts):
     """
     Run the experiment
     :param instruction:
@@ -82,31 +88,37 @@ def test(instruction=None, **opt):
         FuzzerDriver.set_instructions(instruction)
 
     logger.info("Closing all previous instances on control flow fuzzer")
+
+    # TODO: Use the FuzzerDriver instead
     for pid in get_pid("figsdn-fuzzer.jar"):
         os.kill(pid, signal.SIGKILL)
 
     logger.info("Starting Control Flow Fuzzer")
     FuzzerDriver.start()
-    time.sleep(5)
 
     logger.info("Starting Mininet network")
 
     MininetDriver.start(
-        cmd='mn --controller=remote,ip={},port={},protocols=OpenFlow14 --topo=single,2'.format(setup.config().ryu.host,
+        cmd='mn --controller=remote,ip={},port={},protocols=OpenFlow14 --topo=single,2'.format(setup.config().onos.host,
                                                                                                setup.config().fuzzer.port)
     )
+    time.sleep(5)
+    # Add a flow between h1 and h2
+    logger.info("Adding a flow to s1.")
+    MininetDriver.add_flow(sw='s1',
+                           flow="dl_src=00:00:00:00:00:01,dl_dst=00:00:00:00:00:02,actions=output:2",
+                           timeout=15.0)
+    time.sleep(5)
+    logger.info("Removing all flows from s1.")
+    MininetDriver.delete_flow(sw='s1', strict=True)
 
-    logger.info("Executing ping command: h1 -> h2")
-    stats = MininetDriver.ping_host(src='h1', dst='h2', count=1, wait_timeout=5)
-
-    logger.trace("Ping results: {}".format(stats.as_dict() if stats is not None else stats))
+    # TODO: Synchronize with fuzzer instead
     time.sleep(5)
 
-# End def run_fuzz_test
+# End def test
 
 
 # ===== ( Utility Functions ) ==========================================================================================
-
 
 def get_pid(name: str):
     """ Search the PID of a program by its partial name"""

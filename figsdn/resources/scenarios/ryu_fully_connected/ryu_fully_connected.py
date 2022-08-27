@@ -1,56 +1,60 @@
 #!/usr/bin/env python3
-# coding: utf-8
+# -*- coding: utf-8 -*-
+
+import importlib
+import json
 import logging
 import os
 import signal
 import subprocess
 import sys
 import time
+import random
 
 from figsdn.app import setup
 from figsdn.app.drivers import FuzzerDriver, MininetDriver, RyuDriver
 
 # ===== ( Parameters ) =================================================================================================
 
-logger                      = logging.getLogger(__name__)
-exp_logger                  = logging.getLogger("PacketFuzzer.jar")
+logger = logging.getLogger(__name__)
+exp_logger = logging.getLogger("PacketFuzzer.jar")
+
 
 # ===== (Before, after functions) ======================================================================================
 
 
-def initialize(**opt):
+def initialize(**opts):
     """Job to be executed before the beginning of a series of test"""
     pass
 # End def initialize
 
 
-def before_each(**opt):
+def before_each(**opts):
     """Job before after each test."""
 
     success = True
 
-    # Flush the logs of ONOS
+    # Flush the logs of Ryu
     success &= RyuDriver.flush_logs()
 
-    # Stop running instances of onos
+    # Stop running instances of ryu
     success &= RyuDriver.stop()
 
-    # Start onos
-    success &= RyuDriver.start('ryu.app.simple_switch_14')
+    # Start Ryu
+    success &= RyuDriver.start('ryu.app.simple_switch_stp_14')
     time.sleep(2)
     return success
 # End def before_each
 
 
-def after_each(**opt):
+def after_each(**opts):
     """Job executed after each test."""
-
     # Clean mininet
     logger.info("Stopping Mininet")
     MininetDriver.stop()
     logger.debug("Done")
 
-    logger.info("Stopping Control Flow Fuzzer")
+    logger.info("Stopping Fuzzer")
     FuzzerDriver.stop(5)
     logger.debug("Done")
 
@@ -60,7 +64,7 @@ def after_each(**opt):
 # End def after_each
 
 
-def terminate(**opt):
+def terminate(**opts):
     """Job to be executed after the end of a series of test"""
     pass
 # End def terminate
@@ -69,11 +73,11 @@ def terminate(**opt):
 # ===== ( Main test function ) =========================================================================================
 
 
-def test(instruction=None, **opt):
-    """
-    Run the experiment
-    :param instruction:
-    :return:
+def test(instruction=None, **opts):
+    """Run the experiment
+
+    Args:
+        topo (str): The topology to choose.
     """
 
     # Write the instruction to the fuzzer
@@ -82,31 +86,50 @@ def test(instruction=None, **opt):
         FuzzerDriver.set_instructions(instruction)
 
     logger.info("Closing all previous instances on control flow fuzzer")
+
+    # TODO: Use the FuzzerDriver instead
     for pid in get_pid("figsdn-fuzzer.jar"):
         os.kill(pid, signal.SIGKILL)
 
     logger.info("Starting Control Flow Fuzzer")
     FuzzerDriver.start()
-    time.sleep(5)
 
     logger.info("Starting Mininet network")
 
+    # Get the topo file
+    topo_pkg = "figsdn.resources.scenarios.{0}".format("ryu_fully_connected")
+    with importlib.resources.path(topo_pkg, 'topo.py') as p:
+        topo_path = p
+
+    # Start mininet with the topo
+    topo = '1s_2h'  # Default topology
+    if 'topo' in opts:
+        topo = opts.get('topo', None)
+
     MininetDriver.start(
-        cmd='mn --controller=remote,ip={},port={},protocols=OpenFlow14 --topo=single,2'.format(setup.config().ryu.host,
-                                                                                               setup.config().fuzzer.port)
+        cmd="mn --custom {}".format(topo_path.as_posix())
+            + " --topo={}".format(topo)
+            + " --controller=remote,ip={},port={},protocols=OpenFlow14".format(setup.config().ryu.host,
+                                                                               setup.config().fuzzer.port)
     )
+    # Get all the nodes
+    nodes = MininetDriver.nodes()
+    logger.trace("Acquired nodes:\n{}".format(json.dumps(nodes, indent=4)))
+    time.sleep(2)
 
-    logger.info("Executing ping command: h1 -> h2")
-    stats = MininetDriver.ping_host(src='h1', dst='h2', count=1, wait_timeout=5)
+    if nodes is not None:
+        host_nodes = {key: nodes[key] for key in nodes.keys() if nodes[key]['type'] == 'host'}
+        host1, host2 = random.sample(host_nodes.keys(), 2)  # Pick two random host from the list
+        logger.info("Executing ping command: {} -> {}".format(host1, host2))
+        stats = MininetDriver.ping_host(src=host1, dst=host2, count=1, wait_timeout=5)
+        logger.trace("Ping results: {}".format(stats.as_dict() if stats is not None else stats))
 
-    logger.trace("Ping results: {}".format(stats.as_dict() if stats is not None else stats))
+    # TODO: Synchronize with fuzzer instead
     time.sleep(5)
-
-# End def run_fuzz_test
+# End def test
 
 
 # ===== ( Utility Functions ) ==========================================================================================
-
 
 def get_pid(name: str):
     """ Search the PID of a program by its partial name"""

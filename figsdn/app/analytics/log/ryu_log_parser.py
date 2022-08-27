@@ -37,9 +37,18 @@ class RyuLogParser(LogParser):
 
         matches = super()._match(LOG_RGX['RYU'])
 
+
+        hello_happened = False
+
         for key_match in matches:
             key = key_match['rgx_key']
             match = key_match['match']
+
+            if key == 'HELLO_EVENT':
+                if not hello_happened:
+                    hello_happened = True
+                else:
+                    error_effect = 'SWITCH_DISCONNECTED'
 
             if not has_error:
                 if key == 'PARSING_ERROR':
@@ -51,7 +60,10 @@ class RyuLogParser(LogParser):
                     error_type = "OPENFLOW_ERROR"
 
                     # Translate the type and code from hex number to dec numbers
-                    error_reason = ErrorType(int(match['type'], 16)).code_class(int(match['code'], 16)).name
+                    try:
+                        error_reason = ErrorType(int(match['type'], 16)).code_class(int(match['code'], 16)).name
+                    except ValueError:
+                        error_reason = "UNKNOWN_OFP_ERROR_TYPE"
 
                 if 'key' in 'EXCEPTION':
                     has_error = True
