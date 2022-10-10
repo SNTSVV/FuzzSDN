@@ -1,4 +1,4 @@
-# FIGSDN
+# FUZZSDN
 
 A Failure-Inducing Model generation scheme for SDN based systems using Fuzzing and Machine Learning Techniques
 
@@ -8,7 +8,8 @@ A Failure-Inducing Model generation scheme for SDN based systems using Fuzzing a
 ## Prerequisite
 
 ---
-In order to build and install FIGSDN, the following tools are required:
+In order to build and install FuzzSDN, the following tools are required:
+
 * Python >= 3.8
 * Maven >= 3.9
 * Java JDK >= 11
@@ -19,10 +20,10 @@ In order to build and install FIGSDN, the following tools are required:
 ---
 
 
-1. Get the source code of FIGSDN on the nodes you want to deploy
+1. Get the source code of FuzzSDN on the nodes you want to deploy
 
 ```bash
-$ mkdir -p src/figsdn
+$ mkdir -p src/fuzzsdn
 $ git clone <path>
 ```
 
@@ -37,8 +38,8 @@ $ cd ~/src
 ---
 
 ```bash
-$ figsdn <cmd>
-$ figsdn-report <cmd>
+$ fuzzsdn <cmd>
+$ fuzzsdn-report <cmd>
 ```
 
 ## Contributing

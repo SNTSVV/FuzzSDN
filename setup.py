@@ -13,7 +13,7 @@ with open('requirements.txt', 'r') as f:
 # TODO: add non-python dependencies python-dev, libjpeg-dev, etc.
 setup(
     # Metadata
-    name='figsdn',
+    name='fuzzsdn',
     version='0.7.0',
     description='A Failure-Inducing Model generation scheme for SDN based systems using Fuzzing and Machine Learning '
                 'Techniques',
@@ -31,22 +31,22 @@ setup(
 
     # Packages and Scripts
     packages=[
-        'figsdn',
+        'fuzzsdn',
         # Main Application
-        'figsdn/app',
-        'figsdn/app/analytics',
-        'figsdn/app/drivers',
-        'figsdn/app/experiment',
+        'fuzzsdn/app',
+        'fuzzsdn/app/analytics',
+        'fuzzsdn/app/drivers',
+        'fuzzsdn/app/experiment',
         # Commons
-        'figsdn/common',
-        'figsdn/common/metrics',
-        'figsdn/common/openflow',
-        'figsdn/common/utils',
+        'fuzzsdn/common',
+        'fuzzsdn/common/metrics',
+        'fuzzsdn/common/openflow',
+        'fuzzsdn/common/utils',
         # Report Application
-        'figsdn/report',
+        'fuzzsdn/report',
     ],
 
     scripts=[
-        'bin/figsdn',
+        'bin/fuzzsdn',
     ],
 )
