@@ -1,0 +1,20 @@
+{
+  "description": "Default fuzzer instruction file. Please avoid changing it. Inst",
+  "instructions": [
+    {
+      "criteria": [
+        {
+          "packetType":  "PACKET_IN"
+        }
+      ],
+      "actions": [
+        {
+          "action": "messagePayloadAction",
+          "type": "scramble",
+          "percentage": 0.2
+        }
+      ],
+      "matchLimit": 1
+    }
+  ]
+}

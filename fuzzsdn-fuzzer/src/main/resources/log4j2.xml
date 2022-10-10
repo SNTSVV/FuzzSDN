@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration name="default"
+               status="WARN">
+
+    <Properties>
+        <Property name="APP_LOG_ROOT">${sys:user.home}/.local/state/fuzzsdn/log/</Property>
+        <Property name="rawPattern">%d{DEFAULT_MICROS} | [%c{2}](%t) | %-5p | %m%n</Property>
+        <Property name="coloredShortPattern">%highlight{%-5p}{FATAL=bright red, ERROR=red, WARN=yellow, INFO=cyan, DEBUG=green, TRACE=bright blue} [%c{2}] - %m%n</Property>
+    </Properties>
+
+    <Appenders>
+        <!-- Appender used to log into a rolling file -->
+        <RollingFile name="rolling_file"
+                     fileName="${APP_LOG_ROOT}/fuzzsdn-fuzzer.log"
+                     filePattern="${APP_LOG_ROOT}/fuzzsdn-fuzzer.%i.log.gz"
+                     ignoreExceptions="true"
+                     append="true">
+            <PatternLayout>
+                <pattern>${rawPattern}</pattern>
+            </PatternLayout>
+            <Policies>
+                <!--<OnStartupTriggeringPolicy />-->
+                <SizeBasedTriggeringPolicy size="500 MB" />
+            </Policies>
+            <DefaultRolloverStrategy max="50"/>
+        </RollingFile>
+
+        <!-- Console Appender -->
+        <Console name="console"
+                 target="SYSTEM_OUT">
+            <PatternLayout>
+                <pattern>${coloredShortPattern}</pattern>
+            </PatternLayout>
+        </Console>
+    </Appenders>
+
+    <!-- Set up the Loggers-->
+    <Loggers>
+        <!-- Main Logger -->
+        <logger name="edu.svv.fuzzsdn.fuzzer" level="ALL" additivity="false">
+            <AppenderRef ref="rolling_file" level="info"/>
+            <AppenderRef ref="console" level="warn"/>
+        </logger>
+
+        <!-- Root Logger -->
+        <Root level="warn" additivity="true">
+            <AppenderRef ref="console" />
+        </Root>
+    </Loggers>
+
+</Configuration>
