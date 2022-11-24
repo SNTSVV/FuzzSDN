@@ -8,9 +8,7 @@ import copy
 import logging
 from typing import Optional
 
-import MySQLdb
-from MySQLdb.connections import Connection
-from MySQLdb.cursors import Cursor
+import mysql.connector
 
 
 class Database:
@@ -23,8 +21,8 @@ class Database:
     __database = None
 
     # Connection and cursor used by MySQLdb
-    __db_connection : Optional[Connection]  = None
-    __db_cursor     : Optional[Cursor]  = None
+    __db_connection   = None
+    __db_cursor       = None
 
     # Internals
     __is_init = False
@@ -86,10 +84,10 @@ class Database:
 
         cls.__database = db
         try:
-            cls.__db_connection = MySQLdb.connect(cls.__host,
-                                                  cls.__user,
-                                                  cls.__password,
-                                                  cls.__database)
+            cls.__db_connection = mysql.connector.connect(host=cls.__host,
+                                                          user=cls.__user,
+                                                          password=cls.__password,
+                                                          database=cls.__database)
         except Exception as e:
             cls.__log.exception("Exception '{}' happened while connecting:".format(e))
             raise RuntimeError("Can't connect to the database")
@@ -111,10 +109,10 @@ class Database:
 
         cls.__database = db
         try:
-            connection = MySQLdb.connect(cls.__host,
-                                         cls.__user,
-                                         cls.__password,
-                                         cls.__database)
+            connection = mysql.connector.connect(host=cls.__host,
+                                                 user=cls.__user,
+                                                 password=cls.__password,
+                                                 database=cls.__database)
         except Exception as e:
             cls.__log.exception("Exception '{}' happened while connecting:".format(e))
             raise RuntimeError("Can't connect to the database")
