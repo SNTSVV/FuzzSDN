@@ -213,15 +213,21 @@ def run(
         print(Style.BOLD, "*** Precision: {:.2f}".format(precision), Style.RESET)
 
         # 0. Configure the experiment depending on the ML model and Fuzz Mode
-        if _context['method'] == arguments.Method.DEFAULT:
+        if _context['method'] in (arguments.Method.DEFAULT, arguments.Method.RANDOM_BUDGET):
             if ml_model is None or not ml_model.has_rules:
                 _log.info("No rules in set of rule. Generating random samples")
                 experimenter.method = Method.RANDOM
                 experimenter.ruleset = None
-            else:
+            elif _context['method'] == arguments.Method.DEFAULT:
                 experimenter.method = Method.RULE
                 experimenter.ruleset = ml_model.ruleset
                 analyzer.set_ruleset_for_iteration(ml_model.ruleset)
+            elif _context['method'] == arguments.Method.RANDOM_BUDGET:
+                experimenter.method = Method.RANDOM_RULE
+                experimenter.ruleset = ml_model.ruleset
+                analyzer.set_ruleset_for_iteration(ml_model.ruleset)
+            else:
+                raise ValueError("Unknown fuzzing method '{}'".format(_context['method']))
 
         elif _context['method'] == arguments.Method.DELTA:
             experimenter.method = Method.DELTA

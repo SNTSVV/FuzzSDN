@@ -84,6 +84,7 @@ class FailureToTestType(StrEnum):
 class Method(StrEnum):
     """Enum for the possible fuzzing methods of fuzzsdn."""
     DEFAULT = 'default',
+    RANDOM_BUDGET = 'random-budget',
     DELTA   = 'DELTA',
     BEADS   = 'BEADS',
 

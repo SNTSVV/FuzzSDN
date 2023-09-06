@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 A class to manipulate all operations with a database
@@ -6,33 +5,61 @@ A class to manipulate all operations with a database
 
 import copy
 import logging
-from typing import Optional
+from typing import Optional, Tuple
 
 import mysql.connector
+from mysql.connector import MySQLConnection
 
+# ======================================================================================================================
+# Module variables
+# ======================================================================================================================
+
+logger : logging.Logger = logging.getLogger(__name__)
+
+# ======================================================================================================================
+# Class Database
+# ======================================================================================================================
 
 class Database:
     """A class that handles all operations with the database."""
 
+    # ------------------------------------------------------------------------------------------------------------------
+    # Attributes
+    # ------------------------------------------------------------------------------------------------------------------
+
     # Database parameters
-    __host = None
-    __user = None
-    __password = None
-    __database = None
+    __host     : Optional[str] = None
+    __user     : Optional[str] = None
+    __password : Optional[str] = None
+    __database : Optional[str] = None
 
     # Connection and cursor used by MySQLdb
-    __db_connection   = None
-    __db_cursor       = None
+    __db_connection : Optional[MySQLConnection] = None
+    __db_cursor     : Optional[MySQLConnection.cursor] = None
 
     # Internals
-    __is_init = False
-    __is_connected = False
-    __log = None
+    __is_init      : bool = False
+    __is_connected : bool = False
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # Initialization
+    # ------------------------------------------------------------------------------------------------------------------
 
     @classmethod
-    def init(cls, hostname, username, password, force=False):
+    def init(cls, hostname : str, username : str, password : str, force : bool = False) -> None:
         """
         Initialize the database.
+
+        Args:
+            hostname:
+                Hostname of the database
+            username:
+                Username to use to connect to the database
+            password:
+                Password to use to connect to the database
+            force:
+                Force the initialization even if the class is already initialized.
+                Defaults to False.
         """
         if cls.__is_connected is True:
             if force is True:
@@ -45,9 +72,10 @@ class Database:
         cls.__password = password
 
         cls.__log = logging.getLogger(__name__)
-        cls.__log.debug("Database module started.")
-
         cls.__is_init = True
+
+        logger.debug("Database module started.")
+    # End def init
 
     @classmethod
     def is_init(cls) -> bool:
@@ -70,7 +98,9 @@ class Database:
                      username=cls.__user)
     # End def init
 
-    # =====( Connection / Disconnection )========================================= #
+    # ------------------------------------------------------------------------------------------------------------------
+    # Connection management
+    # ------------------------------------------------------------------------------------------------------------------
 
     @classmethod
     def connect(cls, db):
@@ -89,10 +119,10 @@ class Database:
                                                           password=cls.__password,
                                                           database=cls.__database)
         except Exception as e:
-            cls.__log.exception("Exception '{}' happened while connecting:".format(e))
+            logger.exception("Exception '{}' happened while connecting:".format(e))
             raise RuntimeError("Can't connect to the database")
         else:
-            cls.__db_cursor = cls.__db_connection.cursor()
+            cls.__db_cursor = cls.__db_connection.cursor(buffered=True)
             cls.__is_connected = True
     # End def connect
 
@@ -114,13 +144,16 @@ class Database:
                                                  password=cls.__password,
                                                  database=cls.__database)
         except Exception as e:
-            cls.__log.exception("Exception '{}' happened while connecting:".format(e))
+            logger.exception("Exception '{}' happened while connecting:".format(e))
             raise RuntimeError("Can't connect to the database")
         else:
-            return connection, connection.cursor()
+            return connection, connection.cursor(buffered=True)
 
     @classmethod
-    def get_cursor(cls):
+    def get_cursor(cls) -> Tuple[MySQLConnection, MySQLConnection.cursor]:
+        """
+        Return the cursor of the database
+        """
         return cls.__db_cursor
 
     @classmethod
@@ -145,7 +178,9 @@ class Database:
         # We send a copy so the status can't be modified without actually disconnecting
         return copy.copy(cls.__is_connected)
 
-    # ====( Database operations )================================================= #
+    # ------------------------------------------------------------------------------------------------------------------
+    # Query management
+    # ------------------------------------------------------------------------------------------------------------------
 
     @classmethod
     def execute(cls, query, parameters=None):
@@ -156,7 +191,7 @@ class Database:
             raise RuntimeError("Not connected to any database")
 
         cls.__db_cursor.execute(query, parameters or ())
-        cls.__log.debug("SQL Command: {} {}".format(query, parameters if not None else ''))
+        logger.debug("SQL Command: {} {}".format(query, parameters if not None else ''))
     # End def execute
 
     @classmethod
@@ -168,7 +203,7 @@ class Database:
             raise RuntimeError("Not connected to any database")
 
         cls.__db_cursor.execute(query, parameters or ())
-        cls.__log.debug("SQL Command: {} {}".format(query, parameters if not None else ''))
+        logger.debug("SQL Command: {} {}".format(query, parameters if not None else ''))
         cls.commit()
 
         return cls.fetchall()
@@ -182,7 +217,7 @@ class Database:
         if cls.__is_connected is False:
             raise RuntimeError("Not connected to any database")
 
-        cls.__log.debug("Commit last queries")
+        logger.debug("Commit last queries")
         cls.__db_connection.commit()
     # End def commit
 
@@ -194,7 +229,7 @@ class Database:
         if cls.__is_connected is False:
             raise RuntimeError("Not connected to any database")
 
-        cls.__log.debug("Fetching all rows")
+        logger.debug("Fetching all rows")
         return cls.__db_cursor.fetchall()
     # End def fetchall
 
@@ -206,7 +241,7 @@ class Database:
         if cls.__is_connected is False:
             raise RuntimeError("Not connected to any database")
 
-        cls.__log.debug("Fetching one row")
+        logger.debug("Fetching one row")
         return cls.__db_cursor.fetchone()
     # End def fetchone
 
@@ -218,11 +253,13 @@ class Database:
         if cls.__is_connected is False:
             raise RuntimeError("Not connected to any database")
 
-        cls.__log.debug("Fetching one row")
+        logger.debug("Fetching one row")
         return cls.__db_cursor.fetchmany(size=size)
     # End def fetchone
 
-    # =====( Operators )========================================================== #
+    # ------------------------------------------------------------------------------------------------------------------
+    # Database management
+    # ------------------------------------------------------------------------------------------------------------------
 
     @classmethod
     def get_database(cls):
