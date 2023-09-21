@@ -4,12 +4,13 @@
 import importlib.util
 import json
 import logging
-import re
 import os
+import random
+import re
 from enum import Enum, auto
 from importlib import resources
 from timeit import default_timer as timer
-from typing import Optional, Union, Tuple
+from typing import Optional, Tuple, Union
 
 from iteround import saferound
 
