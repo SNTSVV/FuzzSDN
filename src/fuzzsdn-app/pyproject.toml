@@ -1,0 +1,35 @@
+[tool.poetry]
+
+name = "fuzzsdn"
+version = "0.7.0"
+description = "A Failure-Inducing Model generation scheme for SDN based systems using Fuzzing and Machine Learning Techniques"
+authors = ["Raphaël Ollando <raphael.ollando@uni.lu>"]
+
+
+[tool.poetry.dependencies]
+python = "^3.8"
+
+appdirs = "~1.4.4"
+configparser = "~5.2.0"
+gower = "~0.0.5"
+iteround = "~1.0.3"
+liac-arff = ">=2.5.0"
+matplotlib = "~3.4.2"
+mininet = "~2.3.0.dev6"
+mysql-connector-python = "~8.0.31"
+networkx = "~2.8"
+numpy = ">=1.22.0"
+pandas = "~1.2.4"
+paramiko = "~2.7.2"
+pexpect = "~4.8.0"
+PyPika = "~0.48.8"
+python-weka-wrapper3 = "^0.2.5"
+seaborn = "~0.11.1"
+setuptools = ">=57.0.0"
+scipy = ">=1.6.3"
+sympy = "~1.8"
+tabulate = "~0.8.9"
+z3-solver = ">=4.8.12.0"
+
+[tool.poetry.scripts]
+fuzzsdn = "fuzzsdn.main:main"

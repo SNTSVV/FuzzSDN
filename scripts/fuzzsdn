@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+
+# ======================================================================================================================
+# Variables
+# ======================================================================================================================
+
+FRAMEWORK="fuzzsdn"
+USER=$(whoami)
+USER_HOME="$(getent passwd "$USER" | cut -d: -f6)"
+DATA_HOME="${XDG_DATA_HOME:-"$USER_HOME/.local/share"}"
+VENV_NAME="$FRAMEWORK-venv"
+VENV_DIR="$DATA_HOME/virtualenv/$VENV_NAME"
+
+# ======================================================================================================================
+# Signal Handling
+# ======================================================================================================================
+
+# Function to deactivate the virtual environment
+deactivate_venv() {
+    if [[ -n $VIRTUAL_ENV ]]; then
+        deactivate
+    fi
+}
+
+# Trap signals to ensure the virtual environment is deactivated upon signal termination
+trap deactivate_venv EXIT
+
+# ======================================================================================================================
+# Main
+# ======================================================================================================================
+
+# Activate the virtual environment and run the framework
+source "$VENV_DIR/bin/activate"
+fuzzsdn "${@}"

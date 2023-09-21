@@ -28,33 +28,62 @@ LIB_DIR="$USR_HOME/.local/lib"
 apt-get update --assume-yes
 
 # Install dependencies
-apt-get install --assume-yes --quiet openjdk-11-jdk
-apt-get install --assume-yes --quiet libjpeg-dev python3.8-dev
+read -p "Install prerequisites? [y/n] " yn
+case $yn in
+[Yy]*)
+  echo "Installing prerequisites..."
+  apt-get install --assume-yes --quiet openjdk-11-jdk
+  apt-get install --assume-yes --quiet maven
+  apt-get install --assume-yes --quiet libjpeg-dev python3.8-dev python3.8-venv
+  apt-get install --assume-yes --quiet libmysqlclient-dev -y
+  apt-get install --assume-yes --quiet mysql-server -y
+  apt-get install --assume-yes --quiet  mininet -y
+  curl -sSL https://install.python-poetry.org | python3 -
+  echo "Done."
+  ;;
+[Nn]*)
+  echo "Skipping dependencies installation..."
+  ;;
+*)
+  echo invalid response
+  exit 1
+  ;;
+esac
 
-# Check mysql installation
-apt-get install libmysqlclient-dev -y
-apt-get install mysql-server -y
-mysql -e "CREATE DATABASE IF NOT EXISTS fuzzsdn /*\!40100 DEFAULT CHARACTER SET utf8 */;"
-mysql -e "CREATE USER IF NOT EXISTS fuzzsdn@localhost IDENTIFIED BY 'fuzzsdn';"
-mysql -e "GRANT ALL PRIVILEGES ON fuzzsdn.* TO 'fuzzsdn'@'localhost';"
-mysql -e "FLUSH PRIVILEGES;"
-
-# Install Mininet
-apt-get install mininet
+# Set up MySQL
+read -p "Set up default MySQL database? [y/n] " yn
+case $yn in
+[Yy]*)
+  echo "Setting up MySQL..."
+  mysql -e "CREATE DATABASE IF NOT EXISTS fuzzsdn /*\!40100 DEFAULT CHARACTER SET utf8 */;"
+  mysql -e "CREATE USER IF NOT EXISTS fuzzsdn@localhost IDENTIFIED BY 'fuzzsdn';"
+  mysql -e "GRANT ALL PRIVILEGES ON fuzzsdn.* TO 'fuzzsdn'@'localhost';"
+  mysql -e "FLUSH PRIVILEGES;"
+  echo "Done."
+  ;;
+[Nn]*)
+  echo "Skipping MySQL setup..."
+  ;;
+*)
+  echo invalid response
+  exit 1
+  ;;
+esac
 
 # Create the app directories if they don't exist yet
+echo "Creating directories..."
 mkdir -p "$USR_HOME/.local"
 mkdir -p "$CACHE_HOME"
 mkdir -p "$DATA_HOME"
 mkdir -p "$CONFIG_DIR"
 mkdir -p "$STATE_HOME"
-cp ../etc/fuzzsdn.cfg "$CONFIG_DIR/fuzzsdn.cfg" # Copy the configuration file from etc to the root directory
 
 # Finally, set the permissions to the user
+echo "Setting permissions..."
 chown -R "$USER":"$USER" "$USR_HOME/.local" "$CONFIG_DIR" "$CACHE_HOME" "$DATA_HOME" "$CONFIG_DIR" "$STATE_HOME"
 
 # Ask user if he wants to configure passwordless user for the current user
-read -p "Grant current user ($USER) with passwordless sudo permissions ? " yn
+read -p "Grant current user ($USER) with passwordless sudo permissions? [y/n] " yn
 case $yn in
 [Yy]*)
   echo "$USER ALL=(ALL) NOPASSWD: ALL" | (sudo su -c 'EDITOR="tee" visudo -f /etc/sudoers.d/fuzzsdn')
