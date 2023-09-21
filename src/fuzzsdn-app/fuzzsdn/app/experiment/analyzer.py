@@ -109,7 +109,7 @@ class Analyzer:
                        If set to None, the whole dataset is output.
             failure_under_test (str): Parse the dataset according to the error class.
                          If set to None, no error class is inferred.
-            debug (bool): whether or not to output debug information
+            debug (bool): whether to output debug information
 
         Returns:
             a pd.DataFrame
@@ -175,7 +175,7 @@ class Analyzer:
             )
 
         # Transform the has_error column into boolean values
-        df['has_error'] = df['has_error'].apply(lambda x: x == b'\x01')
+        df['has_error'] = df['has_error'].apply(lambda x: x == 1)
 
         if failure_under_test is not None:
             # OFPBAC_BAD_OUT_PORT
@@ -471,7 +471,7 @@ class Analyzer:
             .columns(
                 Column("log_id"         , 'INT UNSIGNED', nullable=False),
                 Column('iter_id'        , 'INT UNSIGNED', nullable=False),
-                Column("has_error"      , 'BIT(1)'      , nullable=False),
+                Column("has_error"      , 'TINYINT(1)'  , nullable=False),
                 Column('error_type'     , 'VARCHAR(255)', nullable=True),
                 Column('error_reason'   , 'VARCHAR(255)', nullable=True),
                 Column('error_effect'   , 'VARCHAR(255)', nullable=True)) \
