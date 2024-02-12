@@ -21,28 +21,32 @@ have, on average, a precision of 98% and a recall of 86%, significantly outperfo
 
 
 ### Prerequisites
-Virtual Machine:
-OS: Ubuntu 16.04+
-CPU: 4 Cores
-Memory: 10GB
+#### Virtual Machine:
+OS: Ubuntu 16.04+ |
+CPU: 4 Cores |
+Memory: 10GB |
 Disk Space: 50GB
-Mininet: http://mininet.org/
-Version: 2.3.0
+
+Mininet: http://mininet.org/ |
+Version: 2.3.0 |
 Installation: http://mininet.org/download/
-ONOS: https://onosproject.org/
-Version: 2.6.0
+
+
+ONOS: https://onosproject.org/ |
+Version: 2.6.0 |
 Installation: https://wiki.onosproject.org/display/ONOS/Getting+the+ONOS+core+source+code+using+git+and+Gerrit
-RYU: https://ryu-sdn.org
-Version: 4.34
+
+RYU: https://ryu-sdn.org |
+Version: 4.34 |
 Installation: https://ryu-sdn.org
 
 
 ### How to perform experiments ?
-Step 0: Exctract fuzzsdn.zip to any PATH
-Step 1: Move to PATH
-Step 2: Move to "./bin" and run "./pre-install.sh"
-Step 3: Move to PATH and run "pip install --editable ."
-Step 4: Run the command "screen"
-Step 5: Run the command "fuzzsdn experiment run". See the README.md file for detailed instructions
-Step 6: Detach the screen using the keyboard shortcut "Ctrl+A+D"
+Step 0: Exctract fuzzsdn.zip to any PATH\
+Step 1: Move to PATH\
+Step 2: Move to "./bin" and run "./pre-install.sh"\
+Step 3: Move to PATH and run "pip install --editable ."\
+Step 4: Run the command "screen"\
+Step 5: Run the command "fuzzsdn experiment run".\
+Step 6: Detach the screen using the keyboard shortcut "Ctrl+A+D"\
 Step 7: Once the experiment is completed, run "fuzzsdn experiment report " to obtain the results
