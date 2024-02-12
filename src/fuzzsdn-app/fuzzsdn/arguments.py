@@ -84,7 +84,6 @@ class FailureToTestType(StrEnum):
 class Method(StrEnum):
     """Enum for the possible fuzzing methods of fuzzsdn."""
     DEFAULT = 'default',
-    RANDOM_BUDGET = 'random-budget',
     DELTA   = 'DELTA',
     BEADS   = 'BEADS',
 
@@ -97,9 +96,12 @@ class Method(StrEnum):
 
 class Budget(StrEnum):
     """Enum for the methods of budget calculation"""
-
+    RANDOM                  = 'random',
+    RANDOM_UNIFORM          = 'random-uniform',
+    RANDOM_BIN              = 'random-bin',
     CONFIDENCE              = 'confidence',
     CONFIDENCE_AND_RANK     = 'rank-confidence',
+    RANDOM_CONSTANT         = 'random-constant',
 
     @staticmethod
     def values():
@@ -110,7 +112,6 @@ class Budget(StrEnum):
 
 class Limit(StrEnum):
     """Enum for the possible limits to a run of fuzzsdn."""
-
     TIME        = 'time',
     ITERATION   = 'iteration',
     BALANCE     = 'balance'

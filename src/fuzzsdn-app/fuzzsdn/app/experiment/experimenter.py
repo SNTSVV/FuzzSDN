@@ -184,7 +184,7 @@ class Experimenter:
                     # TODO: Maybe raise and error instead ?
                     self.__log.warning("No value defined to replace \"{}\" in criterion \"{}\"".format(_var, name))
 
-            # Finally store the current criterion
+            # Finally, store the current criterion
             self.__log.info("Loaded criterion \"{}\"".format(name))
             self.__criterion = json.loads(criterion)
 
@@ -393,31 +393,6 @@ class Experimenter:
                         json_dict.update(self.__criterion)  # add the criterion
                         json_dict['actions'] = [action]
                         instructions.append(json.dumps({"instructions": [json_dict]}))  # add it to the instruction
-
-        elif self.method == Method.RANDOM_RULE:
-            # Create a random budget for each rule
-            n_rules = len(self.ruleset)
-            budget_list = [random.random() for _ in range(n_rules)]
-            budget_list = [x / float(sum(budget_list)) * count for x in budget_list]
-            # Round the budget so that the sum is equal to count
-            rounded_budget = [int(x) for x in saferound(budget_list, places=0)]
-            for i in range(n_rules):
-                self.__log.trace("Budget for rule {}: {}".format(i, rounded_budget[i]))
-                if rounded_budget[i] > 0:
-                    actions = strategy.fuzzsdn_action_mutate_rule(
-                        rule=self.ruleset[i],
-                        amount=rounded_budget[i],
-                        scenario=self.__scenario_name,
-                        criterion=self.__criterion_name,
-                        mutation_rate=self.mutation_rate,
-                        analyzer=self.__analyzer
-                    )
-                    self.__log.trace("Number of actions generated for rule {}: {}".format(i, len(actions)))
-                    for action in actions:
-                        json_dict = dict()
-                        json_dict.update(self.__criterion)
-                        json_dict['actions'] = [action]
-                        instructions.append(json.dumps({"instructions": [json_dict]}))
 
         else:
             raise RuntimeError("Cannot build instructions for {}".format(self.method))

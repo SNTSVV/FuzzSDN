@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import pwd
+import random
 import signal
 import sys
 from os.path import join
@@ -213,21 +214,15 @@ def run(
         print(Style.BOLD, "*** Precision: {:.2f}".format(precision), Style.RESET)
 
         # 0. Configure the experiment depending on the ML model and Fuzz Mode
-        if _context['method'] in (arguments.Method.DEFAULT, arguments.Method.RANDOM_BUDGET):
+        if _context['method'] == arguments.Method.DEFAULT:
             if ml_model is None or not ml_model.has_rules:
                 _log.info("No rules in set of rule. Generating random samples")
                 experimenter.method = Method.RANDOM
                 experimenter.ruleset = None
-            elif _context['method'] == arguments.Method.DEFAULT:
+            else:
                 experimenter.method = Method.RULE
                 experimenter.ruleset = ml_model.ruleset
                 analyzer.set_ruleset_for_iteration(ml_model.ruleset)
-            elif _context['method'] == arguments.Method.RANDOM_BUDGET:
-                experimenter.method = Method.RANDOM_RULE
-                experimenter.ruleset = ml_model.ruleset
-                analyzer.set_ruleset_for_iteration(ml_model.ruleset)
-            else:
-                raise ValueError("Unknown fuzzing method '{}'".format(_context['method']))
 
         elif _context['method'] == arguments.Method.DELTA:
             experimenter.method = Method.DELTA
@@ -290,8 +285,13 @@ def run(
             # budget calculation
             st_of_plan = timer()
             data_size   = learner.get_instances_count()
-            calculate_budget(data_size=data_size['all'], samples=_context['nb_of_samples'],
-                             failure_count=data_size['FAIL'], ruleset=ml_model.ruleset, method=_context['budget'])
+            calculate_budget(
+                data_size=data_size['all'],
+                samples=_context['nb_of_samples'],
+                failure_count=data_size['FAIL'],
+                ruleset=ml_model.ruleset,
+                method=_context['budget']
+            )
             time_plan_end = timer()
 
         else:
@@ -335,12 +335,12 @@ def calculate_budget(data_size, samples, failure_count, ruleset, method=argument
         raise ValueError("Unknown method '{}'".format(method))
     _log.debug("Setting rule budget according to method \"{}\".".format(method))
 
-    # Calculate the constants used in all methods
-    class_ratio = failure_count / data_size if failure_count <= (data_size / 2) else (data_size - failure_count) / data_size
-    s_min = min(0.5 * (data_size + samples) - class_ratio * data_size, samples)
-    s_maj = max(samples - s_min, 0)
-
     if method == arguments.Budget.CONFIDENCE_AND_RANK:
+        # Calculate
+        class_ratio = failure_count / data_size if failure_count <= (data_size / 2) else (data_size - failure_count) / data_size
+        s_min = min(0.5 * (data_size + samples) - class_ratio * data_size, samples)
+        s_maj = max(samples - s_min, 0)
+
         rule_cnt = len(ruleset)
         rule_info = list()
         budgets = list()
@@ -388,6 +388,10 @@ def calculate_budget(data_size, samples, failure_count, ruleset, method=argument
             _log.debug("Set a budget of {} for rule {}".format(ruleset[i].budget, i))
 
     elif method == arguments.Budget.CONFIDENCE:
+        class_ratio = failure_count / data_size if failure_count <= (data_size / 2) else (data_size - failure_count) / data_size
+        s_min = min(0.5 * (data_size + samples) - class_ratio * data_size, samples)
+        s_maj = max(samples - s_min, 0)
+
         for i in range(len(ruleset)):
             confidence = ruleset.confidence(i, relative=True, relative_to_class=True)
             if ruleset[i].get_class() == 'FAIL':
@@ -401,6 +405,129 @@ def calculate_budget(data_size, samples, failure_count, ruleset, method=argument
                 else:
                     ruleset[i].set_budget(confidence * s_min)
 
+            _log.debug("Set a budget of {} for rule {}".format(ruleset[i].budget, i))
+
+    elif method == arguments.Budget.RANDOM:
+
+        # Handle the case where there is no rules
+        if len(ruleset) == 0:
+            return
+
+        # Calculate the number of rules in each class
+        n_fail_rules = len([r for r in ruleset if r.get_class() == 'FAIL'])
+        n_pass_rules = len([r for r in ruleset if r.get_class() == 'PASS'])
+
+        # This should never happen
+        if n_fail_rules == 0 and n_pass_rules == 0:
+            return
+
+        # Assign the budget to each class
+        if n_fail_rules == 0:
+            fail_budget = 0
+            pass_budget = 1
+        elif n_pass_rules == 0:
+            fail_budget = 1
+            pass_budget = 0
+        else:
+            fail_budget = random.random()
+            pass_budget = 1 - fail_budget
+
+        # Distribute the budget to each rule
+        fail_budget_list = list()
+        pass_budget_list = list()
+        if n_fail_rules > 0:
+            fail_budget_list = [random.random() for _ in range(n_fail_rules)]
+            while sum(fail_budget_list) == 0: # Avoid division by zero
+                fail_budget_list = [random.random() for _ in range(n_fail_rules)]
+            fail_budget_list = [
+                (float(x) / float(sum(fail_budget_list))) * float(fail_budget) * samples for x in fail_budget_list
+            ]
+
+        if n_pass_rules > 0:
+            pass_budget_list = [random.random() for _ in range(n_pass_rules)]
+            while sum(pass_budget_list) == 0: # Avoid division by zero
+                pass_budget_list = [random.random() for _ in range(n_pass_rules)]
+            pass_budget_list = [
+                (float(x) / float(sum(pass_budget_list))) * float(pass_budget) * samples for x in pass_budget_list
+            ]
+
+        # Assign the budget to each rule
+        for i in range(len(ruleset)):
+            if ruleset[i].get_class() == 'FAIL':
+                ruleset[i].set_budget(fail_budget_list.pop())
+            else:
+                ruleset[i].set_budget(pass_budget_list.pop())
+            _log.debug("Set a budget of {} for rule {}".format(ruleset[i].budget, i))
+
+    elif method == arguments.Budget.RANDOM_UNIFORM:
+        # Create a random budget for each rule
+        n_rules = len(ruleset)
+        budget_list = [random.random() for _ in range(n_rules)]
+        budget_list = [(float(x) / float(sum(budget_list))) * float(samples) for x in budget_list]
+        # Round the budget so that the sum is equal to count
+        for i in range(n_rules):
+            ruleset[i].set_budget(budget_list[i])
+            _log.debug("Set a budget of {} for rule {}".format(ruleset[i].budget, i))
+
+    elif method == arguments.Budget.RANDOM_BIN:
+        n_rules = len(ruleset)
+        budget_list = [float(0) for _ in range(n_rules)]
+        for i in range(samples):
+            budget_list[random.randint(0, n_rules - 1)] += 1.0
+        for i in range(n_rules):
+            ruleset[i].set_budget(budget_list[i])
+            _log.debug("Set a budget of {} for rule {}".format(ruleset[i].budget, i))
+
+    elif method == arguments.Budget.RANDOM_CONSTANT:
+        # calculate the ratio of each class
+        if failure_count > (data_size / 2):
+            fail_budget = failure_count / data_size
+            pass_budget = 1 - fail_budget
+        else:
+            pass_budget = (data_size - failure_count) / data_size
+            fail_budget = 1 - pass_budget
+
+        # calculate the number of rules in each class
+        n_fail_rules = len([r for r in ruleset if r.get_class() == 'FAIL'])
+        n_pass_rules = len([r for r in ruleset if r.get_class() == 'PASS'])
+
+        # This should never happen
+        if n_fail_rules == 0 and n_pass_rules == 0:
+            return
+
+        # Assign the budget to each class
+        if n_fail_rules == 0:
+            fail_budget = 0
+            pass_budget = 1
+        if n_pass_rules == 0:
+            fail_budget = 1
+            pass_budget = 0
+
+        # Distribute the budget to each rule
+        fail_budget_list = list()
+        pass_budget_list = list()
+        if n_fail_rules > 0:
+            fail_budget_list = [random.random() for _ in range(n_fail_rules)]
+            while sum(fail_budget_list) == 0:  # Avoid division by zero
+                fail_budget_list = [random.random() for _ in range(n_fail_rules)]
+            fail_budget_list = [
+                (float(x) / float(sum(fail_budget_list))) * float(fail_budget) * samples for x in fail_budget_list
+            ]
+
+        if n_pass_rules > 0:
+            pass_budget_list = [random.random() for _ in range(n_pass_rules)]
+            while sum(pass_budget_list) == 0:  # Avoid division by zero
+                pass_budget_list = [random.random() for _ in range(n_pass_rules)]
+            pass_budget_list = [
+                (float(x) / float(sum(pass_budget_list))) * float(pass_budget) * samples for x in pass_budget_list
+            ]
+
+        # Assign the budget to each rule
+        for i in range(len(ruleset)):
+            if ruleset[i].get_class() == 'FAIL':
+                ruleset[i].set_budget(fail_budget_list.pop())
+            else:
+                ruleset[i].set_budget(pass_budget_list.pop())
             _log.debug("Set a budget of {} for rule {}".format(ruleset[i].budget, i))
 # End def calculate_budget
 
@@ -416,7 +543,7 @@ def cleanup(*args):
     if setup.config().general.cleanup is True:
         _log.info("Cleaning up fuzzsdn...")
 
-        # Stop all the the drivers
+        # Stop all the drivers
         _log.debug("Stopping all the drivers...")
         try:
             FuzzerDriver.stop()
